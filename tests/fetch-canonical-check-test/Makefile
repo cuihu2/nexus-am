@@ -18,8 +18,8 @@ endif
 ifneq ($(words $(JUMP)),1)
 $(error JUMP must select exactly one transfer type)
 endif
-ifeq ($(filter 0 1 2 3,$(JUMP)),)
-$(error Invalid JUMP="$(JUMP)". Supported values: 0 1 2 3)
+ifeq ($(filter 0 1 2 3 4 5,$(JUMP)),)
+$(error Invalid JUMP="$(JUMP)". Supported values: 0 1 2 3 4 5)
 endif
 ifneq ($(filter 1,$(HALF_RVI)),)
 ifneq ($(filter-out 0,$(JUMP)),)
@@ -31,6 +31,8 @@ JUMP_SUFFIX_0 :=
 JUMP_SUFFIX_1 := -beqz
 JUMP_SUFFIX_2 := -jal
 JUMP_SUFFIX_3 := -jalr
+JUMP_SUFFIX_4 := -mret
+JUMP_SUFFIX_5 := -sret
 SUFFIX := $(MODE)$(JUMP_SUFFIX_$(JUMP))$(if $(filter 1,$(HALF_RVI)),-half-rvi,)
 NAME = fetch-canonical-check-test-$(SUFFIX)
 SRCS = main.c

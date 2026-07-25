@@ -1,8 +1,8 @@
 // Test instruction fetch in the non-canonical address in Sv* modes.
 
-// Usage: `make ARCH=riscv64-xs MODE=sv{39,48,57,39x4,48x4} JUMP={0,1,2,3} HALF_RVI={0,1} LOG_LEVEL={0,1,2}`
+// Usage: `make ARCH=riscv64-xs MODE=sv{39,48,57,39x4,48x4} JUMP={0,1,2,3,4} HALF_RVI={0,1} LOG_LEVEL={0,1,2}`
 // MODE: Translation mode as RISC-V spec described.
-// JUMP: How to enter the non-canonical space: 0=fall-through, 1=beqz, 2=jal, 3=jalr.
+// JUMP: How to enter the non-canonical space: 0=fall-through, 1=beqz, 2=jal, 3=jalr, 4=mret.
 // HALF_RVI: Used with JUMP=0 to test the situation where a RVI (4B) instruction crosses the page boundary.
 
 // Acknowledgement: Inspired by https://github.com/OpenXiangShan/XiangShan/issues/6264
@@ -22,8 +22,8 @@
 #if (HALF_RVI != 0) && (HALF_RVI != 1)
 #error "HALF_RVI must be either 0 or 1"
 #endif
-#if (JUMP < 0) || (JUMP > 3)
-#error "JUMP must be 0 (fall-through), 1 (beqz), 2 (jal), or 3 (jalr)"
+#if (JUMP < 0) || (JUMP > 5)
+#error "JUMP must be 0 (fall-through), 1 (beqz), 2 (jal), 3 (jalr), 4 (mret), or 5 (sret)"
 #endif
 #if HALF_RVI && JUMP
 #error "HALF_RVI=1 is valid only when JUMP=0"
@@ -140,10 +140,18 @@
 #define FAULT_ADDR         JUMP_TARGET_ADDR
 #define EXPECTED_MEPC      JUMP_TARGET_ADDR
 #define TRANSFER_NAME      "jal"
-#else
+#elif JUMP == 3
 #define FAULT_ADDR         JUMP_TARGET_ADDR
 #define EXPECTED_MEPC      JUMP_TARGET_ADDR
 #define TRANSFER_NAME      "jalr"
+#elif JUMP == 4
+#define FAULT_ADDR         JUMP_TARGET_ADDR
+#define EXPECTED_MEPC      JUMP_TARGET_ADDR
+#define TRANSFER_NAME      "mret"
+#elif JUMP == 5
+#define FAULT_ADDR         JUMP_TARGET_ADDR
+#define EXPECTED_MEPC      JUMP_TARGET_ADDR
+#define TRANSFER_NAME      "sret"
 #endif
 
 #define PTE_V              (1UL << 0)
@@ -171,6 +179,7 @@
 #define MSTATUS_MPV        (1UL << 39)
 #define HSTATUS_VSXL_MASK  (3UL << 32)
 #define HSTATUS_VSXL_64    (2UL << 32)
+#define HSTATUS_SPV        (1UL << 7)
 #define MISA_H             (1UL << ('H' - 'A'))
 
 _Static_assert(TEST_START + SLED_BYTES == FIRST_BAD_ADDR,
@@ -183,8 +192,10 @@ _Static_assert((TEST_ENTRY_ADDR & 3UL) == (HALF_RVI ? 2UL : 0UL),
                "The test entry has the wrong instruction alignment");
 _Static_assert(((JUMP_TARGET_ADDR - TEST_ENTRY_ADDR) & 1UL) == 0,
                "The direct-jump offset must be 2-byte aligned");
+#if JUMP != 4 && JUMP != 5
 _Static_assert(JUMP_TARGET_ADDR - TEST_ENTRY_ADDR < 0x1000,
                "The beqz target is outside its immediate range");
+#endif
 
 #define read_csr(csr)                                           \
     ({                                                          \
@@ -273,6 +284,16 @@ __asm__(
 );
 extern char test_lower_entry[];
 extern char test_lower_continue[];
+
+#if JUMP == 5
+__asm__(
+".globl sret_stub\n"
+".align 2\n"
+"sret_stub:\n"
+"  sret\n"
+);
+extern char sret_stub[];
+#endif
 
 static uint64_t pte_leaf(uint64_t pa) {
     uint64_t flags = VIRTUALIZED ? PTE_G_RWXAD : PTE_RWXAD;
@@ -369,6 +390,7 @@ static int enable_translation(void) {
 #endif
 }
 
+__attribute__((unused))
 static void enter_lower_mode(uint64_t entry) {
     uint64_t mstatus = read_csr(CSR_MSTATUS);
     mstatus = (mstatus & ~MSTATUS_MPP_MASK) | MSTATUS_MPP_S;
@@ -410,18 +432,18 @@ static uint32_t encode_jal(int32_t offset) {
            (imm & 0x0FF000U)        |       // imm[19:12]
            (1U << 7) | 0x6FU;               // jal ra,offset
 }
-#elif JUMP == 3
-static uint32_t encode_addi(uint32_t rd, uint32_t rs1, int32_t imm) {
+#elif JUMP == 3 || JUMP == 5
+static uint32_t __attribute__((unused)) encode_addi(uint32_t rd, uint32_t rs1, int32_t imm) {
     return (((uint32_t)imm & 0xFFFU) << 20) |
            (rs1 << 15) | (rd << 7) | 0x13U;
 }
 
-static uint32_t encode_slli(uint32_t rd, uint32_t rs1, uint32_t shamt) {
+static uint32_t __attribute__((unused)) encode_slli(uint32_t rd, uint32_t rs1, uint32_t shamt) {
     return ((shamt & 0x3FU) << 20) |
            (rs1 << 15) | (1U << 12) | (rd << 7) | 0x13U;
 }
 
-static uint32_t encode_jalr(uint32_t rd, uint32_t rs1, int32_t imm) {
+static uint32_t __attribute__((unused)) encode_jalr(uint32_t rd, uint32_t rs1, int32_t imm) {
     return (((uint32_t)imm & 0xFFFU) << 20) |
            (rs1 << 15) | (rd << 7) | 0x67U;
 }
@@ -429,8 +451,8 @@ static uint32_t encode_jalr(uint32_t rd, uint32_t rs1, int32_t imm) {
 
 static void install_test_code(void) {
     uint64_t off = HALF_RVI ? 2 : 0;
-#if JUMP != 0
-    uint64_t entry_pa = BOUNDARY_CODE_PA + off;
+#if (JUMP >= 1 && JUMP <= 3) || (JUMP == 5 && !VIRTUALIZED)
+    uint64_t entry_pa __attribute__((unused)) = BOUNDARY_CODE_PA + off;
 #endif
     for (uint64_t pa = BOUNDARY_CODE_PA + off; pa < BOUNDARY_CODE_PA + SLED_BYTES; pa += 4)
         write_insn(pa, 0x00000013U);             // nop
@@ -444,6 +466,25 @@ static void install_test_code(void) {
     write_insn(entry_pa + 0x04, encode_slli(5, 5, BOUNDARY_SHIFT)); // slli t0,t0,BOUNDARY_SHIFT
     write_insn(entry_pa + 0x08, encode_addi(5, 5, 0x66));           // addi t0,t0,0x66
     write_insn(entry_pa + 0x0C, encode_jalr(1, 5, 0));              // jalr ra,0(t0)
+#elif JUMP == 4
+    // For mret, no boundary code is needed. The mret is executed directly
+    // from M-mode in main() with mepc set to the non-canonical address.
+    // The canonical check is performed by the CSR module's AddrTransType
+    // pre-check on mepc.
+#elif JUMP == 5 && !VIRTUALIZED
+    // For sret in non-virtualized mode, HS-mode code sets sepc to the
+    // non-canonical address and SPP=0 (U-mode), then sret to HU-mode -> IPF
+    write_insn(entry_pa + 0x00, encode_addi(5, 0, 1));              // li t0,1
+    write_insn(entry_pa + 0x04, encode_slli(5, 5, BOUNDARY_SHIFT)); // slli t0,t0,BOUNDARY_SHIFT
+    write_insn(entry_pa + 0x08, encode_addi(5, 5, 0x66));           // addi t0,t0,0x66
+    write_insn(entry_pa + 0x0C, 0x14129073U);                        // csrw sepc,t0
+    write_insn(entry_pa + 0x10, encode_addi(6, 0, 1));              // li t1,1
+    write_insn(entry_pa + 0x14, encode_slli(6, 6, 8));              // slli t1,t1,8 (SPP bit)
+    write_insn(entry_pa + 0x18, 0x10031073U);                        // csrc sstatus,t1 (SPP=0)
+    write_insn(entry_pa + 0x1C, 0x10200073U);                        // sret
+#elif JUMP == 5 && VIRTUALIZED
+    // For sret in virtualized mode, everything is set up from M-mode in main().
+    // No boundary code needed.
 #endif
 
     // Set FLAG_PA to 0xFA, then ecall.  The shifts zero-extend the LUI result.
@@ -492,7 +533,47 @@ int main(void) {
     last_mcause = last_mtval = last_mtval2 = last_mepc = 0;
     ecall_mcause = 0;
     trap_resume = (uint64_t)test_lower_continue;
+#if JUMP == 5
+    // Clear mstatus.TSR to allow SRET in HS-mode
+    write_csr(CSR_MSTATUS, read_csr(CSR_MSTATUS) & ~(1UL << 22));
+#endif
+#if JUMP == 4
+    // mret directly to the non-canonical address.
+    // MPP=S so translation is enabled and the CSR AddrTransType pre-check fires.
+    enter_lower_mode(FAULT_ADDR);
+#elif JUMP == 5 && VIRTUALIZED
+    // For sret in virtualized mode, we need to execute sret in HS-mode.
+    // HS-mode uses satp (which is Bare), so boundary page is not accessible.
+    // Instead, set up sepc/hstatus/sstatus from M-mode, mret to a tiny
+    // HS-mode stub that just executes sret.
+    {
+        // Set sepc to the non-canonical GPA
+        write_csr(0x141, FAULT_ADDR);  // sepc
+        // Set hstatus.SPV=1 (enter VS-mode on sret)
+        uint64_t hstatus = read_csr(CSR_HSTATUS);
+        hstatus |= HSTATUS_SPV;
+        write_csr(CSR_HSTATUS, hstatus);
+        // Set sstatus.SPP=1 (S-mode, for HS->VS sret)
+        uint64_t sstatus = read_csr(0x100);  // sstatus
+        sstatus |= (1UL << 8);  // SPP
+        write_csr(0x100, sstatus);
+        // Create a 1-instruction HS-mode stub: sret, at a accessible PA
+        extern char sret_stub[];
+        write_csr(0x341, (uint64_t)sret_stub);  // mepc = stub address
+        uint64_t mstatus = read_csr(CSR_MSTATUS);
+        mstatus = (mstatus & ~MSTATUS_MPP_MASK) | MSTATUS_MPP_S;
+        mstatus &= ~MSTATUS_MPV;             // MRET enters HS-mode.
+        write_csr(CSR_MSTATUS, mstatus);
+        asm volatile(
+            "la t0, 1f\n\t"
+            "sd t0, m_continue, t1\n\t"
+            "mret\n\t"
+            "1:\n\t"
+            ::: "t0", "t1", "memory");
+    }
+#else
     enter_lower_mode((uint64_t)test_lower_entry);
+#endif
 
     uint32_t flag = *(volatile uint32_t *)FLAG_PA;
     INFO("Caught ecall=%lu, traps=%u, mcause=%lu, mepc=0x%lx, mtval=0x%lx, mtval2=0x%lx, alias=0x%x\n",
