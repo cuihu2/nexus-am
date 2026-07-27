@@ -1,8 +1,8 @@
 // Test instruction fetch in the non-canonical address in Sv* modes.
 
-// Usage: `make ARCH=riscv64-xs MODE=sv{39,48,57,39x4,48x4} JUMP={0,1,2,3,4} HALF_RVI={0,1} LOG_LEVEL={0,1,2}`
+// Usage: `make ARCH=riscv64-xs MODE=sv{39,48,57,39x4,48x4} JUMP={0,1,2,3,4,5} HALF_RVI={0,1} LOG_LEVEL={0,1,2}`
 // MODE: Translation mode as RISC-V spec described.
-// JUMP: How to enter the non-canonical space: 0=fall-through, 1=beqz, 2=jal, 3=jalr, 4=mret.
+// JUMP: How to enter the non-canonical space: 0=fall-through, 1=beqz, 2=jal, 3=jalr, 4=mret, 5=sret.
 // HALF_RVI: Used with JUMP=0 to test the situation where a RVI (4B) instruction crosses the page boundary.
 
 // Acknowledgement: Inspired by https://github.com/OpenXiangShan/XiangShan/issues/6264
