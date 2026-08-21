@@ -1,0 +1,12 @@
+#include "../../runtime/hpu_test.h"
+
+HPU_DEFINE_TESTCASE(
+    "HPU_IT_DIR_STR_004",
+    "IT-STR-004",
+    "核内异常/分支预测与HPU指令交叉",
+    "定向结构连接+功能覆盖",
+    1,
+    HPU_CASE_STR_CONTROL_FLOW,
+    HPU_REQ_IT_MONITOR | HPU_REQ_CACHE_CONTRACT |
+        HPU_REQ_EXTERNAL_ENTRY | HPU_REQ_FUNCTION_COVERAGE,
+    0u);

@@ -1,0 +1,13 @@
+#include "../../runtime/hpu_test.h"
+
+HPU_DEFINE_TESTCASE(
+    "HPU_IT_STING_STR_001",
+    "IT-STR-001",
+    "分通道反压与CDC约束随机压力",
+    "STING约束随机结构连接",
+    3,
+    HPU_CASE_STR_CHANNELS,
+    HPU_REQ_IT_MONITOR | HPU_REQ_READY_CONTROL |
+        HPU_REQ_CACHE_CONTRACT | HPU_REQ_EXTERNAL_ENTRY |
+        HPU_REQ_FUNCTION_COVERAGE | HPU_REQ_STING,
+    0xB0A93C42u);

@@ -1,0 +1,14 @@
+#include "../../runtime/hpu_test.h"
+
+HPU_DEFINE_TESTCASE(
+    "HPU_IT_STING_STR_005",
+    "IT-STR-005",
+    "RISC-V与HPU混合代码段约束随机",
+    "STING约束随机+功能覆盖",
+    3,
+    HPU_CASE_STR_RANDOM_MIXED,
+    HPU_REQ_IT_MONITOR | HPU_REQ_READY_CONTROL |
+        HPU_REQ_CACHE_CONTRACT | HPU_REQ_EXTERNAL_ENTRY |
+        HPU_REQ_FUNCTION_COVERAGE | HPU_REQ_STING |
+        HPU_REQ_QUEUE_CONTROL,
+    0xACA935F6u);
