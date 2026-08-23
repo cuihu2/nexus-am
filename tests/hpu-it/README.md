@@ -241,12 +241,12 @@ git submodule update --init --recursive
 ## 宿主机构建与回归
 
 ```bash
-cmake -S . -B build-host -DHPU_ENABLE_INLINE_ASM=OFF
-cmake --build build-host -j
-ctest --test-dir build-host --output-on-failure -j
+cmake -S . -B build/host -DHPU_ENABLE_INLINE_ASM=OFF
+cmake --build build/host -j
+ctest --test-dir build/host --output-on-failure -j
 ```
 
-这会生成 49 个独立宿主机 executable 到 `build-host/cases/`，不是仅生成
+这会生成 49 个独立宿主机 executable 到 `build/host/cases/`，不是仅生成
 object 文件。具有完整实现的 testcase 在自检查正确时由 CTest 直接判定通过；
 CMB015 因算法契约缺失保持显式 blocked/预期失败。宿主机自检查证明 testcase、
 oracle 和数据边界检查自洽。
@@ -254,10 +254,10 @@ oracle 和数据边界检查自洽。
 如需同时构建上游 generator/encoder/reference：
 
 ```bash
-cmake -S . -B build-all
-cmake --build build-all -j
-cmake --build build-all --target hpu_it_inline_asm_tools -j
-ctest --test-dir build-all --output-on-failure
+cmake -S . -B build/all
+cmake --build build/all -j
+cmake --build build/all --target hpu_it_inline_asm_tools -j
+ctest --test-dir build/all --output-on-failure
 ```
 
 权威测试点表也有独立的一致性门禁（仅使用Python标准库）：
@@ -295,6 +295,36 @@ ELF64 RISC-V、入口 `0x80000000`、DRAM LOAD segment、关键指令字，并�
 向 IT 环境交付时，只复制 `readlink -f build-nexus-am/images/latest` 解析出的整个
 fingerprint 目录，不要复制 `images/` 根目录中的旧平铺文件，也不要混合不同
 fingerprint 目录内的三件套。
+
+### GitHub Release 自动发布
+
+仓库中的 `.github/workflows/hpu-it-release.yml` 在 GitHub Release 发布时自动：
+
+1. checkout Release 对应的 tag，而不是默认分支的最新提交；
+2. 使用固定的 `0x87000000/19201` HPU memory profile 构建并验证49个基线用例；
+3. 从中筛选计算指令、组合指令序列和性能三类共27个可交付用例，明确排除
+   CMB015；
+4. 生成带 source fingerprint 的 `.tar.gz` IT 包及其 `.sha256`，上传到该
+   GitHub Release。
+
+工作流使用 `release: published`，因此正式 Release 和 prerelease 都会触发。
+如果发布任务需要重试，可在 Actions 页面手动运行 `Publish HPU IT package` 并
+输入已存在的 Release tag；同名资产会由重新验证的产物替换。工作流文件必须先
+存在于仓库默认分支，GitHub 才会为后续 Release 触发它。
+
+本地可以使用同一个打包入口：
+
+```bash
+export AM_HOME=/path/to/nexus-am
+tests/hpu-it/scripts/build_nexus_am.sh "$AM_HOME/tests/hpu-it/build"
+tests/hpu-it/scripts/package_release.sh \
+  "$AM_HOME/tests/hpu-it/build/images/latest" \
+  "$AM_HOME/tests/hpu-it/build/release"
+```
+
+压缩包内包含27套 `.elf/.bin/.txt`、适用用例的 DMA manifest、memory profile、
+源码/AM/toolchain 指纹、qualification 状态和包内 `SHA256SUMS`；Release 同时
+提供整个压缩包的独立 SHA-256 文件。
 
 生产快照发布到带 source fingerprint 的不可变目录；每套包含ELF/bin/txt、
 内嵌profile/fingerprint和对应DMA sidecar。运行结果由程序的golden、guard、

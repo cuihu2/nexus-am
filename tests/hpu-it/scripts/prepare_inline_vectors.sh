@@ -4,9 +4,9 @@ set -Eeuo pipefail
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
 inline_root="$repo_root/third_party/inline-asm"
-asset_build=${HPU_INLINE_ASSET_BUILD:-"$repo_root/build-inline-assets"}
+asset_build=${HPU_INLINE_ASSET_BUILD:-"$repo_root/build/inline-assets"}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}
-lock_dir="$repo_root/build-inline-assets"
+lock_dir="$repo_root/build/locks"
 
 if [[ ! -f $inline_root/CMakeLists.txt ]]; then
   printf 'ERROR: missing cuihu2/inline-asm checkout: %s\n' "$inline_root" >&2

@@ -15,6 +15,13 @@ jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}
 hpu_mem_base=${HPU_IT_MEM_BASE:-0x87000000}
 hpu_mem_lines=${HPU_IT_MEM_LINES:-19201}
 
+# Recursive Nexus-AM make invocations change their working directory.  Resolve
+# a caller-provided relative output path once here so object and image targets
+# continue to refer to the same publication root at every recursion depth.
+if [[ $output_root != /* ]]; then
+  output_root="$PWD/$output_root"
+fi
+
 if [[ -z ${AM_HOME:-} || ! -f ${AM_HOME}/Makefile.app ]]; then
   printf 'ERROR: AM_HOME must point to OpenXiangShan/nexus-am\n' >&2
   exit 2
