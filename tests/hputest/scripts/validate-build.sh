@@ -2,15 +2,26 @@
 set -Eeuo pipefail
 
 artifact_root=${1:-}
-expected_cases=${EXPECTED_CASES:-7}
 cross_compile=${CROSS_COMPILE:-riscv64-linux-gnu-}
 
 if [[ -z $artifact_root || ! -d $artifact_root ]]; then
   printf 'ERROR: artifact directory is required\n' >&2
   exit 2
 fi
+manifest="$artifact_root/MANIFEST.txt"
+if [[ ! -s $manifest ]]; then
+  printf 'ERROR: MANIFEST.txt is missing\n' >&2
+  exit 2
+fi
+manifest_cases=$(sed -n 's/^case_count=//p' "$manifest")
+expected_cases=${EXPECTED_CASES:-$manifest_cases}
 if [[ ! $expected_cases =~ ^[1-9][0-9]*$ ]]; then
   printf 'ERROR: EXPECTED_CASES must be positive\n' >&2
+  exit 2
+fi
+if [[ $manifest_cases != "$expected_cases" ]]; then
+  printf 'ERROR: manifest case_count=%s, expected=%s\n' \
+    "$manifest_cases" "$expected_cases" >&2
   exit 2
 fi
 for tool in objcopy objdump readelf; do
@@ -37,6 +48,15 @@ require_word() {
   local word=$2
   grep -Eiq "(^|[[:space:]])${word}([[:space:]]|$)" "$txt" || {
     printf 'ERROR: %s does not contain instruction word %s\n' "$txt" "$word" >&2
+    exit 2
+  }
+}
+
+require_main_return() {
+  local txt=$1
+  local value=$2
+  grep -Eq "[[:space:]]li[[:space:]]+a0,${value}([[:space:]]|$)" "$txt" || {
+    printf 'ERROR: %s does not return %s from main()\n' "$txt" "$value" >&2
     exit 2
   }
 }
@@ -85,10 +105,13 @@ for elf in "${elfs[@]}"; do
       require_word "$txt" 0400400b
       require_word "$txt" 00b5542b
       require_word "$txt" 7000000b ;;
+    01_return_0)
+      require_main_return "$txt" 0 ;;
+    02_return_1)
+      require_main_return "$txt" 1 ;;
   esac
 done
 
-test -s "$artifact_root/MANIFEST.txt"
 test -s "$artifact_root/SHA256SUMS"
 (cd "$artifact_root" && sha256sum -c SHA256SUMS >/dev/null)
 printf '[hputest] validation PASS: %u ELF/BIN/TXT sets\n' "${#elfs[@]}"
