@@ -74,7 +74,7 @@ if [[ ! -f $master_image || $(stat -c '%s' "$master_image") -ne 4342016 ]]; then
 fi
 master_sha=$(sha256sum "$master_image")
 master_sha=${master_sha%% *}
-if [[ $master_sha != fd161793648790ebb02308df49fdd90b0cea02901020b6668124af1e52ca2ee4 ]]; then
+if [[ $master_sha != 601fcddd91fb772d86ce29fad0afc92b1533d2728b1a7413e748b3dc178cd793 ]]; then
   printf 'ERROR: ciphertext master image SHA-256 mismatch: %s\n' \
     "$master_sha" >&2
   exit 2
@@ -85,11 +85,11 @@ for operator in encode rescale; do
   case "$operator" in
     encode)
       expected_bytes=1048832
-      expected_sha=e962d5ef02a4bd8c5b89d2ded1efd8d2410c4582bf41bed235c38bdaa861e408
+      expected_sha=250ff71f3d1020205fa972f3a1c04caa7790ed3ab6bfe3acdc56feabdedb2da5
       ;;
     rescale)
       expected_bytes=1327360
-      expected_sha=58e7d67eebcde9a4fd32590a098047fd56fcbd4c71db9df2e467c78f8512dc0d
+      expected_sha=0dc17b77fa94f7e0dfbd8ddcc31aa58d01d0603302c46a70e4b9761fede17731
       ;;
   esac
   if [[ ! -f $operator_image || $(stat -c '%s' "$operator_image") -ne $expected_bytes ]]; then

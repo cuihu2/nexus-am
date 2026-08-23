@@ -221,7 +221,7 @@ if(HPU_ENABLE_INLINE_ASM)
     if(TARGET hpu_encode_self_test)
         list(APPEND HPU_INLINE_ASM_TOOL_TARGETS hpu_encode_self_test)
     endif()
-    add_custom_target(hpu_it_inline_asm_tools
+    add_custom_target(hpu_it_inline_asm_tools ALL
         DEPENDS ${HPU_INLINE_ASM_TOOL_TARGETS}
     )
 endif()

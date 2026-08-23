@@ -95,7 +95,7 @@ static const hpu_vector_image hpu_vectors[] = {
     {
         hpu_vector_ntt_begin,
         hpu_vector_ntt_end,
-        UINT64_C(0x3aee7c712e527cf2),
+        UINT64_C(0x1379fa73a0804152),
         2305U,
         0U,
         256U,
@@ -114,7 +114,7 @@ static const hpu_vector_image hpu_vectors[] = {
     {
         hpu_vector_intt_begin,
         hpu_vector_intt_end,
-        UINT64_C(0x7d58fdbc20438abd),
+        UINT64_C(0xeabcc424d6a4367d),
         2305U,
         0U,
         256U,

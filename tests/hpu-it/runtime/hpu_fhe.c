@@ -426,7 +426,7 @@ static int fhe_validate_master(void) {
     size_t bytes = (size_t)(hpu_fhe_master_end - hpu_fhe_master_begin);
     if (bytes != (size_t)FHE_MASTER_LINES * FHE_LINE_BYTES) return 405;
     if (fhe_fnv1a64(hpu_fhe_master_begin, bytes) !=
-        UINT64_C(0xb3cd9960b63475e1)) {
+        UINT64_C(0xc71bd4f2513d767d)) {
         return 406;
     }
     return 0;
@@ -490,21 +490,72 @@ static int fhe_prepare_fixture(fhe_program_kind program) {
     return fhe_configure_window();
 }
 
-static void fhe_bit_reverse(uint32_t *values) {
-    unsigned i;
-    unsigned j = 0U;
-    for (i = 1U; i < FHE_N; ++i) {
-        unsigned bit = FHE_N >> 1U;
-        uint32_t temporary;
-        while ((j & bit) != 0U) {
-            j ^= bit;
-            bit >>= 1U;
+static void fhe_apply_p(uint32_t registers[128], unsigned count) {
+    unsigned rotation;
+    for (rotation = 0U; rotation < count % 7U; ++rotation) {
+        uint32_t shifted[128];
+        unsigned old_position;
+        for (old_position = 0U; old_position < 128U; ++old_position) {
+            unsigned new_position =
+                (old_position >> 1U) | ((old_position & 1U) << 6U);
+            shifted[new_position] = registers[old_position];
         }
-        j ^= bit;
-        if (i >= j) continue;
-        temporary = values[i];
-        values[i] = values[j];
-        values[j] = temporary;
+        for (old_position = 0U; old_position < 128U; ++old_position) {
+            registers[old_position] = shifted[old_position];
+        }
+    }
+}
+
+static void fhe_cpu_transform_stage(uint32_t *values,
+                                    const uint32_t *twiddle,
+                                    unsigned instruction_stage,
+                                    int inverse,
+                                    uint32_t modulus) {
+    unsigned forward_stage = inverse ?
+        FHE_STAGE_COUNT - 1U - instruction_stage : instruction_stage;
+    unsigned m = 1U << forward_stage;
+    unsigned twiddle_index = 0U;
+    unsigned group_start;
+
+    for (group_start = 0U; group_start < FHE_N;
+         group_start += m < 128U ? 128U : 2U * m) {
+        unsigned offset_limit = m < 128U ? 64U : m;
+        unsigned offset_step = m < 128U ? 64U : 64U;
+        unsigned offset;
+        for (offset = 0U; offset < offset_limit; offset += offset_step) {
+            uint32_t registers[128];
+            unsigned positions[128];
+            unsigned lane;
+            unsigned i;
+            if (m < 128U) {
+                for (i = 0U; i < 128U; ++i) {
+                    positions[i] = group_start + i;
+                    registers[i] = values[positions[i]];
+                }
+            } else {
+                for (i = 0U; i < 64U; ++i) {
+                    positions[2U * i] = group_start + offset + i;
+                    positions[2U * i + 1U] = group_start + m + offset + i;
+                    registers[2U * i] = values[positions[2U * i]];
+                    registers[2U * i + 1U] = values[positions[2U * i + 1U]];
+                }
+            }
+            if (inverse) fhe_apply_p(registers, 6U);
+            for (lane = 0U; lane < 64U; ++lane) {
+                unsigned even = 2U * lane;
+                unsigned odd = even + 1U;
+                uint32_t a = registers[even];
+                uint32_t product = fhe_mul(
+                    registers[odd], twiddle[twiddle_index++], modulus);
+                registers[even] = fhe_add(a, product, modulus);
+                registers[odd] = fhe_sub(a, product, modulus);
+            }
+            if (!inverse) fhe_apply_p(registers, 1U);
+            for (i = 0U; i < 128U; ++i) {
+                values[positions[i]] = registers[i];
+            }
+            if (m < 128U) break;
+        }
     }
 }
 
@@ -519,24 +570,10 @@ static void fhe_cpu_transform(uint32_t *values, unsigned basis,
             values[i] = fhe_mul(values[i], factor[i], modulus);
         }
     }
-    fhe_bit_reverse(values);
     for (stage = 0U; stage < FHE_STAGE_COUNT; ++stage) {
         const uint32_t *twiddle =
             fhe_master_line(fhe_twiddle_stage_line(basis, inverse, stage));
-        unsigned half = 1U << stage;
-        unsigned group = half << 1U;
-        unsigned base;
-        unsigned index = 0U;
-        for (base = 0U; base < FHE_N; base += group) {
-            unsigned j;
-            for (j = 0U; j < half; ++j, ++index) {
-                uint32_t even = values[base + j];
-                uint32_t odd = fhe_mul(values[base + j + half],
-                                       twiddle[index], modulus);
-                values[base + j] = fhe_add(even, odd, modulus);
-                values[base + j + half] = fhe_sub(even, odd, modulus);
-            }
-        }
+        fhe_cpu_transform_stage(values, twiddle, stage, inverse, modulus);
     }
     if (inverse) {
         const uint32_t *factor =

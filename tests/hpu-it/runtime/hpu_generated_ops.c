@@ -791,34 +791,34 @@ int hpu_generated_operator_run(uint32_t seed, hpu_case_kind kind) {
 
     if (kind == HPU_CASE_GENERATED_PMULT) {
         profile = (gop_profile){"PMULT", gop_pmult_image_begin,
-            gop_pmult_image_end, UINT64_C(0x7dd40ed04ce2ffa7), 4865U,
+            gop_pmult_image_end, UINT64_C(0xd34ab8caf277708b), 4865U,
             768U, 512U, 47U, HPU_PROGRAM_PMULT_DMA_COUNT};
     } else if (kind == HPU_CASE_GENERATED_CMULT) {
         profile = (gop_profile){"CMULT", gop_cmult_image_begin,
-            gop_cmult_image_end, UINT64_C(0x56e3eaec718884ef), 5377U,
+            gop_cmult_image_end, UINT64_C(0x88c91aa2829f3b0b), 5377U,
             1024U, 768U, 99U, HPU_PROGRAM_CMULT_DMA_COUNT};
     } else if (kind == HPU_CASE_GENERATED_MODUP) {
         profile = (gop_profile){"MODUP", gop_modup_image_begin,
-            gop_modup_image_end, UINT64_C(0xb01ac03be8c652b9), 6849U,
+            gop_modup_image_end, UINT64_C(0x8026d302c954265d), 6849U,
             128U, 448U, 79U, HPU_PROGRAM_MODUP_DMA_COUNT};
     } else if (kind == HPU_CASE_GENERATED_MODDOWN) {
         profile = (gop_profile){"MODDOWN", gop_moddown_image_begin,
-            gop_moddown_image_end, UINT64_C(0xad124a5bb50a3343), 6977U,
+            gop_moddown_image_end, UINT64_C(0xbb8bab130a986f23), 6977U,
             448U, 256U, 127U, HPU_PROGRAM_MODDOWN_DMA_COUNT};
     } else if (kind == HPU_CASE_CMB_NTT_AUTO ||
                kind == HPU_CASE_CMB_ROTATE) {
         profile = (gop_profile){"AUTO_X3_GALOIS_KEYSWITCH",
             gop_auto_image_begin, gop_auto_image_end,
-            UINT64_C(0xfcd8d0c5ed8b4215), 9089U,
+            UINT64_C(0x1f5ae028688f3ce9), 9089U,
             2304U, 512U, 1831U, HPU_PROGRAM_AUTO_DMA_COUNT};
     } else if (kind == HPU_CASE_CMB_ENCODE) {
         profile = (gop_profile){"ENCODE", gop_encode_image_begin,
-            gop_encode_image_end, UINT64_C(0x2165ada4d3a6f83a), 4097U,
+            gop_encode_image_end, UINT64_C(0x4ac1b428fb2b6d66), 4097U,
             256U, 256U, 171U, HPU_PROGRAM_ENCODE_DMA_COUNT};
         broadcast_layout = 0;
     } else if (kind == HPU_CASE_CMB_RESCALE) {
         profile = (gop_profile){"RESCALE", gop_rescale_image_begin,
-            gop_rescale_image_end, UINT64_C(0x246383fec770f0e4), 5185U,
+            gop_rescale_image_end, UINT64_C(0x7112b583ad695528), 5185U,
             1216U, 384U, 169U, HPU_PROGRAM_RESCALE_DMA_COUNT};
         broadcast_layout = 0;
         workspace_lines = 12U * GOP_POLY_LINES;

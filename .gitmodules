@@ -1,0 +1,3 @@
+[submodule "tests/hpu-it/third_party/inline-asm"]
+	path = tests/hpu-it/third_party/inline-asm
+	url = https://github.com/18241950925/inline-asm.git

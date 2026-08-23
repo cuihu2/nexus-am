@@ -228,6 +228,7 @@ static const char hpu_it_compiled_case_kind[]
 #define HPU_GUARD_WORD            0xa5a55a5aU
 #define HPU_VECTOR_POISON_WORD    0xd15ea5edU
 #define HPU_FULL_VECTOR_WORDS     4096U
+#define HPU_FULL_VECTOR_STAGES    12U
 #define HPU_BCONV_LINES           (HPU_FULL_VECTOR_WORDS / HPU_WORDS_PER_LINE)
 
 /*
@@ -277,7 +278,6 @@ typedef struct {
 
 static hpu_runtime g_runtime;
 static uint32_t g_vector_work[HPU_FULL_VECTOR_WORDS];
-static uint32_t g_vector_next[HPU_FULL_VECTOR_WORDS];
 static uint32_t g_vector_cpu_output[4U * HPU_FULL_VECTOR_WORDS];
 
 /*
@@ -1407,30 +1407,71 @@ static int validate_vector_metadata(const hpu_vector_image *image) {
     return 0;
 }
 
-static void vector_reference_stage(uint32_t modulus,
-                                   const uint32_t *twiddle,
-                                   unsigned stage) {
-    unsigned half = 1U << stage;
-    unsigned group = half << 1;
-    unsigned base;
-    unsigned j;
-    unsigned tw = 0U;
-    for (base = 0U; base < HPU_FULL_VECTOR_WORDS; base += group) {
-        for (j = 0U; j < half; ++j, ++tw) {
-            uint32_t u = g_vector_work[base + j];
-            uint32_t v = mod_mul(g_vector_work[base + j + half],
-                                 twiddle[tw], modulus);
-            g_vector_next[base + j] = mod_add(u, v, modulus);
-            g_vector_next[base + j + half] = mod_sub(u, v, modulus);
+static void vector_apply_p(uint32_t registers[128], unsigned count) {
+    unsigned rotation;
+    for (rotation = 0U; rotation < count % 7U; ++rotation) {
+        uint32_t shifted[128];
+        unsigned old_position;
+        for (old_position = 0U; old_position < 128U; ++old_position) {
+            unsigned new_position =
+                (old_position >> 1U) | ((old_position & 1U) << 6U);
+            shifted[new_position] = registers[old_position];
         }
-    }
-    for (j = 0U; j < HPU_FULL_VECTOR_WORDS; ++j) {
-        g_vector_work[j] = g_vector_next[j];
+        for (old_position = 0U; old_position < 128U; ++old_position) {
+            registers[old_position] = shifted[old_position];
+        }
     }
 }
 
-static void vector_reference_bit_reverse(void) {
-    bit_reverse_words(g_vector_work, HPU_FULL_VECTOR_WORDS);
+static void vector_reference_stage(uint32_t modulus,
+                                   const uint32_t *twiddle,
+                                   unsigned instruction_stage,
+                                   int inverse) {
+    unsigned forward_stage = inverse ?
+        HPU_FULL_VECTOR_STAGES - 1U - instruction_stage : instruction_stage;
+    unsigned m = 1U << forward_stage;
+    unsigned twiddle_index = 0U;
+    unsigned group_start;
+    for (group_start = 0U; group_start < HPU_FULL_VECTOR_WORDS;
+         group_start += m < 128U ? 128U : 2U * m) {
+        unsigned offset_limit = m < 128U ? 64U : m;
+        unsigned offset;
+        for (offset = 0U; offset < offset_limit; offset += 64U) {
+            uint32_t registers[128];
+            unsigned positions[128];
+            unsigned lane;
+            unsigned i;
+            if (m < 128U) {
+                for (i = 0U; i < 128U; ++i) {
+                    positions[i] = group_start + i;
+                    registers[i] = g_vector_work[positions[i]];
+                }
+            } else {
+                for (i = 0U; i < 64U; ++i) {
+                    positions[2U * i] = group_start + offset + i;
+                    positions[2U * i + 1U] = group_start + m + offset + i;
+                    registers[2U * i] = g_vector_work[positions[2U * i]];
+                    registers[2U * i + 1U] =
+                        g_vector_work[positions[2U * i + 1U]];
+                }
+            }
+            if (inverse) vector_apply_p(registers, 6U);
+            for (lane = 0U; lane < 64U; ++lane) {
+                unsigned even = 2U * lane;
+                unsigned odd = even + 1U;
+                uint32_t a = registers[even];
+                uint32_t product = mod_mul(
+                    registers[odd], twiddle[twiddle_index++], modulus);
+                registers[even] = mod_add(a, product, modulus);
+                registers[odd] = mod_sub(a, product, modulus);
+            }
+            if (!inverse) vector_apply_p(registers, 1U);
+            for (i = 0U; i < 128U; ++i) {
+                g_vector_work[positions[i]] = registers[i];
+            }
+            if (m < 128U) break;
+        }
+    }
 }
 
 static int validate_transform_golden(const hpu_vector_image *image,
@@ -1467,14 +1508,13 @@ static int validate_transform_golden(const hpu_vector_image *image,
                     mod_mul(g_vector_work[i], factor[i], modulus);
             }
         }
-        vector_reference_bit_reverse();
         for (stage = 0U; stage < image->stages; ++stage) {
             unsigned first = (inverse ? image->intt_stage_line :
                                         image->ntt_stage_line) +
                              basis * image->basis_stride_lines +
                              stage * image->stage_lines;
             vector_reference_stage(modulus, hpu_vector_line(image, first),
-                                   stage);
+                                   stage, inverse);
         }
         if (inverse) {
             factor = hpu_vector_line(
@@ -1751,21 +1791,13 @@ static int build_single_stage_prestate(const hpu_vector_image *image,
         }
     }
 
-    /*
-     * The functional HPU stage model represents stream_ctrl/lane-transpose
-     * pairing by canonicalizing natural-order input when stage 0 executes.
-     * Therefore a stage-0 fixture must retain natural order; fixtures for a
-     * later isolated stage include the canonical state left by stage 0 and
-     * all preceding logical DIT stages.
-     */
-    if (stage != 0U) vector_reference_bit_reverse();
     for (prior = 0U; prior < stage; ++prior) {
         unsigned first = (inverse ? image->intt_stage_line :
                                     image->ntt_stage_line) +
                          basis * image->basis_stride_lines +
                          prior * image->stage_lines;
         vector_reference_stage(modulus, hpu_vector_line(image, first),
-                               prior);
+                               prior, inverse);
     }
 
     twiddle = hpu_vector_line(
@@ -1910,8 +1942,7 @@ static int run_single_stage_vector(int inverse) {
                 runtime, image, inverse, basis, stage, g_vector_work);
             if (rc != 0) return rc;
 
-            if (stage == 0U) vector_reference_bit_reverse();
-            vector_reference_stage(modulus, twiddle, stage);
+            vector_reference_stage(modulus, twiddle, stage, inverse);
             rc = validate_single_stage_chain_end(image, inverse, basis,
                                                  stage, modulus);
             if (rc != 0) return rc;
