@@ -9,8 +9,8 @@
  * The upstream inline-asm encoder intentionally does not require GNU as to
  * know the HPU mnemonics.  Keep the instruction words here in lock-step with
  * third_party/inline-asm/encode and emit them with .word.  x10 carries the
- * custom1 line offset.  x11 is the DLOAD line count; target RTL intentionally
- * ignores it for DSTORE and uses the object's recorded line count instead.
+ * custom1 line offset.  x11 is the nonzero line count for both DLOAD and
+ * DSTORE; a zero count is an architectural fault.
  */
 
 typedef struct {

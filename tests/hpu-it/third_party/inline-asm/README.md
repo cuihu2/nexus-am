@@ -24,6 +24,8 @@
 - **`operator/keyswitch.hpp/cpp`**：完整密钥切换 (KeySwitch) 逻辑生成，语义为 `KeySwitch(base, switching_component, evk) -> (base + ks0, ks1)`。
 - **`operator/relinearization.hpp/cpp`**：重线性化算子，以 `t0` 为 KeySwitch 的 base、切换 `t2`，再计算 `t1 + ks1`，输出标准二分量密文。
 - **`operator/ciphertext_multiply.hpp/cpp`**：完整密文乘法生成，执行输入分量 NTT、`cmult` 三分量张量积、INTT，并复用 `relinearization` 完成最终合成。
+- **`operator/encode.hpp/cpp`**：硬件 Encode 边界；宿主先完成有符号系数到 RNS-Q 的嵌入，HPU 再逐 Q limb 执行负循环 NTT，输出可直接供 `pmult` 使用的明文。
+- **`operator/rescale.hpp/cpp`**：系数域二分量密文的带舍入层级缩减；对各 Q limb 加 `floor(q_last/2)`，再复用 `ModDown(Q', {q_last})` 丢弃最后一个模数。
 
 ### 4) 指令编码模块 (`encode`)
 将生成出的 HPU 汇编进一步转译为 32 位机器码文本：
@@ -103,6 +105,8 @@ ctest --test-dir build --output-on-failure
 执行 `inline_asm_encode_outputs` 后，会进一步整理出根目录下的 `outputs/` 文件夹。执行 `hpu_reference_vectors` 后，各算子目录会补充输入、期望结果和可读 golden：
 - `outputs/ntt/`
 - `outputs/intt/`
+- `outputs/encode/`
+- `outputs/rescale/`
 - `outputs/mm/`
 - `outputs/bconv/`
 - `outputs/pmult/`
@@ -116,6 +120,7 @@ ctest --test-dir build --output-on-failure
 - `outputs/rv_interface_smoke/`
 
 例如 `outputs/ntt/` 下会包含：
+
 - `ntt.cpp`
 - `ntt.asm`
 - `ntt.inst32`（运行编码工具后生成）
@@ -125,6 +130,12 @@ ctest --test-dir build --output-on-failure
 - `test_data/params.json`、`test_data/artifact_manifest.csv`
 - `test_data/hardware/hpu_mem_image.u32.bin`、`line_map.csv`、`hpu_mem_config.json`
 - `test_data/hardware/mod_ctx_map.csv`、`twiddle_map.csv`、`abi.json`
+
+`outputs/` 是 `hpu_delivery` 生成的交付产物，当前被 `.gitignore` 忽略；仅向测试
+同学发送 Git commit 或让其重新 clone 本仓库不会包含这些数据。正式交付应在同一
+次 `hpu_delivery` 成功后整体归档 `outputs/`，同时记录源码 commit、归档
+SHA-256 和 `outputs/DELIVERY_REPORT.txt`。不得混合不同生成批次的指令、
+relocation manifest、line map 与 HPU_MEM 镜像。
 
 ---
 
@@ -138,13 +149,13 @@ ctest --test-dir build --output-on-failure
 
 当前参数尚未收敛到单一配置文件：
 
-- HPU 指令流参数位于 `src/main.cpp` 的 `kNttCfg`、`kPmultCfg`、`kCmultCfg`、`kModdownCfg`、`kAutoCfg` 和 `kCiphertextMultiplyCfg`。
+- HPU 指令流参数位于 `src/main.cpp` 的 `kNttCfg`、`kEncodeCfg`、`kRescaleCfg`、`kPmultCfg`、`kCmultCfg`、`kModdownCfg`、`kAutoCfg` 和 `kCiphertextMultiplyCfg`。
 - Reference 参数位于 `test/reference/main.cpp` 的 `kN`、`kNumQ`、`kNumP`、`kDnum`、`kPlainModulus` 和 `kSeed`。
 - `outputs/*/test_data/params.json` 是生成结果，不是输入配置；直接修改后会在下一次生成时被覆盖。
 
 修改 `N/Q/P/dnum` 时必须同步修改两处源配置，并满足 `N` 为 2 的幂、`ceil(N/64) <= 1024`（即 `N <= 65536`）、`num_q % dnum == 0`、`num_q + num_p <= 256`、所有 Q/P 模数可用 `uint32` 表示等约束。当前统一示例为 `N=4096, Q=4, P=3, dnum=2`。small Bank 5 为 32 line，固定范围 `0x1400..0x141F`，物理可放 512 个 context；由于 `MOD_ID` 只有 8 bit，软件可寻址上限为 256。它与 8 个并发对象槽位是两个独立资源。
 
-`hpu_delivery` 会为 `ciphertext_multiply` 自动生成与主配置一致的 `N=4096, Q=4, P=3, dnum=2` 输入、评估密钥、阶段 golden、最终输出、明文校验和 artifact checksum。它同时生成独立的 `uint32` HPU_MEM 镜像、q/Barrett 上下文、逐 stage twiddle、256B line offset/count，并从同一 reference 拆分出 NTT、INTT、MM、BConv、ModUp、PMULT、CMULT、ModDown、KeySwitch 和 Relinearization 的独立 UT 数据包。`auto/test_data/STATUS.md` 记录该算子当前的寄存器分配阻塞项。
+`hpu_delivery` 会为 `ciphertext_multiply` 自动生成与主配置一致的 `N=4096, Q=4, P=3, dnum=2` 输入、评估密钥、阶段 golden、最终输出、明文校验和 artifact checksum。它同时生成独立的 `uint32` HPU_MEM 镜像、q/Barrett 上下文、逐 stage twiddle、256B line offset/count，并从同一 reference 拆分出 NTT、INTT、Encode、Rescale、MM、BConv、ModUp、PMULT、CMULT、ModDown、Auto、KeySwitch 和 Relinearization 的独立 UT 数据包。
 
 
 ## 4. 关键设计实现说明
@@ -160,6 +171,12 @@ ctest --test-dir build --output-on-failure
 
 - **完整密文乘法语义：**
   `cmult` 只负责 FHE 密文乘法中的张量积阶段，即 $t_0=a_0b_0$、$t_1=a_0b_1+a_1b_0$、$t_2=a_1b_1$。`relinearization` 调用 `KeySwitch(base=t0, switching_component=t2, evk=rlk)` 得到 $(t_0+ks_0,ks_1)$，再生成 $t_1+ks_1$；`ciphertext_multiply` 直接复用该算子。
+
+- **Encode 的软硬件边界：**
+  当前 reference 的 Encode 是整数明文的 signed-to-RNS 嵌入，不是 CKKS 复数槽位 FFT。冻结的 11 条 HPU ISA 没有比较或条件选择指令，无法从单份 `mod t` 规范余数恢复正负号；因此宿主负责生成 `plaintext_coeff_q[basis][coefficient]`，HPU Encode 负责逐 limb 负循环 NTT，输出 `plaintext_ntt_q`。
+
+- **Rescale 舍入语义：**
+  对 `Q={q_0,...,q_last}` 上的每个密文分量，先在每个 limb 加入 `floor(q_last/2)`，再把最后一个 context 当作单元素 P 基复用 ModDown。输出基为 `Q'={q_0,...,q_{last-1}}`，计算的是 `round(x/q_last) mod Q'`；算子只处理系数域数据，不维护上层 CKKS scale 元数据。
 
 - **生成与编码分层解耦：**
   `inline-asm` 仍负责汇编生成，`encode` 模块则负责解析、归一化和 32 位编码。两者保留独立边界，但通过同一 CMake 工程统一构建，从而降低汇编语义更新后生成器与编码器失配的风险。
@@ -179,7 +196,7 @@ ctest --test-dir build --output-on-failure
 
 - `N` 为 2 的幂，且 `ceil(N/64) <= 1024`（当前硬件上限 `N <= 65536`）
 - 仅允许 3 个工作槽位：`p0/p1/p2`
-- 复杂算子（PMULT/CMULT/MODUP/MODDOWN）使用 `dload/dstore` 流式搬运，不在本地长期保留多基对象
+- 复杂算子（Encode/Rescale/PMULT/CMULT/MODUP/MODDOWN）使用 `dload/dstore` 流式搬运，不在本地长期保留多基对象
 - `dload type=2, flag[0]=1` 将模表逻辑对象分配到 small Bank 5；DMA 与后续指令的一致性由硬件维护，可直接使用 `pmodld MOD_ID` 激活表项
 - 每个可编码算子同时生成 `.inst32` 和 `.cmd26`；`cmd26[25]` 区分 custom0/custom1，custom0 直接携带 `inst[31:7]`，custom1 按控制逻辑字段重排并另带 offset/count sideband
 - `psync` 只在完整程序的最后发出，用于通知 CPU 整个 HPU 程序已经完成；不得将其插入算子内部作为 DMA 等待或阶段屏障
@@ -188,10 +205,15 @@ ctest --test-dir build --output-on-failure
 - `ciphertext_multiply/test_data` 已由软件 reference 自动生成；二进制格式、shape 和校验值见其中的 `params.json` 与 `artifact_manifest.csv`
 - 顶层 `.bin` 是 `uint64` 数学 golden；真正面向 HPU 加载的是 `test_data/hardware/` 下按 256B line 补齐的 `.u32.bin`
 - `hardware/line_map.csv` 给出每个对象的 byte address、line offset 和 line count；custom1 固定使用 `GPR[rs1]=line_offset`、`GPR[rs2]=line_count`（256B line 单位），`hpu_mem_config.json` 给出 HPU_MEM window 值和 `0x00..0x18` CSR 编程顺序
-- 生成的 `hpu_program_*` 入口接收与 DMA 指令等长的 `hpu_dma_span_t[]`；每条 custom1 发射前固定把 line offset/count 装入 `x10/x11`，DSTORE 按冻结 ABI 将 `x11` 置零。`nexus-am/tests/hpu-it` 根据硬件布局生成逐行可审计的 resolved relocation manifest。
+- 生成的 `hpu_program_*` 入口接收与 DMA 指令等长的 `hpu_dma_span_t[]`；每条 DLOAD/DSTORE custom1 发射前都把非零 line offset/count 装入 `x10/x11`。`nexus-am/tests/hpu-it` 根据硬件布局生成逐行可审计的 resolved relocation manifest。
 
 ---
 
 ## 6. 当前交付边界
 
 软件侧已完成指令生成、编码、完整密文乘法/重线性化 reference golden、独立 `uint32` 硬件镜像、`q32+mu48+reserved48` 模上下文、每 stage 固定 `N/2` 个物理 twiddle、显式 negacyclic pre/post factor、256B line 映射、类型化 DMA span、生命周期门禁和 RV 可执行后端。Nexus-AM IT runtime 已完成 HPU_MEM CSR、cache、FAULT/IRQ、scratch 与 DMA relocation 绑定；硬件 qualification 仍需目标 RTL/板级运行和外部 monitor 证据。详细签字项见 `doc/HPU_TEST_DELIVERY.md`。
+
+当前 golden 使用确定性零噪声和 P 可整除的功能测试评估密钥，适合 UT/IT 的
+逐字定位，不是安全性或噪声预算测试向量。Nexus-AM 的 host 模式只验证 testcase、
+oracle、relocation 和内存边界自洽；目标算术是否通过必须以 RISC-V 路径在目标
+RTL/板级执行后的逐字比对、FAULT/IRQ 状态和外部 monitor 记录为准。

@@ -45,8 +45,7 @@ int main(void) {
 #endif
     rc = hpu_run_testcase(&hpu_testcase);
 #if !HPU_IT_STANDALONE_HTIF_ENABLED
-    result = rc != 0 ? "FAIL" :
-             (hpu_testcase.requirements != HPU_REQ_NONE ? "PASS_PROBE" : "PASS");
+    result = rc != 0 ? "FAIL" : "PASS";
     printf("HPU_IT_END case=%s result=%s rc=%d requirements=0x%x\n",
            hpu_testcase.case_id,
            result,

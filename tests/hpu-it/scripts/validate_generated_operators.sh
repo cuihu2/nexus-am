@@ -29,6 +29,11 @@ if grep -Fq ',BLOCKED_' "$image_dir/.qualification-status.csv"; then
   printf 'ERROR: generated operator suite contains a blocked case\n' >&2
   exit 2
 fi
+if [[ $(grep -c ',EXECUTABLE_PASS_READY,output_check_authoritative$' \
+        "$image_dir/.qualification-status.csv") -ne 4 ]]; then
+  printf 'ERROR: all generated operators must be output-authoritative PASS-ready\n' >&2
+  exit 2
+fi
 mem_profile=$(<"$image_dir/.hpu-mem-profile")
 profile_re='^HPU_MEM_BASE=(0[xX][0-9a-fA-F]+|[0-9]+);HPU_MEM_LINES=([1-9][0-9]*);HPU_LINE_BYTES=256;HPU_MEM_BYTES=([1-9][0-9]*)$'
 [[ $mem_profile =~ $profile_re ]] || {
@@ -137,6 +142,12 @@ for source in "${sources[@]}"; do
     printf 'ERROR: %s lacks custom1 DMA words\n' "$case_id" >&2
     exit 2
   }
+  if grep -B3 -E '\.word[[:space:]]+0x00b5[45][0-9a-f]2b' \
+       <<<"$disassembly" | grep -Eq 'li[[:space:]]+a1,0([[:space:]]|$)'; then
+    printf 'ERROR: %s loads zero into x11/a1 before generated DSTORE\n' \
+      "$case_id" >&2
+    exit 2
+  fi
   riscv64-linux-gnu-objcopy -S --set-section-flags .bss=alloc,contents \
     -O binary "$elf" "$scratch/$case_id.bin"
   cmp -s "$scratch/$case_id.bin" "$bin" || exit 2

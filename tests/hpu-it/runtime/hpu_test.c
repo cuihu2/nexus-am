@@ -1032,15 +1032,10 @@ static int rt_dload(hpu_runtime *runtime, unsigned obj,
 #endif
 }
 
-/*
- * RTL derives a DSTORE's transfer length from the object's allocation record;
- * custom1 rs2 is ignored for stores.  Keep the recorded length separate from
- * the rs2 diagnostic value so boundary tests cannot accidentally model rs2 as
- * a second, authoritative length field.
- */
+/* DSTORE uses the same nonzero rs2/line-count sideband contract as DLOAD. */
 static int rt_dstore_recorded(hpu_runtime *runtime, unsigned obj,
                               unsigned line, unsigned recorded_lines,
-                              uintptr_t rs2_value, int release) {
+                              int release) {
     unsigned backing_line;
     if (recorded_lines == 0U || recorded_lines > UINT16_MAX ||
         window_span_to_backing(runtime, line, recorded_lines,
@@ -1055,7 +1050,7 @@ static int rt_dstore_recorded(hpu_runtime *runtime, unsigned obj,
 #else
     span.line_offset = line;
 #endif
-    span.line_count = rs2_value;
+    span.line_count = recorded_lines;
     if (!release) {
         if (obj == 0U) hpu_dstore_poly_p0_keep(span);
         else if (obj == 2U) hpu_dstore_poly_p2_keep(span);
@@ -1079,15 +1074,13 @@ static int rt_dstore_recorded(hpu_runtime *runtime, unsigned obj,
     return 0;
 #else
     (void)backing_line;
-    (void)rs2_value;
     return model_dstore(runtime, obj, line, recorded_lines, release);
 #endif
 }
 
 static int rt_dstore(hpu_runtime *runtime, unsigned obj,
                      unsigned line, unsigned recorded_lines, int release) {
-    return rt_dstore_recorded(runtime, obj, line, recorded_lines,
-                              recorded_lines, release);
+    return rt_dstore_recorded(runtime, obj, line, recorded_lines, release);
 }
 
 static int rt_pmodld(hpu_runtime *runtime, unsigned mod_id) {
@@ -2488,7 +2481,7 @@ static int run_dma_roundtrip_phase(uint32_t seed, const char *phase,
 
     printf("HPU_IT_DMA phase=%s obj=p%u lines=%u "
            "load_offset=%u load_pa=0x%lx store_offset=%u "
-           "store_pa=0x%lx dstore_rs2=0 recorded_lines=%u\n",
+           "store_pa=0x%lx dstore_rs2_lines=%u\n",
            phase, obj, lines, source_line,
            (unsigned long)(runtime->active_window_base +
                            (uintptr_t)source_line * HPU_LINE_BYTES),
@@ -2499,7 +2492,7 @@ static int run_dma_roundtrip_phase(uint32_t seed, const char *phase,
 
     rc = rt_dload(runtime, obj, source_line, lines, 0);
     if (rc == 0) {
-        rc = rt_dstore_recorded(runtime, obj, output_line, lines, 0U, 1);
+        rc = rt_dstore_recorded(runtime, obj, output_line, lines, 1);
     }
     if (rc == 0) rc = rt_sync(runtime);
     if (rc != 0) return rc;
@@ -2571,18 +2564,18 @@ static int run_original_store_phase(uint32_t seed, const char *phase,
 
     rc = rt_dload(runtime, obj, source_line, lines, 0);
     if (rc == 0) {
-        rc = rt_dstore_recorded(runtime, obj, output_line_a, lines, 0U,
+        rc = rt_dstore_recorded(runtime, obj, output_line_a, lines,
                                 continuous ? 0 : 1);
     }
     if (rc == 0 && continuous) {
         /* Deliberately adjacent commands: object dependencies serialize them. */
-        rc = rt_dstore_recorded(runtime, obj, output_line_b, lines, 0U, 1);
+        rc = rt_dstore_recorded(runtime, obj, output_line_b, lines, 1);
     }
     if (rc == 0) rc = rt_sync(runtime);
     if (rc != 0) return rc;
 
     printf("HPU_IT_DSTORE phase=%s kind=raw obj=p%u lines=%u "
-           "writes=%u dstore_rs2=0 recorded_lines=%u\n",
+           "writes=%u dstore_rs2_lines=%u\n",
            phase, obj, lines, output_count, lines);
     outputs[0].line = output_line_a;
     outputs[0].expected = expected;
@@ -2643,18 +2636,18 @@ static int run_calculated_store_phase(uint32_t seed, const char *phase,
     if (rc == 0) rc = rt_pfree(runtime, 1U);
     if (rc == 0) rc = rt_pfree(runtime, 4U);
     if (rc == 0) {
-        rc = rt_dstore_recorded(runtime, 2U, output_line_a, lines, 0U,
+        rc = rt_dstore_recorded(runtime, 2U, output_line_a, lines,
                                 continuous ? 0 : 1);
     }
     if (rc == 0 && continuous) {
         /* Keep then release p2 without a PSYNC between the two writes. */
-        rc = rt_dstore_recorded(runtime, 2U, output_line_b, lines, 0U, 1);
+        rc = rt_dstore_recorded(runtime, 2U, output_line_b, lines, 1);
     }
     if (rc == 0) rc = rt_sync(runtime);
     if (rc != 0) return rc;
 
     printf("HPU_IT_DSTORE phase=%s kind=padd obj=p2 lines=%u "
-           "writes=%u dstore_rs2=0 recorded_lines=%u\n",
+           "writes=%u dstore_rs2_lines=%u\n",
            phase, lines, output_count, lines);
     outputs[0].line = output_line_a;
     outputs[0].expected = expected;
@@ -3511,7 +3504,7 @@ static int run_external_algorithm_probe(hpu_case_kind kind) {
            "algorithm_binding=missing hpu_commands=not_issued "
            "representative_sequence=disallowed missing=%s\n",
            algorithm, missing);
-    return 0;
+    return 423;
 }
 
 static int run_chain(uint32_t seed, hpu_case_kind kind) {
@@ -3580,7 +3573,8 @@ typedef enum {
     HPU_FAULT_PROBE_OOB_DLOAD_P0,
     HPU_FAULT_PROBE_ZERO_DLOAD_P7,
     HPU_FAULT_PROBE_ZERO_WINDOW_DSTORE_P7,
-    HPU_FAULT_PROBE_ZERO_COUNT_OOB_DSTORE_P7
+    HPU_FAULT_PROBE_ZERO_COUNT_DSTORE_P7,
+    HPU_FAULT_PROBE_OOB_DSTORE_P7
 } hpu_fault_probe_kind;
 
 static int hpu_run_fault_probe(hpu_runtime *runtime,
@@ -3624,8 +3618,14 @@ static int hpu_run_fault_probe(hpu_runtime *runtime,
         is_load = 0U;
         expected_window_valid = 0U;
         break;
-    case HPU_FAULT_PROBE_ZERO_COUNT_OOB_DSTORE_P7:
-        name = "zero-count-sideband-oob-dstore-p7";
+    case HPU_FAULT_PROBE_ZERO_COUNT_DSTORE_P7:
+        name = "zero-count-dstore-p7";
+        obj = 7U;
+        is_load = 0U;
+        expected_window_valid = 1U;
+        break;
+    case HPU_FAULT_PROBE_OOB_DSTORE_P7:
+        name = "oob-dstore-p7";
         obj = 7U;
         is_load = 0U;
         expected_window_valid = 1U;
@@ -3640,11 +3640,15 @@ static int hpu_run_fault_probe(hpu_runtime *runtime,
     } else if (kind == HPU_FAULT_PROBE_ZERO_WINDOW_DSTORE_P7) {
         line_offset = 0U;
         sideband_count = 1U;
-        effective_length = "object-recorded-one-line";
-    } else if (kind == HPU_FAULT_PROBE_ZERO_COUNT_OOB_DSTORE_P7) {
-        line_offset = runtime->active_window_lines;
+        effective_length = "custom1-rs2-one-line";
+    } else if (kind == HPU_FAULT_PROBE_ZERO_COUNT_DSTORE_P7) {
+        line_offset = 0U;
         sideband_count = 0U;
-        effective_length = "object-recorded-one-line";
+        effective_length = "custom1-rs2-zero";
+    } else if (kind == HPU_FAULT_PROBE_OOB_DSTORE_P7) {
+        line_offset = runtime->active_window_lines;
+        sideband_count = 1U;
+        effective_length = "custom1-rs2-one-line";
     } else if (kind == HPU_FAULT_PROBE_UNCOMMITTED_DLOAD_P0) {
         line_offset = 0U;
         sideband_count = 1U;
@@ -3691,12 +3695,12 @@ static int hpu_run_fault_probe(hpu_runtime *runtime,
         }
 
         if (kind == HPU_FAULT_PROBE_ZERO_WINDOW_DSTORE_P7 ||
-            kind == HPU_FAULT_PROBE_ZERO_COUNT_OOB_DSTORE_P7) {
+            kind == HPU_FAULT_PROBE_ZERO_COUNT_DSTORE_P7 ||
+            kind == HPU_FAULT_PROBE_OOB_DSTORE_P7) {
             /*
-             * DSTORE gets its effective transfer length from the resident
-             * object's recorded length.  The caller establishes p7 before
-             * either store probe.  The OOB case additionally drives the
-             * frozen rs2/line_count sideband to zero.
+             * The caller establishes p7 before these raw negative probes.
+             * DSTORE uses rs2 as its authoritative line count: zero count,
+             * an invalid window, and an out-of-window span must all fault.
              */
             span.line_offset = (uintptr_t)line_offset;
             span.line_count = sideband_count;
@@ -4109,7 +4113,7 @@ static int run_cfg_fault(uint32_t seed) {
     window_base = (uintptr_t)runtime->memory;
 
     printf("HPU_IT_CFG_FAULT_MATRIX implemented=uncommitted-dload-p0,"
-           "zero-window-dstore-p7,oob-dstore-p7-count0 "
+           "zero-window-dstore-p7,zero-count-dstore-p7,oob-dstore-p7 "
            "local=functional external=it-monitor,axi-cache "
            "status=EXTERNAL_REQUIRED\n");
 
@@ -4154,7 +4158,9 @@ static int run_cfg_fault(uint32_t seed) {
                                  HPU_FAULT_DEFINED_MASK);
     if (rc == 0)
         rc = hpu_run_fault_probe(
-            runtime, HPU_FAULT_PROBE_ZERO_COUNT_OOB_DSTORE_P7);
+            runtime, HPU_FAULT_PROBE_ZERO_COUNT_DSTORE_P7);
+    if (rc == 0)
+        rc = hpu_run_fault_probe(runtime, HPU_FAULT_PROBE_OOB_DSTORE_P7);
     if (rc == 0) rc = rt_pfree(runtime, 7U);
     if (rc == 0) rc = rt_sync(runtime);
     if (rc == 0) rc = compare_memory_unchanged(runtime);
@@ -4567,9 +4573,5 @@ int hpu_run_testcase(const hpu_testcase_descriptor *testcase) {
     default: rc = 191; break;
     }
 
-    if (rc == 0 && testcase->requirements != HPU_REQ_NONE) {
-        printf("HPU_IT_EXTERNAL_EVIDENCE requirements=0x%x status=REQUIRED\n",
-               testcase->requirements);
-    }
     return rc;
 }

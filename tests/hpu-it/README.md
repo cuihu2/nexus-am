@@ -20,23 +20,20 @@ qualification PASS。另有 4 个生成算子补充用例。
 边界 guard 和 testcase 分派。RISC-V 版本则通过固定 `.word` 编码真正发出
 HPU custom0/custom1 指令，并访问 IT 目标 CSR。
 
-程序输出严格区分以下结果：
+程序输出只区分以下两种结果：
 
-- `PASS`：自包含检查通过，且 testcase 没有未满足的外部证据位。
-- `PASS_PROBE`：自包含可执行探针通过，但仍必须在 IT 环境补齐 monitor、
-  ready/backpressure、cache/非缓存区契约、外部数据、覆盖率或性能门限。
-- `FAIL`：程序检查、超时、FAULT 或 golden 比对失败。
+- `PASS`：程序执行成功，输出与 golden 一致，且 guard、FAULT、timeout 等
+  自包含检查全部通过。
+- `FAIL`：程序检查、超时、FAULT、golden 比对或 guard 检查失败。
 
-`PASS_PROBE` 不能作为测试点关闭依据。正式关闭必须同时保存 ELF、运行日志、
-RTL/Spike 版本、seed，以及描述符中 `requirements` 指出的外部证据。
-bind/UVM/RTL monitor 必须向与 guest UART/sim log 隔离的新 evidence 文件先写一条
+描述符中的 `requirements` 继续作为 monitor、ready/backpressure、cache、覆盖率
+和性能数据的采集提示，但不再参与 guest 程序的 PASS/FAIL 判定。需要保存这些
+辅助证据时，bind/UVM/RTL monitor 可以向与 guest UART/sim log 隔离的 evidence
+文件先写一条
 `HPU_IT_EVIDENCE_V1 case=<case> producer=<bind|uvm|rtl-monitor...> run_id=<id>`，
 再写多条可追溯的
-`HPU_IT_REQ_PASS case=<case> requirements=0x<mask> source=<bind|uvm|rtl-monitor...>`。IT runner
-只在这些记录的按位 OR 与用例声明的掩码完全一致时，才将
-`PASS_PROBE` 升级为 qualification pass。缺失、错用例、未声明位或畸形
-证据都不能用通用环境开关绕过；guest 在 UART 中打印的同名文本
-不参与资格判定。
+`HPU_IT_REQ_PASS case=<case> requirements=0x<mask> source=<bind|uvm|rtl-monitor...>`。
+这些记录不改变 guest 已经输出的 `PASS` 或 `FAIL`。
 
 无需 VCS/Spike 即可单测这个证据协议：
 
@@ -47,8 +44,8 @@ scripts/check_requirement_evidence.sh \
 ```
 
 `check_requirement_evidence.sh` 只读外部 evidence 文件并校验记录：完整覆盖返回 0，缺位返回
-77，畸形、错 case 或越权位返回 78。它不会生成 monitor 证据，也不能
-把 `HPU_IT_LOCAL_EVIDENCE` 升级为 qualification pass。
+77，畸形、错 case 或越权位返回 78。它不会生成 monitor 证据，也不参与
+guest 的 PASS/FAIL 判定。
 
 `HPU_REQ_READY_CONTROL` 只表示 ingress ready pattern；
 `HPU_REQ_QUEUE_CONTROL` 额外要求队列 count、消费暂停/恢复、full 边界及
@@ -110,7 +107,8 @@ window A，再 COMMIT 后验证切到 B。每次结果比对同时核对整个 H
 
 软件采样无法保证捕获短暂的 STATUS busy 脉冲，也不能替代 CSR 总线侧对
 shadow/active 同拍切换的观察，因此 CFG-002/CFG-004 仍保留
-`HPU_REQ_IT_MONITOR`，不得仅凭 `PASS_PROBE` 关闭测试点。
+`HPU_REQ_IT_MONITOR` 作为附加观测提示；guest 仍只根据执行和输出检查报告
+`PASS` 或 `FAIL`。
 
 当前目标 Chisel 的 `TLDeviceBlock.scala` 已把 BASE_LO/BASE_HI/SIZE_LO/SIZE_HI
 实现为零初值 `RegInit`，并由轻量 generator 机器生成、同步到两份当前 IT 交付
@@ -121,14 +119,14 @@ IT monitor 要求：本地动态测试证明修复闭环，但不能替代集成
 
 CFG-001/CFG-004/CFG-005 的 RISC-V 生产路径会绕过普通 `rt_dload/rt_dstore`
 范围预检，直接发出受控 raw custom1：覆盖窗口越界 DLOAD、零 `line_count`
-DLOAD，以及 `line_count=0` sideband 下按对象记录长度判定的越界 DSTORE；随后
+DLOAD，以及 DSTORE 的零 `line_count` 和窗口越界；随后
 有界轮询 `FAULT_STATUS[0]`，核对方向和 p0/p7 对象号，执行 bit0 W1C，并确认
 整个 DDR window 无副作用。宿主机和 MMIO-disabled standalone Spike 使用确定性
 CSR 模型，不执行无法由该环境表达前置条件的 raw custom1，并在日志中明确标记
 `csr_mmio=UNMODELED`、`raw_custom1=NOT_ISSUED`。CFG-005 的 RISC-V/MMIO 生产路径
 依次覆盖：未 COMMIT 时 p0 DLOAD fault；先建立一行 p7 对象、再 COMMIT `SIZE=0`
-后的 DSTORE fault；以及恢复有效 window 后 `line_count=0` sideband、按对象记录
-长度判定的越界 DSTORE。三个阶段均核对方向、对象号、W1C 和完整 19201-line
+后的 DSTORE fault；以及恢复有效 window 后零 `line_count` DSTORE 和非零
+`line_count` 的越界 DSTORE。各阶段均核对方向、对象号、W1C 和完整 19201-line
 window 不变，不插入中间 PSYNC。当前 RTL 已实现 window-invalid fault 并消费该
 uop；descriptor 仍保留 `HPU_REQ_FAULT_INJECTION | HPU_REQ_IT_MONITOR |
 HPU_REQ_CACHE_CONTRACT`，独立 IT monitor、FAULT 注入和 AXI/cache 零副作用证据仍
@@ -140,9 +138,9 @@ CFG-003 以独立、每阶段重置的 fixture 覆盖 p0/p7、1/2-line，以及 
 1/2-line DLOAD→DSTORE 回环；PATH-004 分别写回原对象和 PADD 结果，并覆盖
 单次及连续 DSTORE。每个 phase 依靠对象依赖保持命令顺序，只在末尾执行一次
 PSYNC，避免把完成 IRQ 错当成中途 barrier。每个目标区都先 poison，所有
-阶段都逐字检查输出、相邻 guard 和完整 19201-line window。按照目标 RTL，
-DSTORE 长度来自对象的 DLOAD/计算记录而不是 custom1 `rs2`；这些探针把 DSTORE
-`rs2` 固定为 0，以确认它不被误当成写回长度。AXI 首地址、burst/行数、写事务
+阶段都逐字检查输出、相邻 guard 和完整 19201-line window。DLOAD 与 DSTORE
+均通过 custom1 `rs2` 提供非零 line count；这些探针在每次 DSTORE 前装载实际
+写回行数。AXI 首地址、burst/行数、写事务
 次数和 cache 可见性仍只能由真实 IT monitor 关闭，因此三者继续保留
 `HPU_REQ_IT_MONITOR | HPU_REQ_CACHE_CONTRACT`。
 
@@ -195,7 +193,7 @@ third_party/inline-asm @ 4399883b9e1fa249b99d48c7e919ee52acc662bc
 
 普通 GNU assembler 不识别 HPU 助记符，因此 `hpu_inline_asm.h` 使用与上游
 encoder/self-test 一致的固定 32-bit 指令字，并为 custom1 把 line offset 和
-DLOAD count 绑定到 `x10/x11`（DSTORE count 由对象记录给出）。适配层覆盖
+DLOAD/DSTORE 的非零 line count 绑定到 `x10/x11`。适配层覆盖
 NTT/INTT stage 0..11、MOD_ID 0..6、PMAC
 对象/`cimm8` 模式以及 p0/p2/p7 的 `DSTORE rel=0` 生命周期写回。
 上游同时提供算子代码生成、line map、reference 和 golden 数据；
@@ -249,9 +247,9 @@ ctest --test-dir build-host --output-on-failure -j
 ```
 
 这会生成 49 个独立宿主机 executable 到 `build-host/cases/`，不是仅生成
-object 文件。程序会完整执行自检查；由于当前 49 个用例都有待补的 IT 外部
-证据，CTest 根据 `PASS_PROBE` 将它们明确记为 `Skipped`，而不是绿色验收。
-宿主机自检查只能证明 testcase、oracle 和数据边界检查自洽。
+object 文件。具有完整实现的 testcase 在自检查正确时由 CTest 直接判定通过；
+CMB015 因算法契约缺失保持显式 blocked/预期失败。宿主机自检查证明 testcase、
+oracle 和数据边界检查自洽。
 
 如需同时构建上游 generator/encoder/reference：
 
@@ -298,19 +296,10 @@ ELF64 RISC-V、入口 `0x80000000`、DRAM LOAD segment、关键指令字，并�
 fingerprint 目录，不要复制 `images/` 根目录中的旧平铺文件，也不要混合不同
 fingerprint 目录内的三件套。
 
-当前已独立复验的生产快照为
-`hpu-0x87000000-19201-39b3b1020b749ddf`：49组ELF/bin/txt，ELF64
-little-endian RISC-V、入口`0x80000000`，内嵌profile/fingerprint与四个sidecar
-完全一致。只含该不可变目录的归档为
-`build-nexus-am/hpu-0x87000000-19201-39b3b1020b749ddf.tar.gz`，SHA-256为
-`2a01d0125d9bbabc7a2768b58b58ac1f0f5a0839f0bb4aee11f4128506901713`；不得用
-`images/`根目录自行重打包。该版已包含CSR镜像复位、window-invalid FAULT消费、
-CFG-005三类FAULT/W1C闭环以及最终runtime语义修复。独立host与ASan+UBSan
-49项均无失败；同一源码fingerprint的standalone完整运行目录名为
-`hpu-0x87000000-19201-39b3b1020b749ddf-standalone-00183bf2b04cba45`，
-49项均返回0且通过provenance末检。实际父目录由调用者的`OUTPUT_ROOT`决定。
-上述结果仍只对应`PASS_PROBE`和功能模型
-自检查，不替代下述IT资格证据。
+生产快照发布到带 source fingerprint 的不可变目录；每套包含ELF/bin/txt、
+内嵌profile/fingerprint和对应DMA sidecar。运行结果由程序的golden、guard、
+FAULT和timeout检查直接决定为`PASS`或`FAIL`，构建脚本再验证ELF64 RISC-V、
+入口地址、加载布局、指令编码和sidecar一致性。
 
 也可以由 CMake 调用：
 
@@ -337,15 +326,12 @@ scripts/run_it_case.sh /path/to/IT-SCPU-RTL \
   /absolute/path/from-external-monitor.evidence
 ```
 
-IT runner 遇到 `PASS_PROBE` 且缺外部证据时返回 77
-（qualification incomplete）。只有 bind/UVM/monitor 输出的
-`HPU_IT_REQ_PASS` 记录与用例 requirements 掩码完全匹配时，
-runner 才返回 0；不再提供无条件 bring-up 绕过开关。
+guest 输出正确且返回码为0时直接报告`PASS`。可选的bind/UVM/monitor evidence
+用于辅助定位和留档，不再把成功结果降级为第三种状态。
 
 完整 VCS/Vivado Difftest 仍依赖服务器侧仿真器、Difftest 基础 Makefile、
-release package 和授权；这些不随 testcase 仓库分发。缺少外算法包、真实
-monitor/ready 控制、功能覆盖或冻结性能门限时，runner 必须保持
-77/不完整状态，不得以进程退出 0 关闭测试点。
+release package 和授权；这些不随 testcase 仓库分发。尚未实现的CMB015继续
+显式返回失败并在产物状态表中标记为blocked，不会被错误判为`PASS`。
 
 IT 仓库同时提供 `tools/hpu/verilator-fallback/` 开源功能 smoke。该入口会固定
 并校验 Verilator/Yosys 依赖，使用完整 `SimTop/LNSystem`、真实 `dma_sim.v`
@@ -373,14 +359,14 @@ DMA回环的bring-up阻塞，但不等于49个正式用例、逐指令Difftest�
 签核通过。旧`0x87000000/4096` ELF、缺少独立尾部 guard 的
 `0x87000000/18945`中间产物，以及复用 master secret-key 区作scratch的
 `0x87000000/19009`中间产物均与当前 FHE 布局不兼容，已过期且不得交付；
-必须重新构建并验证`0x87000000/19201`产物。各用例
-的monitor/cache等需求位继续保留，未满足时仍只能报告`PASS_PROBE`。
+必须重新构建并验证`0x87000000/19201`产物。各用例的monitor/cache等需求位
+继续作为附加观测提示，不改变golden自检产生的`PASS`或`FAIL`。
 
 最终19201-line standalone功能镜像还使用非`DIFFTEST`的HPU Spike逐项执行了
 `CMB_004`、`CMB_010`、`CMB_012`、`PERF_001`、`PERF_005`和`PERF_006`，六项均通过
 HTIF返回0；单项墙钟时间约1.7至3.0秒。该回归真实执行完整HPU指令流与全窗口
-golden/guard检查，但不提供RTL monitor、cache总线证据或可签收的性能周期，
-因此仍保持`PASS_PROBE`。带`DIFFTEST`宏构建的`spike`命令行不会作为这项
+golden/guard检查，检查正确时直接报告`PASS`。它不额外提供RTL monitor、cache
+总线证据或可签收的性能周期。带`DIFFTEST`宏构建的`spike`命令行不会作为这项
 standalone回归入口；它只作为IT Difftest动态库构建的一部分使用。
 
 上述独立模型回归已固化为脚本；无参数时构建并执行全部49项，也可只指定

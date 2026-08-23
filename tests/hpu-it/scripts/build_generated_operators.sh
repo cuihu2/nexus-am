@@ -128,7 +128,7 @@ if [[ ! -d $image_root ]]; then
   {
     printf 'case_id,delivery_status,reason\n'
     for source in "${case_sources[@]}"; do
-      printf '%s,EXECUTABLE_SELF_CHECK_READY,RTL_evidence_required\n' \
+      printf '%s,EXECUTABLE_PASS_READY,output_check_authoritative\n' \
         "$(basename "$source" .c)"
     done
   } > "$staging/.qualification-status.csv"

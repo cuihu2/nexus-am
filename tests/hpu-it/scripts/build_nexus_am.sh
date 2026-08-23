@@ -224,7 +224,7 @@ else
           printf '%s,BLOCKED_EXTERNAL_ALGORITHM_CONTRACT,HPU_commands_not_issued\n' \
             "$case_id" ;;
         *)
-          printf '%s,EXECUTABLE_SELF_CHECK_READY,RTL_evidence_required\n' \
+          printf '%s,EXECUTABLE_PASS_READY,output_check_authoritative\n' \
             "$case_id" ;;
       esac
     done

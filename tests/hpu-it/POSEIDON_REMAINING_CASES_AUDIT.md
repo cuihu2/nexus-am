@@ -334,6 +334,6 @@ probe path must issue no representative HPU algorithm.  This includes the
 four cases audited above, CMB005 while Auto is unbound, and CMB013 while only
 P3->Q4 ModDown rather than a defined CKKS rescale is available.  The probe
 should log `algorithm_binding=missing`, name the missing asset class, state
-`hpu_commands=not_issued`, and finish as `PASS_PROBE`/qualification-pending.
+`hpu_commands=not_issued`, and finish as `FAIL`/blocked.
 A real algorithm path may replace that probe only when the five acceptance
 conditions at the top of this document are met.

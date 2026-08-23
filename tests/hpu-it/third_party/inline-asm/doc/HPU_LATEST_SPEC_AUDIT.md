@@ -2,7 +2,8 @@
 
 > 2026-08-21 注：本文是修复前审计，其中 `x0/x0` DMA 结论已失效。
 > 当前生成入口固定使用 `x10/x11`，并由类型化 span 与 Nexus-AM resolved
-> manifest 绑定具体 line offset/count。
+> manifest 绑定具体 line offset/count；DLOAD 和 DSTORE 均从 span 装载非零
+> line count，不再使用旧的 DSTORE `x11=0` 约定。
 
 审计日期：2026-08-18
 
@@ -133,8 +134,10 @@ context 数也已按 8-bit `MOD_ID` 限制为 256。
 
 文档来源：《HPU 集成与编程手册》3.1.2、3.4；《HPU 控制逻辑设计文档》allocator 章节。
 
-剩余工作：继续校验 8 个并发对象、普通 bank/half-bank 峰值驻留和 scratch
-布局。对象数与 RNS limb/context 数仍必须分开建模。
+外部 HPU_MEM 的 scratch line layout 和 19201-line window 越界检查已经由
+Nexus-AM runtime 固化。剩余工作是目标 allocator 对 8 个并发对象以及普通
+bank/half-bank 峰值驻留的硬件资格验证；这与外部 HPU_MEM span 是否已绑定是
+两个问题。对象数与 RNS limb/context 数仍必须分开建模。
 
 ### A9. PE golden 是数学结果，不是位精确硬件 reference（P1）
 
@@ -144,13 +147,17 @@ context 数也已按 8-bit `MOD_ID` 限制为 256。
 
 修改建议：保留现有数学 golden，再增加独立 PE bit-exact model 和 corner vectors。两者结果应相同，但 bit-exact model 用于定位截断、流水线和边界实现错误。
 
-### A10. runtime 缺少 non-coherent 与故障协议（P1）
+### A10. runtime non-coherent 与故障协议（软件侧已修复，2026-08-21）
 
-本地证据：当前交付只有指令、镜像和配置 JSON，没有 cache clean/invalidate、CSR fault 清除和中断等待代码。
+Nexus-AM IT runtime 已实现 HPU_MEM window 配置、提交前 cache clean、读回前
+invalidate、`HPU_STATUS/FAULT_STATUS` 检查、W1C fault 和完成 IRQ 等待；
+生成算子还会在执行前 poison 输出与 scratch，并在执行后逐字比较 golden 和检查
+尾部 guard。此前“只有指令、镜像和配置 JSON”的结论已失效。
 
 文档来源：《HPU 集成与编程手册》5.2、5.2.8、9.1。
 
-修改建议：提供最小 runtime/driver 层，完成 HPU_MEM ownership、提交前 clean、读回前 invalidate、`HPU_STATUS/FAULT_STATUS` 检查、W1C fault、`irq_sync_done` 和 DMA 错误处理。
+剩余工作：上述协议仍需在目标 RTL/板级执行中取得 FAULT/IRQ、cache 一致性和外部
+monitor 证据。Host `PASS_PROBE` 自检不执行 HPU 算术，不能替代该资格证据。
 
 ### A11. NTT/INTT 物理 in-place/out-of-place（已冻结，2026-07-24）
 

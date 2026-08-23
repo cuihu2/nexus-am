@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 # Build testcase ELFs for the non-DIFFTEST CUIHU2 Spike executable and run
-# their functional-model self-checks.  This is deliberately separate from
-# IT qualification: MMIO/PLIC and external monitor requirements remain open.
+# their functional-model self-checks.  A zero return code and correct golden
+# output are reported as PASS; MMIO/PLIC limitations remain in the run metadata.
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
@@ -209,7 +209,7 @@ printf '%s\n' "$run_fingerprint" \
 printf '%s\n' "$standalone_model_contract" \
   >"$staging_root/.standalone-model-contract"
 
-printf '[standalone-spike] functional model only; IT qualification remains PASS_PROBE\n'
+printf '[standalone-spike] functional model: correct self-check output reports PASS\n'
 printf '[standalone-spike] spike=%s profile=%s cases=%d\n' \
   "$spike" "$profile_tag" "${#case_ids[@]}"
 

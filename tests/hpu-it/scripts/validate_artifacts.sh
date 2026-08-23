@@ -127,6 +127,11 @@ if [[ $(grep -c ',BLOCKED_EXTERNAL_ALGORITHM_CONTRACT,' \
   printf 'ERROR: qualification status must contain exactly one blocked case\n' >&2
   exit 2
 fi
+if [[ $(grep -c ',EXECUTABLE_PASS_READY,output_check_authoritative$' \
+        "$image_dir/.qualification-status.csv") -ne 48 ]]; then
+  printf 'ERROR: qualification status must contain 48 output-authoritative PASS-ready cases\n' >&2
+  exit 2
+fi
 source_fingerprint=$(<"$image_dir/.source-fingerprint")
 am_revision=$(<"$image_dir/.am-revision")
 compiler_identity=$(<"$image_dir/.toolchain-identity")
@@ -353,6 +358,12 @@ for case_source in "${case_sources[@]}"; do
     if grep -Fq 'unclassified' "$dma_manifest" ||
        tail -n +2 "$dma_manifest" | grep -Evq ',RESOLVED$'; then
       printf 'ERROR: unresolved DMA row for %s\n' "$case_id" >&2
+      exit 2
+    fi
+    if grep -B3 -E '\.word[[:space:]]+0x00b5[45][0-9a-f]2b' \
+         <<<"$disassembly" | grep -Eq 'li[[:space:]]+a1,0([[:space:]]|$)'; then
+      printf 'ERROR: %s loads zero into x11/a1 before generated DSTORE\n' \
+        "$case_id" >&2
       exit 2
     fi
   fi
