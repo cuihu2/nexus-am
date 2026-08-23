@@ -1,0 +1,29 @@
+ifndef AM_HOME
+$(error AM_HOME must point to this Nexus-AM checkout)
+endif
+ifndef CASE_SOURCE
+$(error CASE_SOURCE must name one HPU testcase source)
+endif
+ifndef CASE_ID
+$(error CASE_ID must name one HPU testcase)
+endif
+ifndef HPU_DST_DIR
+$(error HPU_DST_DIR must name the testcase object directory)
+endif
+
+TEST_ROOT := $(CURDIR)
+NAME := $(CASE_ID)
+SRCS := $(CASE_SOURCE)
+DST_DIR := $(HPU_DST_DIR)
+INC_DIR += $(TEST_ROOT)/include
+CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+          -ffile-prefix-map=$(TEST_ROOT)=tests/hputest \
+          -fmacro-prefix-map=$(TEST_ROOT)=tests/hputest \
+          -ffile-prefix-map=$(AM_HOME)=nexus-am \
+          -fmacro-prefix-map=$(AM_HOME)=nexus-am
+
+include $(AM_HOME)/Makefile.app
+
+# Nexus-AM adds -ggdb in Makefile.compile.  Published smoke ELFs do not need
+# checkout-specific debug paths.
+CFLAGS += -g0

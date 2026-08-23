@@ -5,6 +5,10 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   MAKE_FLAGS: ARCH=riscv64-xs CROSS_COMPILE=riscv64-linux-gnu-
@@ -124,3 +128,33 @@ jobs:
         with:
           name: nexus-am-workloads
           path: build
+
+  build-hpu:
+    name: build HPU workloads
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install RISC-V build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-riscv64-linux-gnu \
+            g++-riscv64-linux-gnu \
+            binutils-riscv64-linux-gnu
+      - name: Build and validate HPU smoke tests
+        env:
+          AM_HOME: ${{ github.workspace }}
+        run: |
+          make -C tests/hputest \
+            ARCH=riscv64-xs \
+            CROSS_COMPILE=riscv64-linux-gnu- \
+            JOBS=4
+      - name: Upload HPU ELF, BIN, and disassembly
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexus-am-hpu-workloads
+          path: tests/hputest/build/artifact
+          if-no-files-found: error
+          retention-days: 30

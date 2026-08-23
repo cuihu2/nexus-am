@@ -1,0 +1,9 @@
+/build/
+/build-*/
+*.elf
+*.bin
+*.txt
+*.o
+*.a
+*.map
+*.tar.gz
