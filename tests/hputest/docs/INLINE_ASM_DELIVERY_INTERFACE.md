@@ -14,7 +14,8 @@
 
 ## 1. 当前状态和目标状态
 
-Nexus-AM 当前固定使用 inline-asm commit：
+Nexus-AM 通过 `tests/hputest/third_party/inline-asm` git submodule 固定使用
+inline-asm commit：
 
 ```text
 4399883b9e1fa249b99d48c7e919ee52acc662bc
@@ -352,8 +353,9 @@ sequence,kind,asm,inst32_hex,cmd26_hex,rs1,rs1_value,rs2,rs2_value,data_path,lin
 
 未来接收脚本应执行以下步骤：
 
-1. checkout `delivery.json` 指定且 Nexus-AM 允许的 producer commit；
-2. 在 producer 仓库运行 `hpu_delivery`；
+1. 初始化 `tests/hputest/third_party/inline-asm` submodule，并要求其 HEAD、
+   Nexus-AM gitlink、`delivery.json` 和允许的 producer commit 完全一致；
+2. 在该 submodule 中运行 `hpu_delivery`；
 3. 要求 `format_version == 2` 且 `status == EXECUTABLE`；
 4. 验证 `SHA256SUMS`、全部 manifest、字节序、shape 和文件大小；
 5. 验证 line map 不重叠、容量不越界，并把相对 offset 适配到本地 window；

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-inline_asm_root=${1:-}
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 test_root=$(cd -- "$script_dir/.." && pwd)
+inline_asm_root=${1:-"$test_root/third_party/inline-asm"}
 encoding_header="$test_root/include/hpu/encoding.h"
 
-if [[ -z $inline_asm_root || ! -d $inline_asm_root/.git ]]; then
-  echo 'ERROR: path to a cuihu2/inline-asm checkout is required' >&2
+if [[ ! -f $inline_asm_root/encode/include/assembler.hpp ]] || \
+   ! git -C "$inline_asm_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo 'ERROR: inline-asm submodule is not initialized' >&2
+  echo 'run: git submodule update --init --recursive tests/hputest/third_party/inline-asm' >&2
   exit 2
 fi
 
@@ -19,6 +21,11 @@ if [[ -z $expected_commit || $actual_commit != "$expected_commit" ]]; then
   echo "ERROR: inline-asm commit mismatch" >&2
   echo "expected: $expected_commit" >&2
   echo "actual:   $actual_commit" >&2
+  exit 2
+fi
+if ! git -C "$inline_asm_root" diff --quiet -- || \
+   ! git -C "$inline_asm_root" diff --cached --quiet --; then
+  echo 'ERROR: inline-asm submodule contains tracked modifications' >&2
   exit 2
 fi
 

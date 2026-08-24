@@ -24,6 +24,9 @@ src/00_bringup/
 
 src/common/
 └── hpu_rns_fixture.S
+
+third_party/
+└── inline-asm/                 # pinned git submodule; source only
 ```
 
 Each source has its own `main()` and shows the complete testcase sequence.
@@ -83,11 +86,14 @@ self-check returns 0.  No UART text is required for this decision.
 
 GNU as does not natively recognize the HPU mnemonics.  The small adapters in
 `dma.h`, `arithmetic.h`, and `sync.h` therefore emit `.word`, using named words
-from `include/hpu/encoding.h`.  Those words are not guessed: they are pinned to
+from `include/hpu/encoding.h`.  Those words are not guessed: the
+`third_party/inline-asm` git submodule pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`4399883b9e1fa249b99d48c7e919ee52acc662bc`.  The GitHub Actions HPU job checks
-out that exact commit, compiles its real encoder, and verifies every mnemonic
-and instruction word before building the ELF/BIN artifacts.
+`4399883b9e1fa249b99d48c7e919ee52acc662bc`.  Local builds and the GitHub
+Actions HPU job compile the real encoder from that submodule and verify every
+mnemonic and instruction word before building the ELF/BIN artifacts.  The
+submodule contains producer source only; generated data and programs remain
+build outputs.
 
 The complete producer/consumer contract for future data, line maps, golden,
 instruction manifests, executable `program.S`, and runtime `x10/x11` values is
@@ -139,6 +145,15 @@ CSR base `0x08000000`, HPU memory base `0x87000000`, and a 256-line bring-up
 window.  DLOAD/DSTORE explicitly use `x10=line offset` and `x11=line count`.
 
 ## Build
+
+Initialize the pinned producer source after cloning Nexus-AM:
+
+```bash
+git submodule update --init --recursive tests/hputest/third_party/inline-asm
+```
+
+Then build normally.  `make` verifies the submodule commit and encoder before
+building any HPU testcase:
 
 ```bash
 export AM_HOME=/path/to/nexus-am
