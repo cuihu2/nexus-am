@@ -3,7 +3,6 @@
 
 #include <hpu/cache.h>
 #include <hpu/layout.h>
-#include <klib.h>
 #include <stdint.h>
 
 extern const uint32_t hpu_rns_input_a[HPU_RNS_COEFFICIENTS];
@@ -23,29 +22,22 @@ static inline int hpu_fixture_validate_embedded(void) {
     for (i = 0U; i < HPU_RNS_COEFFICIENTS; ++i) {
         if (hpu_rns_input_a[i] != hpu_fixture_expected_a(i) ||
             hpu_rns_input_b[i] != hpu_fixture_expected_b(i)) {
-            printf("HPU_SMOKE_FIXTURE_FAIL coefficient=%u a=0x%x b=0x%x\n",
-                   i, hpu_rns_input_a[i], hpu_rns_input_b[i]);
             return 1;
         }
     }
-    printf("HPU_SMOKE_FIXTURE_PASS rns_components=2 coefficients=%u "
-           "bytes_per_component=%u\n",
-           HPU_RNS_COEFFICIENTS, (unsigned)HPU_RNS_BYTES);
     return 0;
 }
 
-static inline void hpu_fixture_copy_inputs_to_ddr(void) {
-    volatile uint32_t *input_a = hpu_line(HPU_LINE_SRC_A);
-    volatile uint32_t *input_b = hpu_line(HPU_LINE_SRC_B);
+static inline void hpu_fixture_copy_to_ddr(unsigned destination_line,
+                                           const uint32_t *source) {
+    volatile uint32_t *destination = hpu_line(destination_line);
     unsigned i;
 
     for (i = 0U; i < HPU_RNS_COEFFICIENTS; ++i) {
-        input_a[i] = hpu_rns_input_a[i];
-        input_b[i] = hpu_rns_input_b[i];
+        destination[i] = source[i];
     }
     hpu_fence();
-    hpu_cache_clean((uintptr_t)input_a, HPU_RNS_BYTES);
-    hpu_cache_clean((uintptr_t)input_b, HPU_RNS_BYTES);
+    hpu_cache_clean((uintptr_t)destination, HPU_RNS_BYTES);
 }
 
 static inline void hpu_fixture_poison_output(void) {
@@ -66,9 +58,6 @@ static inline int hpu_fixture_check_dload_dstore(void) {
     hpu_cache_invalidate((uintptr_t)output, HPU_RNS_BYTES);
     for (i = 0U; i < HPU_RNS_COEFFICIENTS; ++i) {
         if (output[i] != hpu_rns_input_a[i]) {
-            printf("HPU_SMOKE_MISMATCH coefficient=%u actual=0x%x "
-                   "expected=0x%x\n",
-                   i, output[i], hpu_rns_input_a[i]);
             return 1;
         }
     }
@@ -85,9 +74,6 @@ static inline int hpu_fixture_check_padd(void) {
             (((uint64_t)hpu_rns_input_a[i] + hpu_rns_input_b[i]) %
              HPU_MODULUS);
         if (output[i] != expected) {
-            printf("HPU_SMOKE_MISMATCH coefficient=%u actual=0x%x "
-                   "expected=0x%x\n",
-                   i, output[i], expected);
             return 1;
         }
     }

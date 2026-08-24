@@ -1,9 +1,7 @@
 #include <am.h>
 #include <hpu/csr.h>
 #include <hpu/fixture.h>
-#include <hpu/init.h>
 #include <hpu/layout.h>
-#include <hpu/result.h>
 #include <hpu/sync.h>
 #include <xsextra.h>
 
@@ -15,17 +13,18 @@
 
 static volatile uint32_t irq_count;
 static volatile uint32_t irq_error;
-static volatile uint32_t last_claim;
 
 static int clear_hpu_irq_level(void) {
     unsigned timeout;
 
-    hpu_csr_write(HPU_CSR_IRQ, 1U);
+    /* IRQ[0] is write-one-to-clear; write zero afterwards to deassert clear. */
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
     for (timeout = 0U; timeout < HPU_TIMEOUT / 16U; ++timeout) {
-        if ((hpu_csr_read(HPU_CSR_IRQ) & 1U) == 0U) break;
+        if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U)
+            break;
     }
-    hpu_csr_write(HPU_CSR_IRQ, 0U);
-    return timeout == HPU_TIMEOUT / 16U ? 44 : 0;
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+    return timeout == HPU_TIMEOUT / 16U ? 1 : 0;
 }
 
 static _Context *hpu_irq_handler(_Event event, _Context *context) {
@@ -37,13 +36,12 @@ static _Context *hpu_irq_handler(_Event event, _Context *context) {
     }
 
     claim = plic_get_claim(HPU_PLIC_CONTEXT_S);
-    last_claim = claim;
     if (claim != HPU_PLIC_SOURCE) {
         irq_error = 42U;
         if (claim != 0U) plic_clear_claim(HPU_PLIC_CONTEXT_S, claim);
         return context;
     }
-    if ((hpu_csr_read(HPU_CSR_IRQ) & 1U) == 0U) {
+    if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U) {
         irq_error = 43U;
     } else if (clear_hpu_irq_level() != 0) {
         irq_error = 44U;
@@ -53,28 +51,56 @@ static _Context *hpu_irq_handler(_Event event, _Context *context) {
     return context;
 }
 
+/*
+ * Purpose: issue an otherwise idle terminal PSYNC and prove that it reaches
+ * PLIC S-context 1 as source 257.  The handler also clears the HPU IRQ level
+ * through CSR address 0x0800001c before completing the PLIC claim.
+ */
 int main(void) {
-    const char *case_id = "HPU_SMOKE_001_04_PSYNC_IRQ";
+    uint32_t status = 0U;
     unsigned timeout;
     int rc = 0;
 
-    hpu_test_begin(case_id, "psync-triggers-plic-interrupt");
+    if (hpu_fixture_validate_embedded() != 0) return 1;
 
-    if (hpu_fixture_validate_embedded() != 0) {
-        return hpu_test_fail(case_id, "fixture", 1U);
+    /* Clear stale events, program the HPU window, and check CSR readback. */
+    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
+    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
+                    (uint32_t)(HPU_MEM_BASE >> 32U));
+    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, HPU_WINDOW_LINES);
+    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
+
+    if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) != (uint32_t)HPU_MEM_BASE)
+        return 1;
+    if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
+        (uint32_t)(HPU_MEM_BASE >> 32U))
+        return 1;
+    if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != HPU_WINDOW_LINES)
+        return 1;
+    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
+
+    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
+    for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
+        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
+        if ((status & HPU_STATUS_FAULT_VALID) != 0U) return 1;
+        if ((status & HPU_STATUS_WINDOW_VALID) != 0U) break;
     }
-    rc = hpu_initialize_and_verify();
-    if (rc != 0) return hpu_test_fail(case_id, "hpu-init", (unsigned)rc);
+    if (timeout == HPU_TIMEOUT) return 1;
+    if ((status & HPU_STATUS_BUSY) != 0U) return 1;
+    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
+        return 1;
+    if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
+        return 1;
 
     /* Configure PLIC S-context 1 for HPU source 257. */
     _intr_write(0);
-    if (_cte_init(NULL) != 0) {
-        return hpu_test_fail(case_id, "plic-init", 1U);
-    }
+    if (_cte_init(NULL) != 0) return 1;
     seip_handler_reg(hpu_irq_handler);
     irq_count = 0U;
     irq_error = 0U;
-    last_claim = 0U;
     plic_set_priority(HPU_PLIC_SOURCE, 1U);
     plic_set_threshold(HPU_PLIC_CONTEXT_S, 0U);
     plic_enable(HPU_PLIC_CONTEXT_S, HPU_PLIC_SOURCE);
@@ -83,9 +109,9 @@ int main(void) {
     _intr_write(1);
 
     /* Terminal PSYNC must raise one interrupt which claims source 257. */
-    hpu_psync(); /* 0x7000000b */
+    hpu_psync();
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        uint32_t status = hpu_csr_read(HPU_CSR_STATUS);
+        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
         if ((status & HPU_STATUS_FAULT_VALID) != 0U) {
             rc = 31;
             break;
@@ -108,7 +134,6 @@ int main(void) {
     plic_disable(HPU_PLIC_CONTEXT_S, HPU_PLIC_SOURCE);
     plic_set_priority(HPU_PLIC_SOURCE, 0U);
 
-    printf("HPU_SMOKE_IRQ count=%u claim=%u\n", irq_count, last_claim);
-    if (rc != 0) return hpu_test_fail(case_id, "psync-irq", (unsigned)rc);
-    return hpu_test_end(case_id, 0);
+    if (rc != 0) return 1;
+    return 0;
 }

@@ -26,10 +26,18 @@ src/common/
 └── hpu_rns_fixture.S
 ```
 
-Each source has its own `main()` and shows the complete testcase sequence:
-CSR programming, HPU command arguments, polling, self-check, and return code.
-Headers under `include/hpu/` contain only one-operation hardware adapters;
-there is no testcase-kind dispatcher or centralized scenario implementation.
+Each source has its own `main()` and shows the complete testcase sequence.
+CSR writes and reads are deliberately explicit address-level calls such as
+`hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, value)`; they are not hidden behind a
+combined initialization function.  Headers under `include/hpu/` contain only
+one-operation hardware adapters and data helpers.  There is no testcase-kind
+dispatcher or centralized scenario implementation.
+
+The IT environment has no UART, so the testcases do not use `printf()` as a
+result channel.  A detected error returns 1 from `main()` and a completed
+self-check returns 0.  Comments next to each operation describe the waveform
+signal or memory condition being tested.  The DLOAD-hold case intentionally
+does not return and must be stopped by the simulation cycle limit.
 
 ## Smoke suite 001
 
@@ -61,8 +69,18 @@ line 256     exclusive window end
 Cases 06 and 07 initialize the whole output region with poison before issuing
 HPU commands.  After terminal PSYNC they invalidate 16 KiB and compare all
 4096 coefficients against immutable ELF data or a C modular-add oracle.
-Mismatch and all other detected failures are logged with a stage/detail and
-returned from `main()` as 1; a completed self-check returns 0.
+Any mismatch or other detected failure returns 1 from `main()`; a completed
+self-check returns 0.  No UART text is required for this decision.
+
+## HPU instruction source
+
+GNU as does not natively recognize the HPU mnemonics.  The small adapters in
+`dma.h`, `arithmetic.h`, and `sync.h` therefore emit `.word`, using named words
+from `include/hpu/encoding.h`.  Those words are not guessed: they are pinned to
+[`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
+`4399883b9e1fa249b99d48c7e919ee52acc662bc`.  The GitHub Actions HPU job checks
+out that exact commit, compiles its real encoder, and verifies every mnemonic
+and instruction word before building the ELF/BIN artifacts.
 
 ## What the CSR checks prove
 

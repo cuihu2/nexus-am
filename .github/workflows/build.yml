@@ -136,6 +136,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+      - name: Checkout pinned HPU inline-asm encoder
+        uses: actions/checkout@v7
+        with:
+          repository: cuihu2/inline-asm
+          ref: 4399883b9e1fa249b99d48c7e919ee52acc662bc
+          path: .hpu-inline-asm
+          persist-credentials: false
       - name: Install RISC-V build dependencies
         run: |
           sudo apt-get update
@@ -143,6 +150,10 @@ jobs:
             gcc-riscv64-linux-gnu \
             g++-riscv64-linux-gnu \
             binutils-riscv64-linux-gnu
+      - name: Verify HPU instruction words against inline-asm
+        run: |
+          tests/hputest/scripts/verify-inline-asm-encodings.sh \
+            "$GITHUB_WORKSPACE/.hpu-inline-asm"
       - name: Build and validate HPU smoke tests
         env:
           AM_HOME: ${{ github.workspace }}
