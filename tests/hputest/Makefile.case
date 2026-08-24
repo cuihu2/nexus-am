@@ -14,6 +14,9 @@ endif
 TEST_ROOT := $(CURDIR)
 NAME := $(CASE_ID)
 SRCS := $(CASE_SOURCE)
+ifneq ($(findstring /001_hpu_smoke/,$(CASE_SOURCE)),)
+SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
+endif
 DST_DIR := $(HPU_DST_DIR)
 INC_DIR += $(TEST_ROOT)/include
 CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \

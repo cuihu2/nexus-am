@@ -1,5 +1,7 @@
 #include <am.h>
 #include <hpu/csr.h>
+#include <hpu/fixture.h>
+#include <hpu/init.h>
 #include <hpu/layout.h>
 #include <hpu/result.h>
 #include <hpu/sync.h>
@@ -58,24 +60,17 @@ int main(void) {
 
     hpu_test_begin(case_id, "psync-triggers-plic-interrupt");
 
-    /* 1. 配置并提交 HPU 外存窗口。 */
-    hpu_csr_write(HPU_CSR_FAULT, 1U);
-    hpu_csr_write(HPU_CSR_IRQ, 1U);
-    hpu_csr_write(HPU_CSR_IRQ, 0U);
-    hpu_csr_write(HPU_CSR_BASE_LO, (uint32_t)HPU_MEM_BASE);
-    hpu_csr_write(HPU_CSR_BASE_HI, 0U);
-    hpu_csr_write(HPU_CSR_SIZE_LO, HPU_WINDOW_LINES);
-    hpu_csr_write(HPU_CSR_SIZE_HI, 0U);
-    hpu_csr_write(HPU_CSR_COMMIT, 1U);
-    for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        if ((hpu_csr_read(HPU_CSR_STATUS) & HPU_STATUS_WINDOW_VALID) != 0U)
-            break;
+    if (hpu_fixture_validate_embedded() != 0) {
+        return hpu_test_fail(case_id, "fixture", 1U);
     }
-    if (timeout == HPU_TIMEOUT) return hpu_test_end(case_id, 11);
+    rc = hpu_initialize_and_verify();
+    if (rc != 0) return hpu_test_fail(case_id, "hpu-init", (unsigned)rc);
 
-    /* 2. 配置 PLIC S-context 1 的 HPU source 257。 */
+    /* Configure PLIC S-context 1 for HPU source 257. */
     _intr_write(0);
-    if (_cte_init(NULL) != 0) return hpu_test_end(case_id, 47);
+    if (_cte_init(NULL) != 0) {
+        return hpu_test_fail(case_id, "plic-init", 1U);
+    }
     seip_handler_reg(hpu_irq_handler);
     irq_count = 0U;
     irq_error = 0U;
@@ -87,7 +82,7 @@ int main(void) {
                      : : "r"(UINT64_C(1) << 9U) : "memory");
     _intr_write(1);
 
-    /* 3. 发 terminal PSYNC，等待中断 handler claim 257 并清 HPU level。 */
+    /* Terminal PSYNC must raise one interrupt which claims source 257. */
     hpu_psync(); /* 0x7000000b */
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
         uint32_t status = hpu_csr_read(HPU_CSR_STATUS);
@@ -114,5 +109,6 @@ int main(void) {
     plic_set_priority(HPU_PLIC_SOURCE, 0U);
 
     printf("HPU_SMOKE_IRQ count=%u claim=%u\n", irq_count, last_claim);
-    return hpu_test_end(case_id, rc);
+    if (rc != 0) return hpu_test_fail(case_id, "psync-irq", (unsigned)rc);
+    return hpu_test_end(case_id, 0);
 }

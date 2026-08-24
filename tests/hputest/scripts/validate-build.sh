@@ -24,7 +24,7 @@ if [[ $manifest_cases != "$expected_cases" ]]; then
     "$manifest_cases" "$expected_cases" >&2
   exit 2
 fi
-for tool in objcopy objdump readelf; do
+for tool in nm objcopy objdump readelf; do
   command -v "${cross_compile}${tool}" >/dev/null || exit 2
 done
 
@@ -61,6 +61,20 @@ require_main_return() {
   }
 }
 
+require_rns_fixture() {
+  local elf=$1
+  local symbol
+
+  for symbol in hpu_rns_input_a hpu_rns_input_b; do
+    "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
+      "^[[:xdigit:]]+[[:space:]]+0*4000[[:space:]]+[Rr][[:space:]]+${symbol}$" || {
+        printf 'ERROR: %s does not embed 16384-byte %s\n' \
+          "$elf" "$symbol" >&2
+        exit 2
+      }
+  done
+}
+
 for elf in "${elfs[@]}"; do
   base=${elf%.elf}
   bin="$base.bin"
@@ -84,6 +98,11 @@ for elf in "${elfs[@]}"; do
     "${cross_compile}objdump" -d "$(basename "$elf")"
   ) > "$rebuilt_txt"
   cmp "$txt" "$rebuilt_txt"
+
+  case "$elf" in
+    */001_hpu_smoke/*.elf)
+      require_rns_fixture "$elf" ;;
+  esac
 
   case "$name" in
     01_dload_hold|03_dload_poll_csr)
