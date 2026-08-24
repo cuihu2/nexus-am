@@ -12,16 +12,36 @@ $(error HPU_DST_DIR must name the testcase object directory)
 endif
 
 TEST_ROOT := $(CURDIR)
+INLINE_ASM_ROOT ?= $(TEST_ROOT)/third_party/inline-asm
+HPU_GENERATED_ROOT ?= $(TEST_ROOT)/build/generated
+INLINE_ASM_MM_ROOT := $(INLINE_ASM_ROOT)/outputs/mm
+INLINE_ASM_DELIVERY_HEADER := \
+  $(HPU_GENERATED_ROOT)/include/hpu/inline_asm_mm_delivery.h
+
+ifeq ($(wildcard $(INLINE_ASM_DELIVERY_HEADER)),)
+$(error missing generated inline-asm delivery; run 'make prepare-inline-asm-mm')
+endif
+
 NAME := $(CASE_ID)
 SRCS := $(CASE_SOURCE)
 ifneq ($(findstring /001_hpu_smoke/,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
+ifneq ($(findstring /001_hpu_smoke/07_dload_compute_dstore_psync.c,$(CASE_SOURCE)),)
+ifeq ($(wildcard $(INLINE_ASM_MM_ROOT)/mm.c),)
+$(error missing generated inline-asm MM program; run 'make prepare-inline-asm-mm')
+endif
+SRCS += $(TEST_ROOT)/src/common/hpu_mm_fixture.S
+SRCS += $(INLINE_ASM_MM_ROOT)/mm.c
+INC_DIR += $(INLINE_ASM_MM_ROOT)
+endif
 DST_DIR := $(HPU_DST_DIR)
-INC_DIR += $(TEST_ROOT)/include
+INC_DIR += $(HPU_GENERATED_ROOT)/include $(TEST_ROOT)/include
 CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -ffile-prefix-map=$(TEST_ROOT)=tests/hputest \
           -fmacro-prefix-map=$(TEST_ROOT)=tests/hputest \
+          -ffile-prefix-map=$(INLINE_ASM_ROOT)=inline-asm \
+          -fmacro-prefix-map=$(INLINE_ASM_ROOT)=inline-asm \
           -ffile-prefix-map=$(AM_HOME)=nexus-am \
           -fmacro-prefix-map=$(AM_HOME)=nexus-am
 

@@ -4,12 +4,18 @@ set -Eeuo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 test_root=$(cd -- "$script_dir/.." && pwd)
 inline_asm_root=${1:-"$test_root/third_party/inline-asm"}
-encoding_header="$test_root/include/hpu/encoding.h"
+generated_root=${HPU_GENERATED_ROOT:-"$test_root/build/generated"}
+encoding_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 
 if [[ ! -f $inline_asm_root/encode/include/assembler.hpp ]] || \
    ! git -C "$inline_asm_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo 'ERROR: inline-asm submodule is not initialized' >&2
   echo 'run: git submodule update --init --recursive tests/hputest/third_party/inline-asm' >&2
+  exit 2
+fi
+if [[ ! -s $encoding_header ]]; then
+  echo 'ERROR: generated inline-asm delivery header is missing' >&2
+  echo 'run: make -C tests/hputest prepare-inline-asm-mm' >&2
   exit 2
 fi
 
@@ -38,6 +44,7 @@ trap cleanup EXIT HUP INT TERM
 
 "${CXX:-c++}" \
   -std=c++17 -Wall -Wextra -Werror \
+  -I"$generated_root/include" \
   -I"$test_root/include" \
   -I"$inline_asm_root/encode/include" \
   "$script_dir/check-inline-asm-encodings.cpp" \

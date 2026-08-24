@@ -53,13 +53,13 @@ int main(void) {
     if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
         return 1;
 
-    /* Copy only input A: line 64, 64 lines, 4096 uint32_t coefficients. */
+    /* Copy only producer input A: line 0, 64 lines, 4096 coefficients. */
     hpu_fixture_copy_to_ddr(HPU_LINE_SRC_A, hpu_rns_input_a);
 
     /*
      * From cuihu2/inline-asm:
      *   dload x10, x11, p0, poly, regular-bank
-     * x10=64 is the line offset and x11=64 is the line count.
+     * x10=0 is the line offset and x11=64 is the line count.
      */
     hpu_dload_p0(HPU_LINE_SRC_A, HPU_RNS_LINES);
 

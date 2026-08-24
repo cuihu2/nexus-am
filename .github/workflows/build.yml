@@ -143,10 +143,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            cmake \
             gcc-riscv64-linux-gnu \
             g++-riscv64-linux-gnu \
-            binutils-riscv64-linux-gnu
+            binutils-riscv64-linux-gnu \
+            python3
+      - name: Generate and import inline-asm MM delivery
+        run: |
+          make -C tests/hputest prepare-inline-asm-mm JOBS=4
       - name: Verify HPU instruction words against inline-asm
+        env:
+          HPU_GENERATED_ROOT: ${{ github.workspace }}/tests/hputest/build/generated
         run: tests/hputest/scripts/verify-inline-asm-encodings.sh
       - name: Build and validate HPU smoke tests
         env:
@@ -156,7 +163,7 @@ jobs:
             ARCH=riscv64-xs \
             CROSS_COMPILE=riscv64-linux-gnu- \
             JOBS=4
-      - name: Upload HPU ELF, BIN, and disassembly
+      - name: Upload HPU ELF, BIN, disassembly, and selected MM delivery
         uses: actions/upload-artifact@v7
         with:
           name: nexus-am-hpu-workloads

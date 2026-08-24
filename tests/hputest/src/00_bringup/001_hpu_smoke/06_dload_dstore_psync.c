@@ -50,7 +50,7 @@ int main(void) {
     if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
         return 1;
 
-    /* Prepare input line range [64,128) and poison output [192,256). */
+    /* Prepare producer input A at [0,64) and poison output at [128,192). */
     hpu_fixture_copy_to_ddr(HPU_LINE_SRC_A, hpu_rns_input_a);
     hpu_fixture_poison_output();
 

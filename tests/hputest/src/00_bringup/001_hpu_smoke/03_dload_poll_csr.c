@@ -47,7 +47,7 @@ int main(void) {
     if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
         return 1;
 
-    /* DLOAD p0 from [line 64, line 128): 4096 uint32_t coefficients. */
+    /* DLOAD p0 from producer input A at [line 0, line 64). */
     hpu_fixture_copy_to_ddr(HPU_LINE_SRC_A, hpu_rns_input_a);
     hpu_dload_p0(HPU_LINE_SRC_A, HPU_RNS_LINES);
 

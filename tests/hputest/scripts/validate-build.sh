@@ -14,6 +14,7 @@ if [[ ! -s $manifest ]]; then
   exit 2
 fi
 manifest_cases=$(sed -n 's/^case_count=//p' "$manifest")
+manifest_inline_asm=$(sed -n 's/^inline_asm_commit=//p' "$manifest")
 expected_cases=${EXPECTED_CASES:-$manifest_cases}
 if [[ ! $expected_cases =~ ^[1-9][0-9]*$ ]]; then
   printf 'ERROR: EXPECTED_CASES must be positive\n' >&2
@@ -24,6 +25,15 @@ if [[ $manifest_cases != "$expected_cases" ]]; then
     "$manifest_cases" "$expected_cases" >&2
   exit 2
 fi
+mm_artifact="$artifact_root/inline-asm-mm"
+if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
+   [[ ! -s $mm_artifact/PRODUCER_COMMIT ]] || \
+   [[ $manifest_inline_asm != "$(<"$mm_artifact/PRODUCER_COMMIT")" ]] || \
+   [[ ! -s $mm_artifact/SHA256SUMS ]]; then
+  printf 'ERROR: selected inline-asm MM provenance is incomplete\n' >&2
+  exit 2
+fi
+(cd "$mm_artifact" && sha256sum -c SHA256SUMS >/dev/null)
 for tool in nm objcopy objdump readelf; do
   command -v "${cross_compile}${tool}" >/dev/null || exit 2
 done
@@ -52,6 +62,28 @@ require_word() {
   }
 }
 
+require_generated_mm_stream() {
+  local txt=$1
+  local inst32="$artifact_root/inline-asm-mm/mm.inst32"
+  local bits
+  local word
+
+  if [[ ! -s $inst32 ]]; then
+    printf 'ERROR: generated MM instruction stream is missing: %s\n' \
+      "$inst32" >&2
+    exit 2
+  fi
+  while IFS= read -r bits; do
+    [[ -z $bits ]] && continue
+    if [[ ! $bits =~ ^[01]{32}$ ]]; then
+      printf 'ERROR: malformed MM inst32 row: %s\n' "$bits" >&2
+      exit 2
+    fi
+    printf -v word '%08x' "$((2#$bits))"
+    require_word "$txt" "$word"
+  done < "$inst32"
+}
+
 require_main_return() {
   local txt=$1
   local value=$2
@@ -73,6 +105,43 @@ require_rns_fixture() {
         exit 2
       }
   done
+}
+
+require_mm_fixture() {
+  local elf=$1
+  local symbol
+
+  for symbol in hpu_rns_expected hpu_rns_input_a hpu_rns_input_b; do
+    "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
+      "^[[:xdigit:]]+[[:space:]]+0*4000[[:space:]]+[Rr][[:space:]]+${symbol}$" || {
+        printf 'ERROR: %s does not embed 16384-byte %s\n' \
+          "$elf" "$symbol" >&2
+        exit 2
+      }
+  done
+  "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
+    '^[[:xdigit:]]+[[:space:]]+0*100[[:space:]]+[Rr][[:space:]]+hpu_rns_mod_ctx$' || {
+      printf 'ERROR: %s does not embed the 256-byte modulus context\n' \
+        "$elf" >&2
+      exit 2
+    }
+  "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
+    '[[:space:]][Tt][[:space:]]+hpu_program_mm$' || {
+      printf 'ERROR: %s does not link the producer hpu_program_mm entry\n' \
+        "$elf" >&2
+      exit 2
+    }
+}
+
+reject_mm_only_fixture() {
+  local elf=$1
+
+  if "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
+      '[[:space:]](hpu_rns_expected|hpu_rns_mod_ctx)$'; then
+    printf 'ERROR: non-MM testcase embeds MM-only golden/modulus data: %s\n' \
+      "$elf" >&2
+    exit 2
+  fi
 }
 
 for elf in "${elfs[@]}"; do
@@ -101,7 +170,10 @@ for elf in "${elfs[@]}"; do
 
   case "$elf" in
     */001_hpu_smoke/*.elf)
-      require_rns_fixture "$elf" ;;
+      require_rns_fixture "$elf"
+      if [[ $name != 07_dload_compute_dstore_psync ]]; then
+        reject_mm_only_fixture "$elf"
+      fi ;;
   esac
 
   case "$name" in
@@ -115,13 +187,8 @@ for elf in "${elfs[@]}"; do
       require_word "$txt" 00b5502b
       require_word "$txt" 7000000b ;;
     07_dload_compute_dstore_psync)
-      require_word "$txt" 00b5292b
-      require_word "$txt" 00b5102b
-      require_word "$txt" 00b5122b
-      require_word "$txt" 6000000b
-      require_word "$txt" 0400400b
-      require_word "$txt" 00b5542b
-      require_word "$txt" 7000000b ;;
+      require_mm_fixture "$elf"
+      require_generated_mm_stream "$txt" ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)
