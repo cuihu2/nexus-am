@@ -14,8 +14,8 @@ src/00_bringup/
 │   ├── 01_dload_hold.c
 │   ├── 02_read_csr_status.c
 │   ├── 03_dload_poll_csr.c
-│   ├── 04_psync_irq.c
-│   ├── 05_dload_psync.c
+│   ├── 04_dload_psync_poll_mmio.c
+│   ├── 05_dload_psync_irq.c
 │   ├── 06_dload_dstore_psync.c
 │   └── 07_dload_compute_dstore_psync.c
 └── 002_main_return_probe/
@@ -46,10 +46,17 @@ does not return and must be stopped by the simulation cycle limit.
 | `01_dload_hold.c` | DLOAD then `while (1)` | Intentional waveform hold |
 | `02_read_csr_status.c` | Program/read HPU CSR state | Return 0/1 |
 | `03_dload_poll_csr.c` | 64-line DLOAD and poll STATUS busy | Return 0/1 |
-| `04_psync_irq.c` | PSYNC and PLIC source 257 | Return 0/1 |
-| `05_dload_psync.c` | 64-line DLOAD then terminal PSYNC | Return 0/1 |
+| `04_dload_psync_poll_mmio.c` | DLOAD + PSYNC; poll MMIO STATUS/IRQ | Return 0/1 |
+| `05_dload_psync_irq.c` | DLOAD + PSYNC; PLIC handler sets `volatile sync_flag` | Return 0/1 |
 | `06_dload_dstore_psync.c` | 4096-coefficient DMA loopback self-check | Return 0/1 |
 | `07_dload_compute_dstore_psync.c` | 4096-coefficient PADD/C golden check | Return 0/1 |
+
+Cases 04 and 05 intentionally submit identical HPU work.  Only their CPU
+completion mechanism differs: case 04 keeps interrupts disabled and polls the
+MMIO register file; case 05 waits for PLIC source 257 and then verifies MMIO
+STATUS is idle.  A third `csrr`-based HPU-status case is deliberately absent:
+the current hardware documentation defines no architectural HPU CSR number,
+privilege level, or idle bit, so the testcase must not invent one.
 
 Every `001_hpu_smoke` ELF embeds two deterministic one-modulus RNS
 polynomials.  Each polynomial contains 4096 little-endian `uint32_t`
@@ -93,8 +100,10 @@ The smoke sequence deliberately checks configuration in layers:
    is not checked by reading back a value of 1.
 3. Require `STATUS.busy=0`, `STATUS.fault_valid=0`, FAULT clear, and IRQ clear
    before issuing work.
-4. Case 03 observes DLOAD `busy` go high and then low; case 05 observes PSYNC
-   completion.  These prove more than CSR readback, but not payload accuracy.
+4. Case 03 observes DLOAD `busy` go high and then low.  Cases 04 and 05 both
+   issue DLOAD + PSYNC: case 04 polls MMIO, while case 05 uses the interrupt
+   handler and a `volatile` flag.  These prove more than CSR readback, but not
+   payload accuracy.
 5. Cases 06 and 07 close the datapath with DSTORE and a 4096-coefficient
    self-check.  This is the final smoke indication that the active window and
    HPU data path worked together.

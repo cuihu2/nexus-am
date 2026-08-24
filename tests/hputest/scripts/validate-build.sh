@@ -107,9 +107,7 @@ for elf in "${elfs[@]}"; do
   case "$name" in
     01_dload_hold|03_dload_poll_csr)
       require_word "$txt" 00b5102b ;;
-    04_psync_irq)
-      require_word "$txt" 7000000b ;;
-    05_dload_psync)
+    04_dload_psync_poll_mmio|05_dload_psync_irq)
       require_word "$txt" 00b5102b
       require_word "$txt" 7000000b ;;
     06_dload_dstore_psync)

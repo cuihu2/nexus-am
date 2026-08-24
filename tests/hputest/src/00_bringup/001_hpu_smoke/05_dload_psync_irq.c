@@ -1,5 +1,6 @@
 #include <am.h>
 #include <hpu/csr.h>
+#include <hpu/dma.h>
 #include <hpu/fixture.h>
 #include <hpu/layout.h>
 #include <hpu/sync.h>
@@ -11,7 +12,8 @@
 #define HPU_PLIC_SOURCE    257U
 #define HPU_PLIC_CONTEXT_S 1U
 
-static volatile uint32_t irq_count;
+/* Written by the interrupt handler and polled by main(). */
+static volatile uint32_t sync_flag;
 static volatile uint32_t irq_error;
 
 static int clear_hpu_irq_level(void) {
@@ -32,6 +34,7 @@ static _Context *hpu_irq_handler(_Event event, _Context *context) {
 
     if (event.event != _EVENT_IRQ_IODEV) {
         irq_error = 41U;
+        sync_flag = 1U;
         return context;
     }
 
@@ -39,6 +42,7 @@ static _Context *hpu_irq_handler(_Event event, _Context *context) {
     if (claim != HPU_PLIC_SOURCE) {
         irq_error = 42U;
         if (claim != 0U) plic_clear_claim(HPU_PLIC_CONTEXT_S, claim);
+        sync_flag = 1U;
         return context;
     }
     if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U) {
@@ -47,14 +51,17 @@ static _Context *hpu_irq_handler(_Event event, _Context *context) {
         irq_error = 44U;
     }
     plic_clear_claim(HPU_PLIC_CONTEXT_S, claim);
-    ++irq_count;
+    sync_flag = 1U;
     return context;
 }
 
 /*
- * Purpose: issue an otherwise idle terminal PSYNC and prove that it reaches
- * PLIC S-context 1 as source 257.  The handler also clears the HPU IRQ level
- * through CSR address 0x0800001c before completing the PLIC claim.
+ * Synchronization method 2: interrupt completion.
+ *
+ * Issue the same DLOAD -> terminal PSYNC sequence as testcase 04.  PSYNC must
+ * reach PLIC S-context 1 as source 257.  The handler clears the HPU IRQ level,
+ * completes the PLIC claim, and then sets volatile sync_flag.  After waking,
+ * main() still verifies that the HPU is idle and fault-free.
  */
 int main(void) {
     uint32_t status = 0U;
@@ -99,7 +106,7 @@ int main(void) {
     _intr_write(0);
     if (_cte_init(NULL) != 0) return 1;
     seip_handler_reg(hpu_irq_handler);
-    irq_count = 0U;
+    sync_flag = 0U;
     irq_error = 0U;
     plic_set_priority(HPU_PLIC_SOURCE, 1U);
     plic_set_threshold(HPU_PLIC_CONTEXT_S, 0U);
@@ -108,25 +115,30 @@ int main(void) {
                      : : "r"(UINT64_C(1) << 9U) : "memory");
     _intr_write(1);
 
-    /* Terminal PSYNC must raise one interrupt which claims source 257. */
+    /* Prepare 4096 coefficients, then issue the same work as testcase 04. */
+    hpu_fixture_copy_to_ddr(HPU_LINE_SRC_A, hpu_rns_input_a);
+    hpu_dload_p0(HPU_LINE_SRC_A, HPU_RNS_LINES);
     hpu_psync();
+
+    /* The handler is the only code allowed to set sync_flag. */
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-        if ((status & HPU_STATUS_FAULT_VALID) != 0U) {
-            rc = 31;
-            break;
-        }
         if (irq_error != 0U) {
             rc = (int)irq_error;
             break;
         }
-        if (irq_count == 1U) break;
-        if (irq_count > 1U) {
-            rc = 45;
-            break;
-        }
+        if (sync_flag == 1U) break;
     }
     if (timeout == HPU_TIMEOUT) rc = 46;
+
+    /* Interrupt arrival alone is insufficient: HPU must now be idle. */
+    status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
+    if ((status & (HPU_STATUS_WINDOW_VALID | HPU_STATUS_BUSY |
+                   HPU_STATUS_FAULT_VALID)) != HPU_STATUS_WINDOW_VALID)
+        rc = 47;
+    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
+        rc = 48;
+    if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
+        rc = 49;
 
     _intr_write(0);
     __asm__ volatile("csrc sie, %0"
