@@ -89,6 +89,13 @@ from `include/hpu/encoding.h`.  Those words are not guessed: they are pinned to
 out that exact commit, compiles its real encoder, and verifies every mnemonic
 and instruction word before building the ELF/BIN artifacts.
 
+The complete producer/consumer contract for future data, line maps, golden,
+instruction manifests, executable `program.S`, and runtime `x10/x11` values is
+documented in [docs/INLINE_ASM_DELIVERY_INTERFACE.md](docs/INLINE_ASM_DELIVERY_INTERFACE.md).
+The document also records the current limitation: the operator streams still
+contain unresolved `x0,x0` DMA placeholders, so they are not yet executable
+Nexus-AM programs.
+
 ## What the CSR checks prove
 
 The smoke sequence deliberately checks configuration in layers:
