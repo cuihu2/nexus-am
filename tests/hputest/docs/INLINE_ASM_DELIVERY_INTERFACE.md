@@ -102,7 +102,8 @@ hpu_rns_input_a:
     .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/images/input_a.u32.bin"
 ```
 
-`src/common/hpu_rns_fixture.S` 只放 A/B，并链接到所有 smoke-001 用例；
+`src/common/hpu_rns_fixture.S` 只放 A/B，并链接到 7 个 smoke-001 用例和
+49 个迁移 IT 用例；两个 `main return` 探针刻意不带数据。
 `src/common/hpu_mm_fixture.S` 放 expected/mod_ctx，仅链接到计算用例 07。
 
 运行时：
@@ -185,7 +186,8 @@ __asm__ volatile(".word 0x..."
 
 ## 7. 简单用例的单指令适配
 
-01–06 仍需要独立 DLOAD/DSTORE/PSYNC，而不是完整 MM 程序。它们使用的 named
+01–06 和迁移 IT 中的基础指令用例需要独立
+DLOAD/DSTORE/PMODLD/算术/PFREE/PSYNC，而不是完整 MM 程序。它们使用的 named
 word 也不再手写在 Git 中。`prepare-inline-asm-mm.sh` 编译生产者的真实 encoder，
 把 mnemonic 编成 build-only header：
 
@@ -193,8 +195,9 @@ word 也不再手写在 Git 中。`prepare-inline-asm-mm.sh` 编译生产者的�
 tests/hputest/build/generated/include/hpu/inline_asm_mm_delivery.h
 ```
 
-tracked `include/hpu/encoding.h` 只 include 这个生成头文件。这样简单用例保持一条
-操作一个函数的可读结构，同时编码仍来自同一个 producer。
+tracked `include/hpu/encoding.h` 只 include 这个生成头文件。这样每个 `main.c`
+保持“一条 HPU 操作对应一个可见调用”的可读结构，同时编码仍来自同一个
+producer。
 
 ## 8. 构建和 GitHub Actions
 
@@ -218,11 +221,15 @@ producer hpu_delivery
 -> package artifact
 ```
 
-GitHub Actions artifact `nexus-am-hpu-workloads` 包含：
+push 到 `master` 或手动触发时，GitHub Actions 分别发布
+`nexus-am-hpu-core-workloads`、`nexus-am-hpu-transform-workloads` 和
+`nexus-am-hpu-fhe-workloads`；PR 只构建较快的 `core` 组。每个 artifact 保留
+7 天并包含该组的：
 
-- 9 组 ELF/BIN/TXT；
-- `MANIFEST.txt` 和顶层 `SHA256SUMS`；
-- `inline-asm-mm/`：选中的 bin/hex/table/mm.c/mm.h/mm.asm、producer commit、
+- 分组目录中的 ELF/BIN/TXT（完整三组共 58 个用例）；
+- `MANIFEST.txt`、`CASE_MANIFEST.tsv`、`NOT_QUALIFIED.tsv` 和顶层
+  `SHA256SUMS`；
+- `provenance/inline-asm-mm/`：选中的 bin/hex/table/mm.c/mm.h/mm.asm、producer commit、
   resolved spans、summary 和独立 `SHA256SUMS`。
 
 生成物不进入 Git history。
@@ -237,13 +244,15 @@ GitHub Actions artifact `nexus-am-hpu-workloads` 包含：
 - FNV、文件长度、mod_ctx 或 4096 项 golden 不匹配；
 - DMA 不是四条、rs1/rs2 不是 x10/x11、存在 `x0,x0` placeholder；
 - MM 指令流不是经过审查的十条或缺少唯一末尾 PSYNC；
-- 数据越过 Nexus-AM 的 256-line window；
+- 选中的 MM producer 数据越过其 256-line 接收窗口；
 - ELF 未嵌入正确尺寸的数据符号，或反汇编缺少 producer 指令字；
 - output 被预装成 golden。
 
 ## 10. 当前边界
 
-当前闭环只证明 `MM/PMUL, N=4096, Q=1` 的软件交付和交叉构建；它不表示 NTT、
-KeySwitch、完整 FHE 程序都已自动接入。GitHub Actions 的绿色结果也只证明生成、
-导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS 失败记录
-应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。
+当前 producer 的完整程序闭环只覆盖 `MM/PMUL, N=4096, Q=1`；迁移 IT 中的基础
+CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
+program/data/golden/relocation 契约的 24 个测试点被标成
+`blocked-not-issued`，不发明指令并固定返回 1。GitHub Actions 的绿色结果也只证明
+生成、导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS
+失败记录应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。

@@ -206,8 +206,11 @@ def read_encodings(path: Path) -> list[tuple[str, str, str]]:
         if len(fields) != 3:
             fail(f"invalid encoder TSV row: {line}")
         rows.append((fields[0], fields[1], fields[2]))
-    if len(rows) != 8:
-        fail("encoder TSV must contain the eight Nexus-AM adapter words")
+    if len(rows) < 8:
+        fail("encoder TSV does not contain the required Nexus-AM adapters")
+    macro_names = [row[0] for row in rows]
+    if len(set(macro_names)) != len(macro_names):
+        fail("encoder TSV contains duplicate macro names")
     return rows
 
 

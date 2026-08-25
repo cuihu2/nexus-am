@@ -24,6 +24,7 @@ endif
 
 NAME := $(CASE_ID)
 SRCS := $(CASE_SOURCE)
+ifneq ($(findstring /src/00_bringup/,$(CASE_SOURCE)),)
 ifneq ($(findstring /001_hpu_smoke/,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
@@ -34,6 +35,19 @@ endif
 SRCS += $(TEST_ROOT)/src/common/hpu_mm_fixture.S
 SRCS += $(INLINE_ASM_MM_ROOT)/mm.c
 INC_DIR += $(INLINE_ASM_MM_ROOT)
+endif
+else
+# Migrated IT cases keep scenario steps in their own readable main.c and share
+# the small, single-purpose adapters under runtime/.  Runtime files never live
+# below src/, so build.sh cannot mistake one for an executable testcase.
+HPU_IT_RUNTIME_SRCS := $(sort $(wildcard $(TEST_ROOT)/runtime/*.c))
+ifeq ($(strip $(HPU_IT_RUNTIME_SRCS)),)
+$(error missing migrated HPU IT runtime sources under $(TEST_ROOT)/runtime)
+endif
+SRCS += $(HPU_IT_RUNTIME_SRCS)
+# Migrated finite cases consume the producer's two 4096-coefficient RNS
+# inputs.  They do not link the smoke-only MM golden/modulus/program payload.
+SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
 DST_DIR := $(HPU_DST_DIR)
 INC_DIR += $(HPU_GENERATED_ROOT)/include $(TEST_ROOT)/include

@@ -1,4 +1,4 @@
-/* Two producer-generated 4096-word inputs, embedded in every smoke-001 ELF. */
+/* Two producer-generated 4096-word inputs for smoke and migrated IT ELFs. */
     .section .rodata.hpu_rns_input_a,"a",@progbits
     .balign 256
 

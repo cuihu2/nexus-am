@@ -128,11 +128,16 @@ jobs:
         with:
           name: nexus-am-workloads
           path: build
+          retention-days: 7
 
   build-hpu:
-    name: build HPU workloads
+    name: build HPU ${{ matrix.group }} workloads
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(github.event_name == 'pull_request' && '["core"]' || '["core","transform","fhe"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -155,18 +160,19 @@ jobs:
         env:
           HPU_GENERATED_ROOT: ${{ github.workspace }}/tests/hputest/build/generated
         run: tests/hputest/scripts/verify-inline-asm-encodings.sh
-      - name: Build and validate HPU smoke tests
+      - name: Build and validate HPU ${{ matrix.group }} tests
         env:
           AM_HOME: ${{ github.workspace }}
         run: |
-          make -C tests/hputest \
+          make -C tests/hputest group \
+            GROUP=${{ matrix.group }} \
             ARCH=riscv64-xs \
             CROSS_COMPILE=riscv64-linux-gnu- \
             JOBS=4
-      - name: Upload HPU ELF, BIN, disassembly, and selected MM delivery
+      - name: Upload HPU ${{ matrix.group }} ELF, BIN, disassembly, and provenance
         uses: actions/upload-artifact@v7
         with:
-          name: nexus-am-hpu-workloads
+          name: nexus-am-hpu-${{ matrix.group }}-workloads
           path: tests/hputest/build/artifact
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7

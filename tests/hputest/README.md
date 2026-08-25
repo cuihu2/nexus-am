@@ -1,8 +1,9 @@
 # HPU tests for Nexus-AM
 
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
-testcases.  Generated ELF, BIN, TXT, object files, and archives are never
-committed.  GitHub Actions builds them and exposes one downloadable artifact.
+testcases.  It contains the nine bring-up/return probes plus the 49 migrated
+IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
+committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 ## Source layout
 
@@ -26,6 +27,18 @@ src/common/
 ├── hpu_rns_fixture.S          # inline-asm MM input A/B via .incbin
 └── hpu_mm_fixture.S           # MM golden/mod_ctx; case 07 only
 
+src/01_configuration/          # 7 migrated IT cases
+src/02_data_paths/             # 6 migrated IT cases
+src/03_compute_instructions/   # 9 migrated IT cases
+src/04_composite_instruction_sequences/ # 13 migrated IT cases
+src/05_cpu_hpu_structural_connectivity/  # 7 migrated IT cases
+src/06_performance/            # 6 migrated IT cases
+src/07_full_application/       # 1 migrated IT case
+
+runtime/                       # mechanical helpers, never whole scenarios
+├── it_core.c                  # data/cache/CSR waits/one-instruction issue
+└── it_compute.c               # coefficient-wise C reference comparisons
+
 third_party/
 └── inline-asm/                 # pinned producer git submodule
 
@@ -34,12 +47,15 @@ build/generated/                # ignored: validated, selected MM delivery
 └── inline-asm/mm/
 ```
 
-Each source has its own `main()` and shows the complete testcase sequence.
-CSR writes and reads are deliberately explicit address-level calls such as
-`hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, value)`; they are not hidden behind a
-combined initialization function.  Headers under `include/hpu/` contain only
-one-operation hardware adapters and data helpers.  There is no testcase-kind
-dispatcher or centralized scenario implementation.
+Each source has its own readable `main()`.  The CSR setup, data preparation,
+individual HPU commands, synchronization, result comparison, and final
+`return 0`/`return 1` are visible in that file; there is no testcase-kind enum,
+central dispatcher, one-call scenario wrapper, or 4500-line scenario file.
+Only mechanical one-operation adapters and reference helpers are split by
+hardware concern under `runtime/`.  CSR writes and reads stay at address
+granularity, for example
+`hpu_it_csr_write32(HPU_CSR_BASE_LO_ADDR, value)`, instead of being hidden in
+a combined initialization function.
 
 The IT environment has no UART, so the testcases do not use `printf()` as a
 result channel.  A detected error returns 1 from `main()` and a completed
@@ -161,6 +177,52 @@ Common addresses are visible in `include/hpu/layout.h` and `include/hpu/csr.h`:
 CSR base `0x08000000`, HPU memory base `0x87000000`, and a 256-line bring-up
 window.  DLOAD/DSTORE explicitly use `x10=line offset` and `x11=line count`.
 
+## Migrated IT suites and artifact groups
+
+The 49 migrated sources retain the original hierarchy and testcase IDs from
+`IT-SCPU-TestCases`.  Files below `src/common/` and `runtime/` are deliberately
+excluded from testcase discovery.  The tracked `cases.tsv` file is the
+canonical roster: deleting, renaming, duplicating, or silently reclassifying a
+case makes the build fail.  Build artifacts are partitioned by what an IT user
+is likely to run together:
+
+Every migrated ELF links the producer's two immutable one-RNS fixtures
+`hpu_rns_input_a` and `hpu_rns_input_b` (4096 little-endian 32-bit
+coefficients, 16 KiB each).  It does not link the smoke-only MM golden,
+modulus record, or generated `mm.c` program unless its testcase explicitly
+uses that program.
+
+| Group | Contents |
+|---|---|
+| `core` | Bring-up, return probes, configuration, data paths, basic/control instructions, and CPU/HPU structural cases |
+| `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
+| `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
+
+Twenty-five migrated sources issue real CSR/HPU operations and contain a
+software self-check.  The remaining twenty-four sources are deliberately
+fail-closed: the producer has not yet supplied a receiver-ready combination
+of complete N=4096 data, immutable golden results, and a resolved DMA-span
+table for those algorithms/performance measurements.  The blocked set is
+`INS_C0_005/006`,
+`CMB_001/002/003/004/005/010/011/012/013/014/015`,
+`STING_CMB_007`, `STR_003/004`, `STING_STR_005`,
+`PERF_001/002/003/004/005/006`, and `APP_001`.  In particular, the transform
+cases stay blocked until the producer supplies the real N=4096 data,
+pre/post-twist and stage-twiddle layout; a one-line stand-in is not accepted.
+
+The twenty-four blocked sources are still cross-built so the source/API boundary
+cannot rot, but they do not issue invented HPU commands and deliberately
+return 1.  Both
+`CASE_MANIFEST.tsv` and `NOT_QUALIFIED.tsv` mark them
+`blocked-not-issued`; they are not qualification results.
+
+`cases.tsv` uses five explicit qualifiers: `software-self-check`,
+`blocked-not-issued`, `waveform-hold`, `termination-probe-pass`, and
+`termination-probe-fail`.  A software `return 0` proves only the checks written
+in that C file.  Requirements such as IT monitor observations, backpressure,
+STING entry, function coverage, and performance baselines remain external IT
+evidence and are not promoted to PASS by the GitHub build.
+
 ## Build
 
 Initialize the pinned producer source after cloning Nexus-AM:
@@ -186,12 +248,26 @@ make -C tests/hputest one \
   CASE=00_bringup/001_hpu_smoke/06_dload_dstore_psync
 ```
 
+Build only one artifact group:
+
+```bash
+make -C tests/hputest group GROUP=core
+make -C tests/hputest group GROUP=transform
+make -C tests/hputest group GROUP=fhe
+```
+
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-nine ELF/BIN/TXT sets plus `MANIFEST.txt`, `SHA256SUMS`, and a compact
-`inline-asm-mm/` directory containing the selected producer program, data,
-tables, provenance, and its own checksums.  GitHub Actions uploads this entire
-directory as `nexus-am-hpu-workloads`; none of those generated files are
-committed to Git.
+58 ELF/BIN/TXT sets partitioned below `artifact/core/`,
+`artifact/transform/`, and `artifact/fhe/`.  It also produces
+`MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, `SHA256SUMS`, and a
+compact `provenance/inline-asm-mm/` directory containing the selected producer
+program, data, tables, provenance, and its own checksums.
+
+On pushes to `master` and manual runs, GitHub Actions builds and uploads all
+three groups separately as `nexus-am-hpu-core-workloads`,
+`nexus-am-hpu-transform-workloads`, and `nexus-am-hpu-fhe-workloads`.  Pull
+requests build the `core` group as the fast structural gate.  Artifacts are
+retained for seven days; none of them are committed to Git.
 
 ## PASS/FAIL boundary
 
