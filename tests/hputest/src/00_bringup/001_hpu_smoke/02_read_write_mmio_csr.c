@@ -4,7 +4,9 @@
 
 /*
  * Purpose: prove that the CPU can write/read the HPU shadow configuration
- * CSRs and that COMMIT produces an idle, valid window without a fault.
+ * register window through MMIO and that COMMIT produces an idle, valid
+ * window without a fault.  HPU status is MMIO-only in the current design;
+ * this testcase deliberately does not invent a RISC-V csrr address.
  * No HPU DMA or arithmetic instruction is issued by this testcase.
  */
 int main(void) {

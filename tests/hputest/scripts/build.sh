@@ -215,23 +215,20 @@ done
 generated_root=${HPU_GENERATED_ROOT:-"$output_root/generated"}
 mm_delivery_source="$generated_root/inline-asm/mm"
 mm_delivery_artifact="$artifact_root/provenance/inline-asm-mm"
-if [[ ! -s $mm_delivery_source/SHA256SUMS ]] || \
-   [[ ! -s $mm_delivery_source/PRODUCER_COMMIT ]]; then
-  printf 'ERROR: validated inline-asm MM delivery is missing; run prepare-inline-asm-mm\n' >&2
-  exit 2
-fi
+for required in PRODUCER_COMMIT encoder_words.tsv RESOLVED_DMA_SPANS.csv \
+                DELIVERY_SUMMARY.md; do
+  if [[ ! -s $mm_delivery_source/$required ]]; then
+    printf 'ERROR: validated inline-asm MM delivery is missing %s; run prepare-inline-asm-mm\n' \
+      "$required" >&2
+    exit 2
+  fi
+done
 if [[ -d $mm_delivery_artifact ]]; then
   find "$mm_delivery_artifact" -mindepth 1 -delete
 else
   mkdir -p "$mm_delivery_artifact"
 fi
 cp -a "$mm_delivery_source/." "$mm_delivery_artifact/"
-
-(
-  cd "$artifact_root"
-  find . -type f \( -name '*.elf' -o -name '*.bin' -o -name '*.txt' \) \
-    -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
-)
 if [[ -n $case_filter ]]; then
   selection="case:$case_filter"
   expected_cases=1

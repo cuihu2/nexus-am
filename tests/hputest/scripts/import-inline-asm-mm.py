@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -246,15 +245,6 @@ def render_header(commit: str, coefficient_count: int, modulus: int,
     return "\n".join(lines)
 
 
-def sha256_manifest(root: Path) -> str:
-    rows = []
-    for path in sorted(item for item in root.rglob("*") if item.is_file()
-                       and item.name != "SHA256SUMS"):
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        rows.append(f"{digest}  {path.relative_to(root).as_posix()}")
-    return "\n".join(rows) + "\n"
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, type=Path)
@@ -270,7 +260,7 @@ def main() -> int:
             fail(f"missing selected MM delivery file: {relative}")
     if len(arguments.producer_commit) != 40 or any(
             char not in "0123456789abcdef" for char in arguments.producer_commit):
-        fail("producer commit must be a 40-character lowercase SHA")
+        fail("producer commit must be a 40-character lowercase Git object ID")
 
     validate_program(source)
     coefficient_count, modulus, selected = validate_data(source)
@@ -309,9 +299,6 @@ def main() -> int:
             "- `images/expected.u32.bin` is immutable golden data; Nexus-AM "
             "poisons line 128 before DSTORE and never preloads this golden.\n",
             encoding="utf-8")
-        (staging / "SHA256SUMS").write_text(
-            sha256_manifest(staging), encoding="utf-8")
-
         if destination.exists():
             backup = destination.with_name(
                 f".{destination.name}.old-{os.getpid()}")

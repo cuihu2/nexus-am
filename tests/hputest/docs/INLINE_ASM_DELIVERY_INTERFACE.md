@@ -26,15 +26,21 @@ tests/hputest/build/
 
 ## 2. 生产者如何生成
 
-接收脚本调用生产者的正式入口：
+接收脚本构建并依次运行生产者的指令生成、编码和 reference-vector
+三个阶段：
 
 ```bash
 cmake -S tests/hputest/third_party/inline-asm \
       -B tests/hputest/build/inline-asm-cmake \
       -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build tests/hputest/build/inline-asm-cmake \
-      --target hpu_delivery --parallel 4
+      --target inline_asm_codegen inline_asm_encode_outputs \
+               hpu_reference_vectors --parallel 4
 ```
+
+脚本在 submodule 根目录执行这三个可执行文件，产生 `output/`、
+`outputs/` 和 MM 数据表；然后由 Nexus-AM importer 逐字段检查选中的
+MM 契约。这使接收端不依赖未使用算子的整包交付流程。
 
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
@@ -45,7 +51,7 @@ cmake --build tests/hputest/build/inline-asm-cmake \
 - 一行 modulus context；
 - 已完成 `x10/x11` relocation 的可执行 C 函数。
 
-完整 `hpu_delivery` 还会生成其他算子和 twiddle。Nexus-AM 不把整个大镜像链接进
+生产者还会生成其他算子和 twiddle。Nexus-AM 不把整个大镜像链接进
 ELF，只严格选择 MM 冒烟所需的四个数据文件和一个程序。
 
 ## 3. 数据文件和人工可读表格
@@ -213,7 +219,7 @@ make -C tests/hputest \
 构建顺序固定为：
 
 ```text
-producer hpu_delivery
+producer instruction/data generation stages
 -> validate/import selected MM files
 -> generate encoder header
 -> compile testcase + selected producer mm.c/data
@@ -227,10 +233,9 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 7 天并包含该组的：
 
 - 分组目录中的 ELF/BIN/TXT（完整三组共 58 个用例）；
-- `MANIFEST.txt`、`CASE_MANIFEST.tsv`、`NOT_QUALIFIED.tsv` 和顶层
-  `SHA256SUMS`；
+- `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
 - `provenance/inline-asm-mm/`：选中的 bin/hex/table/mm.c/mm.h/mm.asm、producer commit、
-  resolved spans、summary 和独立 `SHA256SUMS`。
+  resolved spans 和 summary。
 
 生成物不进入 Git history。
 

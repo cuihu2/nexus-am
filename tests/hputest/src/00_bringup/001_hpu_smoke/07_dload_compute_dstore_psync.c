@@ -9,8 +9,11 @@
  *   load modulus/A/B -> select modulus -> PMUL -> DSTORE -> PSYNC -> compare
  *
  * The data, modulus context, instruction words and DMA register protocol all
- * come from one inline-asm hpu_delivery run.  The C oracle independently
+ * come from one inline-asm generation run.  The C oracle independently
  * computes (A[i] * B[i]) mod q for every one of the 4096 output coefficients.
+ * A simulator report of X/Z on an SRAM write is a four-state data-integrity
+ * failure, not a RISC-V Z-extension message; this testcase returns 1 when
+ * that corruption reaches the 4096-word comparison.
  */
 int main(void) {
     static const hpu_dma_span_t mm_spans[HPU_PROGRAM_MM_DMA_COUNT] = {

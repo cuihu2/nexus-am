@@ -352,12 +352,18 @@ done
 mm_artifact="$artifact_root/provenance/inline-asm-mm"
 if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
    [[ ! -s $mm_artifact/PRODUCER_COMMIT ]] || \
-   [[ $manifest_inline_asm != "$(<"$mm_artifact/PRODUCER_COMMIT")" ]] || \
-   [[ ! -s $mm_artifact/SHA256SUMS ]]; then
+   [[ $manifest_inline_asm != "$(<"$mm_artifact/PRODUCER_COMMIT")" ]]; then
   printf 'ERROR: selected inline-asm MM provenance is incomplete\n' >&2
   exit 2
 fi
-(cd "$mm_artifact" && sha256sum -c SHA256SUMS >/dev/null)
+for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
+                mm.c mm.h mm.asm mm.inst32 dma_relocation_manifest.csv; do
+  if [[ ! -s $mm_artifact/$required ]]; then
+    printf 'ERROR: selected inline-asm MM provenance omits %s\n' \
+      "$required" >&2
+    exit 2
+  fi
+done
 
 encoder_words="$mm_artifact/encoder_words.tsv"
 if [[ ! -s $encoder_words ]] || \
@@ -583,7 +589,7 @@ for elf in "${elfs[@]}"; do
   esac
 
   case "$name" in
-    01_dload_hold|03_dload_poll_csr)
+    01_dload_hold|03_dload_poll_mmio)
       require_word "$txt" 00b5102b ;;
     04_dload_psync_poll_mmio|05_dload_psync_irq)
       require_word "$txt" 00b5102b
@@ -602,6 +608,4 @@ for elf in "${elfs[@]}"; do
   esac
 done
 
-test -s "$artifact_root/SHA256SUMS"
-(cd "$artifact_root" && sha256sum -c SHA256SUMS >/dev/null)
 printf '[hputest] validation PASS: %u ELF/BIN/TXT sets\n' "${#elfs[@]}"

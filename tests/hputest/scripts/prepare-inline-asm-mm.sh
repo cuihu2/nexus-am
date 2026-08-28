@@ -44,7 +44,7 @@ if [[ $producer_commit != "$gitlink_commit" ]]; then
   echo "checkout: $producer_commit" >&2
   exit 2
 fi
-for tool in cmake python3 "${CXX:-c++}" sha256sum; do
+for tool in cmake python3 "${CXX:-c++}"; do
   command -v "$tool" >/dev/null || {
     echo "ERROR: missing build tool: $tool" >&2
     exit 2
@@ -57,19 +57,8 @@ import_root="$generated_root/inline-asm/mm"
 generated_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 tool_root="$output_root/inline-asm-tools"
 encoding_tsv="$tool_root/encoder_words.tsv"
-stamp="$generated_root/.inline-asm-mm-producer"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root"
-fingerprint=$(
-  {
-    printf '%s\n' "$producer_commit"
-    sha256sum \
-      "$script_dir/prepare-inline-asm-mm.sh" \
-      "$script_dir/import-inline-asm-mm.py" \
-      "$script_dir/generate-inline-asm-encodings.cpp"
-  } | sha256sum | awk '{print $1}'
-)
-
 required_outputs=(
   "$inline_asm_root/outputs/mm/mm.c"
   "$inline_asm_root/outputs/mm/mm.h"
@@ -82,25 +71,29 @@ required_outputs=(
   "$inline_asm_root/outputs/mm/test_data/hardware/images/expected.u32.bin"
   "$inline_asm_root/outputs/mm/test_data/hardware/constants/mod_ctx.u32.bin"
 )
-need_delivery=0
-if [[ ! -f $stamp ]] || [[ $(<"$stamp") != "$fingerprint" ]]; then
-  need_delivery=1
-fi
+
+echo "[hputest] generating selected inline-asm MM inputs at $producer_commit"
+cmake -S "$inline_asm_root" -B "$cmake_build" \
+  -DBUILD_TESTING=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$cmake_build" --parallel "$jobs" --target \
+  inline_asm_codegen inline_asm_encode_outputs hpu_reference_vectors
+(
+  cd "$inline_asm_root"
+  "$cmake_build/inline_asm_codegen" both \
+    --config "$inline_asm_root/config/fhe_test.conf"
+  "$cmake_build/test/encode/inline_asm_encode_outputs"
+  "$cmake_build/test/reference/hpu_reference_vectors" \
+    "$inline_asm_root/outputs/ciphertext_multiply/test_data" \
+    "$inline_asm_root/outputs" \
+    --config "$inline_asm_root/config/fhe_test.conf"
+)
 for path in "${required_outputs[@]}"; do
   if [[ ! -s $path ]]; then
-    need_delivery=1
+    echo "ERROR: inline-asm generation omitted required MM output: $path" >&2
+    exit 2
   fi
 done
-
-if ((need_delivery)); then
-  echo "[hputest] generating inline-asm delivery at $producer_commit"
-  cmake -S "$inline_asm_root" -B "$cmake_build" \
-    -DBUILD_TESTING=ON \
-    -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$cmake_build" --parallel "$jobs" --target hpu_delivery
-else
-  echo "[hputest] reuse inline-asm delivery for $producer_commit"
-fi
 
 "${CXX:-c++}" \
   -std=c++17 -Wall -Wextra -Werror \
@@ -120,5 +113,4 @@ python3 "$script_dir/import-inline-asm-mm.py" \
   --encodings "$encoding_tsv" \
   --producer-commit "$producer_commit"
 
-printf '%s\n' "$fingerprint" > "$stamp"
 echo '[hputest] inline-asm MM generation/import PASS'

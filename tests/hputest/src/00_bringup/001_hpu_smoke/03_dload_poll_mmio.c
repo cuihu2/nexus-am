@@ -4,9 +4,10 @@
 #include <hpu/layout.h>
 
 /*
- * Purpose: configure the HPU, issue a 64-line DLOAD, then poll STATUS until
- * busy has been observed high and subsequently low.  main() returns 0 only
- * after that complete transition; a fault or timeout returns 1.
+ * Purpose: configure the HPU, issue a 64-line DLOAD, then poll the MMIO
+ * STATUS register until busy has been observed high and subsequently low.
+ * main() returns 0 only after that complete transition; a fault or timeout
+ * returns 1.  There is no architectural HPU status CSR for a csrr variant.
  */
 int main(void) {
     uint32_t status = 0U;
