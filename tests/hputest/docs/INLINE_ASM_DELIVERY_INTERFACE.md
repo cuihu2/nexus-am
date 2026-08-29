@@ -10,7 +10,8 @@
 
 ```text
 tests/hputest/third_party/inline-asm
-commit eadb1103dcad31ac903eb68d84bea8f303b84332
+branch encode
+commit 80b4725db7403e7a8a8663ed1344309e058f6a46
 ```
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
@@ -82,7 +83,9 @@ line offset   relative to configured HPU_MEM_BASE
 outputs/mm/test_data/hardware/
 ```
 
-每个 `.u32.bin` 都有同名 `.u32.hex.txt`，便于人工查看。生产者还给出：
+每个 `.u32.bin` 的人工可读伴随文件由 `hardware_manifest.csv` 的
+`readable_path` 字段指定；当前 `encode` 分支生成 `.u32.dec.txt` 十进制文本。
+接收端不再猜测或写死展示文件后缀。生产者还给出：
 
 - `test_data/params.json`：N、operation、domain、模数；
 - `test_data/hardware/line_map.csv`：path、shape、offset、count、字节数；
@@ -234,7 +237,7 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 
 - 分组目录中的 ELF/BIN/TXT（完整三组共 58 个用例）；
 - `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
-- `provenance/inline-asm-mm/`：选中的 bin/hex/table/mm.c/mm.h/mm.asm、producer commit、
+- `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、producer commit、
   resolved spans 和 summary。
 
 生成物不进入 Git history。

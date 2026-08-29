@@ -40,7 +40,7 @@ EXPECTED_MM_WORDS = [
     0x7000000B,
 ]
 
-SELECTED_FILES = [
+BASE_SELECTED_FILES = [
     "mm.c",
     "mm.h",
     "mm.asm",
@@ -53,13 +53,9 @@ SELECTED_FILES = [
     "test_data/hardware/hardware_manifest.csv",
     "test_data/hardware/mod_ctx_map.csv",
     "test_data/hardware/images/input_a.u32.bin",
-    "test_data/hardware/images/input_a.u32.hex.txt",
     "test_data/hardware/images/input_b.u32.bin",
-    "test_data/hardware/images/input_b.u32.hex.txt",
     "test_data/hardware/images/expected.u32.bin",
-    "test_data/hardware/images/expected.u32.hex.txt",
     "test_data/hardware/constants/mod_ctx.u32.bin",
-    "test_data/hardware/constants/mod_ctx.u32.hex.txt",
 ]
 
 
@@ -70,6 +66,34 @@ def fail(message: str) -> None:
 def read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def selected_files(source: Path) -> list[str]:
+    """Resolve human-readable companions from the producer manifest."""
+    manifest_path = source / "test_data/hardware/hardware_manifest.csv"
+    manifest_rows = {row["path"]: row for row in read_csv(manifest_path)}
+    hardware_root = (source / "test_data/hardware").resolve(strict=True)
+    selected = list(BASE_SELECTED_FILES)
+
+    for binary_path in EXPECTED_IMAGES:
+        row = manifest_rows.get(binary_path)
+        if row is None:
+            fail(f"missing hardware manifest row: {binary_path}")
+        readable_path = row.get("readable_path", "").strip()
+        relative = Path(readable_path)
+        if (not readable_path or relative.is_absolute() or
+                ".." in relative.parts):
+            fail(f"invalid readable_path for {binary_path}: {readable_path!r}")
+        candidate = (hardware_root / relative).resolve(strict=True)
+        try:
+            candidate.relative_to(hardware_root)
+        except ValueError:
+            fail(f"readable_path escapes hardware package: {readable_path}")
+        selected.append(f"test_data/hardware/{relative.as_posix()}")
+
+    if len(selected) != len(set(selected)):
+        fail("selected MM delivery contains duplicate paths")
+    return selected
 
 
 def parse_int(value: str) -> int:
@@ -255,7 +279,8 @@ def main() -> int:
     arguments = parser.parse_args()
 
     source = arguments.source.resolve()
-    for relative in SELECTED_FILES:
+    delivery_files = selected_files(source)
+    for relative in delivery_files:
         if not (source / relative).is_file():
             fail(f"missing selected MM delivery file: {relative}")
     if len(arguments.producer_commit) != 40 or any(
@@ -273,7 +298,7 @@ def main() -> int:
     staging = Path(tempfile.mkdtemp(prefix=".mm-import-", dir=destination.parent))
     backup: Path | None = None
     try:
-        for relative in SELECTED_FILES:
+        for relative in delivery_files:
             target = staging / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / relative, target)
