@@ -1,13 +1,16 @@
-#include <hpu/it_case_steps.h>
+#include <hpu/steps.h>
 
-#define CASE_ID "HPU_IT_DIR_APP_001"
-#define TESTPOINT "IT-APP-001"
-#define DESCRIPTION "完整小型FHE应用端到端演示"
-#define TEST_MODE "定向应用测试待接入"
-#define PRIORITY 3
-#define CASE_KIND "HPU_CASE_APP_MINI_FHE"
-#define REQUIREMENTS "HPU_REQ_IT_MONITOR | HPU_REQ_CACHE_CONTRACT | HPU_REQ_EXTERNAL_DATA | HPU_REQ_EXTERNAL_ENTRY | HPU_REQ_PERF_THRESHOLD"
-#define SEED 0u
+/*
+ * 测试点：IT-APP-001
+ * 目的：完整小型FHE应用端到端演示。
+ * 模式：定向应用测试待接入（P3）。
+ * 外部条件：
+ *   - HPU_REQ_IT_MONITOR
+ *   - HPU_REQ_CACHE_CONTRACT
+ *   - HPU_REQ_EXTERNAL_DATA
+ *   - HPU_REQ_EXTERNAL_ENTRY
+ *   - HPU_REQ_PERF_THRESHOLD
+ */
 
 int main(void) {
     /*
@@ -19,6 +22,6 @@ int main(void) {
      * 5. 比对：没有可信输出可比对，明确 return 1，防止 VCS 报出假 PASS。
      * 外部证据边界：return 0 只表示软件自检通过；IT monitor、外部数据、外部入口、性能门限 证据仍由 IT/VCS 环境判定。
      */
-    (void)hpu_it_not_issued();
+    (void)not_issued();
     return 1;
 }

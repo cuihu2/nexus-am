@@ -1,13 +1,13 @@
-#include <hpu/it_case_steps.h>
+#include <hpu/steps.h>
 
-#define CASE_ID "HPU_IT_DIR_INS_C0_005"
-#define TESTPOINT "IT-INS-C0-005"
-#define DESCRIPTION "PNTT单stage结果写回闭环"
-#define TEST_MODE "定向单stage"
-#define PRIORITY 0
-#define CASE_KIND "HPU_CASE_INS_PNTT_STAGE"
-#define REQUIREMENTS "HPU_REQ_IT_MONITOR | HPU_REQ_CACHE_CONTRACT"
-#define SEED UINT32_C(0xc005)
+/*
+ * 测试点：IT-INS-C0-005
+ * 目的：PNTT单stage结果写回闭环。
+ * 模式：定向单stage（P0）。
+ * 外部条件：
+ *   - HPU_REQ_IT_MONITOR
+ *   - HPU_REQ_CACHE_CONTRACT
+ */
 
 int main(void) {
     /*
@@ -17,6 +17,6 @@ int main(void) {
      * per-stage golden output as one versioned delivery.  Issuing the word
      * against the placeholder twiddle line would not test IT-INS-C0-005.
      */
-    (void)hpu_it_not_issued();
+    (void)not_issued();
     return 1;
 }

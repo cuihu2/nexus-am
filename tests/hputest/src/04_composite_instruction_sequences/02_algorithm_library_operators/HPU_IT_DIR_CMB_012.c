@@ -1,13 +1,13 @@
-#include <hpu/it_case_steps.h>
+#include <hpu/steps.h>
 
-#define CASE_ID "HPU_IT_DIR_CMB_012"
-#define TESTPOINT "IT-CMB-012"
-#define DESCRIPTION "Poseidon算法库reline组合序列"
-#define TEST_MODE "定向算法库算子"
-#define PRIORITY 2
-#define CASE_KIND "HPU_CASE_CMB_RELINE"
-#define REQUIREMENTS "HPU_REQ_IT_MONITOR | HPU_REQ_CACHE_CONTRACT"
-#define SEED 0u
+/*
+ * 测试点：IT-CMB-012
+ * 目的：Poseidon算法库reline组合序列。
+ * 模式：定向算法库算子（P2）。
+ * 外部条件：
+ *   - HPU_REQ_IT_MONITOR
+ *   - HPU_REQ_CACHE_CONTRACT
+ */
 
 int main(void) {
     /*
@@ -15,9 +15,9 @@ int main(void) {
      * 1. ELF 已嵌入 producer 的 A/B 两组 4096×uint32 输入，防止数据接口退化。
      * 2. 完整算法仍缺少已解析的 DMA span 表、全部中间区布局和不可变 golden。
      * 3. 因此本用例不写 HPU CSR、不发明 reline 指令序列，也不产生假 self-check PASS。
-     * 4. hpu_it_not_issued() 仅验证输入符号可链接；main 随后明确 return 1。
+     * 4. not_issued() 仅验证输入符号可链接；main 随后明确 return 1。
      * 5. producer 契约补齐后，才在这里展开 CSR→数据→指令→PSYNC→逐系数比对步骤。
      */
-    (void)hpu_it_not_issued();
+    (void)not_issued();
     return 1;
 }

@@ -1,68 +1,66 @@
-#include <hpu/it_case_steps.h>
+#include <hpu/steps.h>
 
-#define CASE_ID "HPU_IT_DIR_INS_C0_009"
-#define TESTPOINT "IT-INS-C0-009"
-#define DESCRIPTION "PFREE释放后同对象号复用"
-#define TEST_MODE "定向对象生命周期"
-#define PRIORITY 1
-#define CASE_KIND "HPU_CASE_INS_PFREE"
-#define REQUIREMENTS "HPU_REQ_IT_MONITOR | HPU_REQ_CACHE_CONTRACT"
-#define SEED UINT32_C(0xc009)
+/*
+ * 测试点：IT-INS-C0-009
+ * 目的：PFREE释放后同对象号复用。
+ * 模式：定向对象生命周期（P1）。
+ * 外部条件：
+ *   - HPU_REQ_IT_MONITOR
+ *   - HPU_REQ_CACHE_CONTRACT
+ */
 
 int main(void) {
+    const uint32_t seed = UINT32_C(0xc009);
     uint32_t status;
     unsigned timeout;
 
-    if (hpu_it_prepare_data(SEED) != 0) return 1;
+    if (prepare_data(seed) != 0) return 1;
 
-    hpu_it_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
-    hpu_it_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_it_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    hpu_it_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_IT_MEM_BASE);
-    hpu_it_csr_write32(HPU_CSR_BASE_HI_ADDR,
-                       (uint32_t)(HPU_IT_MEM_BASE >> 32U));
-    hpu_it_csr_write32(HPU_CSR_SIZE_LO_ADDR, HPU_IT_WINDOW_LINES);
-    hpu_it_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
-    if (hpu_it_csr_read32(HPU_CSR_BASE_LO_ADDR) !=
-        (uint32_t)HPU_IT_MEM_BASE) return 1;
-    if (hpu_it_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_IT_MEM_BASE >> 32U)) return 1;
-    if (hpu_it_csr_read32(HPU_CSR_SIZE_LO_ADDR) != HPU_IT_WINDOW_LINES)
+    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
+    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
+        (uint32_t)(HPU_MEM_BASE >> 32U));
+    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, WINDOW_LINES);
+    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
+    if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) !=
+        (uint32_t)HPU_MEM_BASE) return 1;
+    if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
+        (uint32_t)(HPU_MEM_BASE >> 32U)) return 1;
+    if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != WINDOW_LINES)
         return 1;
-    if (hpu_it_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
-    hpu_it_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (hpu_it_wait_window_valid(1) != 0) return 1;
+    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
+    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
+    if (wait_window(1) != 0) return 1;
 
     /* Load A as p0, free p0, reuse p0 for B, and store the reused object. */
-    if (hpu_it_issue_dload(HPU_IT_P0, HPU_IT_LINE_SRC_A,
-                           HPU_IT_POLY_LINES, HPU_IT_DMA_POLY) != 0)
+    if (dload(P0, LINE_A, POLY_LINES) != 0)
         return 1;
-    if (hpu_it_issue_pfree(HPU_IT_P0) != 0) return 1;
-    if (hpu_it_issue_dload(HPU_IT_P0, HPU_IT_LINE_SRC_B,
-                           HPU_IT_POLY_LINES, HPU_IT_DMA_POLY) != 0)
+    if (pfree(P0) != 0) return 1;
+    if (dload(P0, LINE_B, POLY_LINES) != 0)
         return 1;
-    if (hpu_it_issue_dstore(HPU_IT_P0, HPU_IT_LINE_OUT_A,
-                            HPU_IT_POLY_LINES, HPU_IT_STORE_RELEASE) != 0)
+    if (dstore_release(P0, LINE_OUT, POLY_LINES) != 0)
         return 1;
 
-    hpu_it_issue_psync();
-    if (hpu_it_wait_irq_level() != 0) return 1;
-    hpu_it_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
+    psync();
+    if (wait_irq() != 0) return 1;
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        if ((hpu_it_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U)
+        if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U)
             break;
     }
-    hpu_it_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
     if (timeout == HPU_TIMEOUT) return 1;
-    status = hpu_it_csr_read32(HPU_CSR_STATUS_ADDR);
+    status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
     if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return 1;
     if ((status & (HPU_STATUS_BUSY | HPU_STATUS_FAULT_VALID)) != 0U)
         return 1;
-    if ((hpu_it_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
+    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
         return 1;
 
     /* The output must be all 4096 words of B, not the freed A object. */
-    if (hpu_it_compare_regions(HPU_IT_LINE_OUT_A, HPU_IT_LINE_SRC_B,
-                               HPU_IT_POLY_LINES) != 0) return 1;
+    if (check_regions(LINE_OUT, LINE_B,
+        POLY_LINES) != 0) return 1;
     return 0;
 }

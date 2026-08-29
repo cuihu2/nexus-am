@@ -122,19 +122,25 @@ for case_id in "${roster_ids[@]}"; do
   source_path=${roster_source[$case_id]}
   [[ $source_path == src/00_bringup/* ]] && continue
   source_file="$test_root/$source_path"
-  if ! grep -Fq "#define CASE_ID \"$case_id\"" "$source_file"; then
-    printf 'ERROR: migrated testcase CASE_ID does not match canonical roster: %s\n' \
+  if grep -Eq '^#define (CASE_ID|TESTPOINT|DESCRIPTION|TEST_MODE|PRIORITY|CASE_KIND|REQUIREMENTS|SEED)([[:space:]]|$)' \
+       "$source_file"; then
+    printf 'ERROR: migrated testcase contains obsolete metadata macros: %s\n' \
+      "$source_path" >&2
+    exit 2
+  fi
+  if ! grep -Fq ' * 测试点：' "$source_file" || \
+     ! grep -Fq ' * 目的：' "$source_file"; then
+    printf 'ERROR: migrated testcase lacks its readable testpoint/purpose comment: %s\n' \
+      "$source_path" >&2
+    exit 2
+  fi
+  if grep -Eq 'hpu_it_|<hpu/it_case_steps\.h>' "$source_file"; then
+    printf 'ERROR: migrated testcase uses the retired hpu_it_* interface: %s\n' \
       "$source_path" >&2
     exit 2
   fi
   source_code=$("${cross_compile}gcc" -fpreprocessed -E -P "$source_file")
   qualifier=${roster_qualifier[$case_id]}
-  if [[ $qualifier == software-self-check ]] && \
-     grep -Eq 'hpu_it_run_[[:alnum:]_]*[[:space:]]*\(' <<< "$source_code"; then
-    printf 'ERROR: migrated software testcase hides main() in hpu_it_run_*: %s\n' \
-      "$source_path" >&2
-    exit 2
-  fi
   if [[ $qualifier == blocked-not-issued ]]; then
     return_count=$(grep -Eoc '(^|[^[:alnum:]_])return([^[:alnum:]_]|$)' \
       <<< "$source_code" || true)
