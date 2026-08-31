@@ -235,7 +235,7 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 `nexus-am-hpu-fhe-workloads`；PR 只构建较快的 `core` 组。每个 artifact 保留
 7 天并包含该组的：
 
-- 分组目录中的 ELF/BIN/TXT（完整三组共 58 个用例）；
+- 分组目录中的 ELF/BIN/TXT（完整三组共 59 个用例）；
 - `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、producer commit、
   resolved spans 和 summary。

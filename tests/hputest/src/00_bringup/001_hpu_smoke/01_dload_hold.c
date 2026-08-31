@@ -4,66 +4,46 @@
 #include <hpu/layout.h>
 
 /*
- * Purpose: issue one 4096-coefficient DLOAD and then keep the CPU alive so
- * the DLOAD address, length, AXI handshakes, busy state, and object state can
- * be inspected in the IT waveform.
- *
- * This is intentionally an observation testcase.  The successful path does
- * not return 0 and does not claim a self-check result.
+ * 目的：确认 DLOAD 指令能到达 HPU，并给波形检查留下足够时间。
+ * 重点观察命令握手、x10/x11、DMA 地址与长度、AXI 读事务。
+ * 这是波形观察用例，成功路径故意不返回。
  */
 int main(void) {
     uint32_t status = 0U;
     unsigned timeout;
 
-    /* The ELF must contain both complete 4096-word input vectors. */
-    if (hpu_fixture_validate_embedded() != 0) return 1;
+    /* ELF 中必须完整包含 A/B 两组 4096 个 32 位系数。 */
+    if (fixture_validate() != 0) return 1;
 
-    /* Clear stale fault and completion state before changing configuration. */
-    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+    /* 清除上一次运行可能留下的 fault 和完成电平。 */
+    csr_write(CSR_FAULT, FAULT_VALID);
+    csr_write(CSR_IRQ, IRQ_LEVEL);
+    csr_write(CSR_IRQ, 0U);
 
-    /* Program the four shadow CSRs with an explicit 64-KiB HPU window. */
-    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
-    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
-                    (uint32_t)(HPU_MEM_BASE >> 32U));
-    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, HPU_WINDOW_LINES);
-    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
+    /* 逐寄存器配置 DDR window，便于直接在波形中定位每次 MMIO。 */
+    csr_write(CSR_BASE_LO, (uint32_t)MEM_BASE);
+    csr_write(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U));
+    csr_write(CSR_SIZE_LO, SMOKE_LINES);
+    csr_write(CSR_SIZE_HI, 0U);
+    if (csr_read(CSR_BASE_LO) != (uint32_t)MEM_BASE) return 1;
+    if (csr_read(CSR_BASE_HI) != (uint32_t)(MEM_BASE >> 32U)) return 1;
+    if (csr_read(CSR_SIZE_LO) != SMOKE_LINES) return 1;
+    if (csr_read(CSR_SIZE_HI) != 0U) return 1;
 
-    /* Readback checks the CPU-to-CSR path; COMMIT itself is a write pulse. */
-    if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) != (uint32_t)HPU_MEM_BASE)
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_MEM_BASE >> 32U))
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != HPU_WINDOW_LINES)
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
-
-    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-        if ((status & HPU_STATUS_FAULT_VALID) != 0U) return 1;
-        if ((status & HPU_STATUS_WINDOW_VALID) != 0U) break;
+    csr_write(CSR_COMMIT, COMMIT);
+    for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
+        status = csr_read(CSR_STATUS);
+        if ((status & STATUS_FAULT) != 0U) return 1;
+        if ((status & STATUS_VALID) != 0U) break;
     }
-    if (timeout == HPU_TIMEOUT) return 1;
-    if ((status & HPU_STATUS_BUSY) != 0U) return 1;
-    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
-        return 1;
-    if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
-        return 1;
+    if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return 1;
 
-    /* Copy only producer input A: line 0, 64 lines, 4096 coefficients. */
-    hpu_fixture_copy_to_ddr(HPU_LINE_SRC_A, hpu_rns_input_a);
+    fixture_copy(LINE_A, RNS_A);
 
-    /*
-     * From cuihu2/inline-asm:
-     *   dload x10, x11, p0, poly, regular-bank
-     * x10=0 is the line offset and x11=64 is the line count.
-     */
-    hpu_dload_p0(HPU_LINE_SRC_A, HPU_RNS_LINES);
+    /* p0、line 偏移和 line 数都是参数，调用可直接复用于其他对象。 */
+    if (dload(P0, LINE_A, RNS_LINES) != 0) return 1;
 
-    /* Intentional waveform hold: stop this testcase with a cycle limit. */
+    /* 故意停在这里；由仿真 cycle limit 结束本用例。 */
     for (;;) {
         __asm__ volatile("nop");
     }

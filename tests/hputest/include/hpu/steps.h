@@ -7,20 +7,16 @@
 
 /* DDR layout shared by the producer-backed tests (one line = 256 bytes). */
 enum {
-    LINE_A = 0,
-    LINE_B = 64,
-    LINE_OUT = 128,
-    LINE_MOD = 192,
     LINE_OUT_B = 256,
     LINE_SCRATCH = 320,
     LINE_TWIDDLE = 384,
-    POLY_LINES = 64,
     WINDOW_LINES = 512,
-    MOD_Q0 = 50061313,
     MOD_Q1 = 50077697
 };
 
-#define POLY_WORDS (POLY_LINES * HPU_WORDS_PER_LINE)
+#define POLY_LINES RNS_LINES
+#define POLY_WORDS RNS_COEFFICIENTS
+#define MOD_Q0     MODULUS
 
 /* HPU physical-object numbers used directly by DLOAD/DSTORE/PFREE. */
 enum {

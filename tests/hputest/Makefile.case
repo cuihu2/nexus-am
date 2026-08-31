@@ -28,7 +28,12 @@ ifneq ($(findstring /src/00_bringup/,$(CASE_SOURCE)),)
 ifneq ($(findstring /001_hpu_smoke/,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
-ifneq ($(findstring /001_hpu_smoke/07_dload_compute_dstore_psync.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/04_psync_irq.c %/05_dload_psync_irq.c \
+                %/07_dload_dstore_psync_irq.c \
+                %/08_dload_compute_dstore_psync_irq.c,$(CASE_SOURCE)),)
+SRCS += $(TEST_ROOT)/src/common/hpu_irq.c
+endif
+ifneq ($(findstring /001_hpu_smoke/08_dload_compute_dstore_psync_irq.c,$(CASE_SOURCE)),)
 ifeq ($(wildcard $(INLINE_ASM_MM_ROOT)/mm.c),)
 $(error missing generated inline-asm MM program; run 'make prepare-inline-asm-mm')
 endif

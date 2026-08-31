@@ -1,16 +1,17 @@
 #include <hpu/csr.h>
-#include <hpu/dma.h>
 #include <hpu/fixture.h>
+#include <hpu/irq.h>
 #include <hpu/layout.h>
+#include <hpu/sync.h>
 
 /*
- * 目的：发出 DLOAD 后由 CPU 轮询 MMIO STATUS 的 busy 变化。
- * 只有实际看到 busy 从 1 回到 0 才成功，避免把初始空闲误判为完成。
+ * 目的：单独验证空闲 PSYNC 能触发 CPU 外部中断。
+ * 中断处理函数必须 claim source 257、清 HPU 完成电平并完成 PLIC claim。
  */
 int main(void) {
     uint32_t status = 0U;
     unsigned timeout;
-    int saw_busy = 0;
+    int rc;
 
     if (fixture_validate() != 0) return 1;
 
@@ -34,15 +35,16 @@ int main(void) {
     }
     if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return 1;
 
-    fixture_copy(LINE_A, RNS_A);
-    if (dload(P0, LINE_A, RNS_LINES) != 0) return 1;
+    if (irq_open() != 0) return 1;
+    psync();
+    rc = irq_wait();
+    irq_close();
+    if (rc != 0) return 1;
 
-    /* STATUS 是 MMIO 地址 0x08000014，不是 csrr。 */
-    for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
-        status = csr_read(CSR_STATUS);
-        if ((status & STATUS_FAULT) != 0U) return 1;
-        if ((status & STATUS_BUSY) != 0U) saw_busy = 1;
-        if (saw_busy && (status & STATUS_BUSY) == 0U) return 0;
-    }
-    return 1;
+    status = csr_read(CSR_STATUS);
+    if ((status & (STATUS_VALID | STATUS_BUSY | STATUS_FAULT)) !=
+        STATUS_VALID)
+        return 1;
+    if ((csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U) return 1;
+    return 0;
 }

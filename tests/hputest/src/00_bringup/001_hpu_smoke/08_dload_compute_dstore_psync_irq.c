@@ -1,20 +1,28 @@
 #include <hpu/csr.h>
-#include <hpu/dma.h>
 #include <hpu/fixture.h>
 #include <hpu/irq.h>
 #include <hpu/layout.h>
-#include <hpu/sync.h>
+#include "mm.h"
 
 /*
- * 目的：验证 DLOAD 后的 terminal PSYNC 能产生完成中断。
- * 与 04 的区别是本用例先做真实 64-line DMA，再等待同一中断路径。
+ * 目的：形成 DLOAD -> PMUL -> DSTORE -> PSYNC 的最小计算闭环。
+ * 输入、模表、指令流和 golden 都来自 inline-asm 的 MM 交付包。
+ * 完成方式固定为 PSYNC 中断，不使用不存在的 RISC-V HPU CSR。
  */
 int main(void) {
+    static const hpu_dma_span_t spans[HPU_PROGRAM_MM_DMA_COUNT] = {
+        /* 顺序必须与 producer 的 DMA relocation manifest 一致。 */
+        {LINE_MOD, 1U},
+        {LINE_A, RNS_LINES},
+        {LINE_B, RNS_LINES},
+        {LINE_OUT, RNS_LINES},
+    };
     uint32_t status = 0U;
     unsigned timeout;
     int rc;
 
     if (fixture_validate() != 0) return 1;
+    if (fixture_validate_mm() != 0) return 1;
 
     csr_write(CSR_FAULT, FAULT_VALID);
     csr_write(CSR_IRQ, IRQ_LEVEL);
@@ -36,14 +44,19 @@ int main(void) {
     }
     if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return 1;
 
+    fixture_copy_mod();
     fixture_copy(LINE_A, RNS_A);
+    fixture_copy(LINE_B, RNS_B);
+    fixture_poison();
+
     if (irq_open() != 0) return 1;
-    if (dload(P0, LINE_A, RNS_LINES) != 0) {
-        irq_close();
-        return 1;
-    }
-    psync();
-    rc = irq_wait();
+
+    /*
+     * producer 函数会在每条 custom1 前写 x10/x11，并且内部只发一次
+     * terminal PSYNC，因此 main 不再额外补发 PSYNC。
+     */
+    rc = hpu_program_mm(spans, HPU_PROGRAM_MM_DMA_COUNT);
+    if (rc == 0) rc = irq_wait();
     irq_close();
     if (rc != 0) return 1;
 
@@ -51,7 +64,9 @@ int main(void) {
     if ((status & (STATUS_VALID | STATUS_BUSY | STATUS_FAULT)) !=
         STATUS_VALID)
         return 1;
-    if ((csr_read(CSR_FAULT) & FAULT_VALID) != 0U) return 1;
     if ((csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U) return 1;
+
+    /* HPU 输出、producer golden 和 C 的 4096 项模乘结果必须全相同。 */
+    if (check_pmul() != 0) return 1;
     return 0;
 }

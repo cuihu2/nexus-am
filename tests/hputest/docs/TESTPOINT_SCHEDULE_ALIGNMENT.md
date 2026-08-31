@@ -32,22 +32,22 @@
 | 01 | `01_dload_hold.c` | DLOAD 后永久等待，给波形观察留下时间 |
 | 02 | `02_read_write_mmio_csr.c` | 逐地址写读 BASE/SIZE，COMMIT 后检查 MMIO STATUS |
 | 03 | `03_dload_poll_mmio.c` | DLOAD，轮询 MMIO STATUS 的 busy 由 0→1→0 |
-| 04 | `04_dload_psync_poll_mmio.c` | DLOAD+PSYNC，以 MMIO STATUS/IRQ 电平轮询完成 |
-| 05 | `05_dload_psync_irq.c` | 相同 DLOAD+PSYNC，以 PLIC 中断和 `volatile` flag 完成 |
-| 06 | `06_dload_dstore_psync.c` | DLOAD+DSTORE+PSYNC，逐 4096 系数回环比对 |
-| 07 | `07_dload_compute_dstore_psync.c` | producer PMUL 程序，逐 4096 系数与 golden/C oracle 比对 |
+| 04 | `04_psync_irq.c` | 空闲 PSYNC，以 PLIC source 257 中断完成 |
+| 05 | `05_dload_psync_irq.c` | DLOAD+PSYNC，以 PLIC 中断和 `volatile` flag 完成 |
+| 06 | `06_dload_dstore_poll_mmio.c` | DLOAD+DSTORE+PSYNC，以 MMIO 轮询完成并逐 4096 系数比对 |
+| 07 | `07_dload_dstore_psync_irq.c` | 同一回环数据流，以 PSYNC 中断完成并逐 4096 系数比对 |
+| 08 | `08_dload_compute_dstore_psync_irq.c` | producer PMUL 程序，以 PSYNC 中断完成并逐 4096 系数与 golden/C oracle 比对 |
 
-旧十项草案按下面规则合并：
+当前编号只保留 MMIO 状态访问方式：
 
-- “DLOAD + 轮询 CSR”和“DLOAD + 轮询 MMIO CSR”合并为 03；
-- “DLOAD + DSTORE + 同步（轮询 CSR）”与“轮询 MMIO”合并为 06；
-- 中断只保留一个可比较的 DLOAD+PSYNC 用例 05；DSTORE 数据正确性由 06
-  单独闭环，不再复制一个只改变等待方式的 DSTORE 用例；
-- 04 与 05 不是重复用例：HPU 工作相同，但 CPU 完成机制分别是 MMIO 轮询和
-  PLIC 中断。
+- 03 只验证 DLOAD 的 MMIO busy 轮询；
+- 04 单独隔离空闲 PSYNC 的中断路径；
+- 05 在 DLOAD 后验证 PSYNC 中断；
+- 06 与 07 使用完全相同的数据回环，仅 CPU 同步方式分别是 MMIO 和中断；
+- 08 增加 producer 生成的 PMUL 计算闭环。
 
-case 05 中使用 `csrs/csrc sie` 只是在 S-mode 打开/关闭标准外部中断，不是第二种
-HPU 状态寄存器访问方式。
+中断用例公共层使用 `csrs/csrc sie`，只是在 S-mode 打开/关闭标准外部中断，
+不是第二种 HPU 状态寄存器访问方式。
 
 ## 3. IT 回传失败记录的解释边界
 

@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 58 || ${roster_group_counts[core]} -ne 37 || \
+if [[ ${#roster_ids[@]} -ne 59 || ${roster_group_counts[core]} -ne 38 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
       $roster_migrated_software -ne 25 || $roster_migrated_blocked -ne 24 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 31 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 32 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 24 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
@@ -583,7 +583,7 @@ for elf in "${elfs[@]}"; do
   case "$elf" in
     */001_hpu_smoke/*.elf)
       require_rns_fixture "$elf"
-      if [[ $name != 07_dload_compute_dstore_psync ]]; then
+      if [[ $name != 08_dload_compute_dstore_psync_irq ]]; then
         reject_mm_only_fixture "$elf"
       fi ;;
     */01_configuration/*.elf|*/02_data_paths/*.elf|\
@@ -597,14 +597,16 @@ for elf in "${elfs[@]}"; do
   case "$name" in
     01_dload_hold|03_dload_poll_mmio)
       require_word "$txt" 00b5102b ;;
-    04_dload_psync_poll_mmio|05_dload_psync_irq)
+    04_psync_irq)
+      require_word "$txt" 7000000b ;;
+    05_dload_psync_irq)
       require_word "$txt" 00b5102b
       require_word "$txt" 7000000b ;;
-    06_dload_dstore_psync)
+    06_dload_dstore_poll_mmio|07_dload_dstore_psync_irq)
       require_word "$txt" 00b5102b
       require_word "$txt" 00b5502b
       require_word "$txt" 7000000b ;;
-    07_dload_compute_dstore_psync)
+    08_dload_compute_dstore_psync_irq)
       require_mm_fixture "$elf"
       require_generated_mm_stream "$txt" ;;
     01_return_0)

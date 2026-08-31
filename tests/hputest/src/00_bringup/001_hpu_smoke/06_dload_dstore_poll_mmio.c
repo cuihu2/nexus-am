@@ -2,15 +2,15 @@
 #include <hpu/dma.h>
 #include <hpu/fixture.h>
 #include <hpu/layout.h>
+#include <hpu/sync.h>
 
 /*
- * 目的：发出 DLOAD 后由 CPU 轮询 MMIO STATUS 的 busy 变化。
- * 只有实际看到 busy 从 1 回到 0 才成功，避免把初始空闲误判为完成。
+ * 目的：用 MMIO 轮询完成 DDR -> HPU -> DDR 回环，并逐项自检。
+ * 输出区先写 poison，避免 DSTORE 没执行时误把旧数据当成正确结果。
  */
 int main(void) {
     uint32_t status = 0U;
     unsigned timeout;
-    int saw_busy = 0;
 
     if (fixture_validate() != 0) return 1;
 
@@ -35,14 +35,27 @@ int main(void) {
     if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return 1;
 
     fixture_copy(LINE_A, RNS_A);
+    fixture_poison();
     if (dload(P0, LINE_A, RNS_LINES) != 0) return 1;
+    if (dstore(P0, LINE_OUT, RNS_LINES) != 0) return 1;
+    psync();
 
-    /* STATUS 是 MMIO 地址 0x08000014，不是 csrr。 */
+    /* CPU 不开中断，只轮询 MMIO 完成电平。 */
     for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
         status = csr_read(CSR_STATUS);
         if ((status & STATUS_FAULT) != 0U) return 1;
-        if ((status & STATUS_BUSY) != 0U) saw_busy = 1;
-        if (saw_busy && (status & STATUS_BUSY) == 0U) return 0;
+        if ((csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U) break;
     }
-    return 1;
+    if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return 1;
+
+    csr_write(CSR_IRQ, IRQ_LEVEL);
+    for (timeout = 0U; timeout < TIMEOUT / 16U; ++timeout) {
+        if ((csr_read(CSR_IRQ) & IRQ_LEVEL) == 0U) break;
+    }
+    csr_write(CSR_IRQ, 0U);
+    if (timeout == TIMEOUT / 16U) return 1;
+
+    /* invalidate 后逐个比较 4096 个系数；任何不一致都 return 1。 */
+    if (check_loopback() != 0) return 1;
+    return 0;
 }

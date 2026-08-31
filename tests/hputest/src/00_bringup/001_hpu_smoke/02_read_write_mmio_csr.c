@@ -3,54 +3,42 @@
 #include <hpu/layout.h>
 
 /*
- * Purpose: prove that the CPU can write/read the HPU shadow configuration
- * register window through MMIO and that COMMIT produces an idle, valid
- * window without a fault.  HPU status is MMIO-only in the current design;
- * this testcase deliberately does not invent a RISC-V csrr address.
- * No HPU DMA or arithmetic instruction is issued by this testcase.
+ * 目的：验证 HPU 的 MMIO 配置写入、配置提交和状态读取。
+ * 当前设计只有 MMIO 寄存器窗口，不构造不存在的 RISC-V HPU CSR。
+ * 本用例不发 DMA 或计算指令。
  */
 int main(void) {
     uint32_t status = 0U;
     unsigned timeout;
 
-    /* Reference the two embedded vectors even though this CSR-only case does
-     * not copy them to DDR.  This also verifies that the ELF fixture is whole.
-     */
-    if (hpu_fixture_validate_embedded() != 0) return 1;
+    if (fixture_validate() != 0) return 1;
 
-    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+    csr_write(CSR_FAULT, FAULT_VALID);
+    csr_write(CSR_IRQ, IRQ_LEVEL);
+    csr_write(CSR_IRQ, 0U);
 
-    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
-    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
-                    (uint32_t)(HPU_MEM_BASE >> 32U));
-    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, HPU_WINDOW_LINES);
-    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
+    /* 四个 shadow 寄存器分别写入、分别读回。 */
+    csr_write(CSR_BASE_LO, (uint32_t)MEM_BASE);
+    csr_write(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U));
+    csr_write(CSR_SIZE_LO, SMOKE_LINES);
+    csr_write(CSR_SIZE_HI, 0U);
+    if (csr_read(CSR_BASE_LO) != (uint32_t)MEM_BASE) return 1;
+    if (csr_read(CSR_BASE_HI) != (uint32_t)(MEM_BASE >> 32U)) return 1;
+    if (csr_read(CSR_SIZE_LO) != SMOKE_LINES) return 1;
+    if (csr_read(CSR_SIZE_HI) != 0U) return 1;
 
-    /* Each comparison maps directly to one CSR read in the waveform. */
-    if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) != (uint32_t)HPU_MEM_BASE)
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_MEM_BASE >> 32U))
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != HPU_WINDOW_LINES)
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
-
-    /* COMMIT is a write pulse; STATUS.window_valid is the acknowledgement. */
-    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-        if ((status & HPU_STATUS_FAULT_VALID) != 0U) return 1;
-        if ((status & HPU_STATUS_WINDOW_VALID) != 0U) break;
+    /* COMMIT 是写脉冲，提交结果通过 STATUS.valid 判断。 */
+    csr_write(CSR_COMMIT, COMMIT);
+    for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
+        status = csr_read(CSR_STATUS);
+        if ((status & STATUS_FAULT) != 0U) return 1;
+        if ((status & STATUS_VALID) != 0U) break;
     }
-    if (timeout == HPU_TIMEOUT) return 1;
-    if ((status & HPU_STATUS_BUSY) != 0U) return 1;
-    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
+    if (timeout == TIMEOUT) return 1;
+    if ((status & (STATUS_VALID | STATUS_BUSY | STATUS_FAULT)) !=
+        STATUS_VALID)
         return 1;
-    if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
-        return 1;
-
+    if ((csr_read(CSR_FAULT) & FAULT_VALID) != 0U) return 1;
+    if ((csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U) return 1;
     return 0;
 }

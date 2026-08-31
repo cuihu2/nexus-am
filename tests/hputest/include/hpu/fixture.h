@@ -10,6 +10,20 @@ extern const uint32_t hpu_rns_input_b[HPU_RNS_COEFFICIENTS];
 extern const uint32_t hpu_rns_expected[HPU_RNS_COEFFICIENTS];
 extern const uint32_t hpu_rns_mod_ctx[HPU_WORDS_PER_LINE];
 
+#define RNS_A        hpu_rns_input_a
+#define RNS_B        hpu_rns_input_b
+#define RNS_EXPECTED hpu_rns_expected
+#define RNS_MOD_CTX  hpu_rns_mod_ctx
+
+/* 新冒烟用例使用短名称；旧名称继续作为兼容入口。 */
+#define fixture_validate    hpu_fixture_validate_embedded
+#define fixture_validate_mm hpu_fixture_validate_mm_assets
+#define fixture_copy        hpu_fixture_copy_to_ddr
+#define fixture_copy_mod    hpu_fixture_copy_mod_ctx_to_ddr
+#define fixture_poison      hpu_fixture_poison_output
+#define check_loopback      hpu_fixture_check_dload_dstore
+#define check_pmul          hpu_fixture_check_pmul
+
 static inline int hpu_fixture_validate_embedded(void) {
     unsigned i;
 
