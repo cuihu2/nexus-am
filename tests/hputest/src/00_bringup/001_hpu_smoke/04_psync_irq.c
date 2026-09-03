@@ -3,6 +3,14 @@
 #include <hpu/irq.h>
 #include <hpu/layout.h>
 #include <hpu/sync.h>
+#include <klib.h>
+
+/*
+ * _cte_init() always initializes the timer and enables it unless this switch
+ * is set first.  Case 04 isolates the HPU external-interrupt path, so timer
+ * interrupts must not participate in this test.
+ */
+extern int g_config_disable_timer;
 
 /*
  * 目的：单独验证空闲 PSYNC 能触发 CPU 外部中断。
@@ -35,9 +43,21 @@ int main(void) {
     }
     if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return 1;
 
-    if (irq_open() != 0) return 1;
+    g_config_disable_timer = 1;
+    printf("04: before irq_open\n");
+    if (irq_open() != 0) {
+        printf("04: irq_open failed\n");
+        return 1;
+    }
+    printf("04: irq_open done\n");
+
+    printf("04: before psync\n");
     psync();
+    printf("04: psync done, irq=0x%x\n", csr_read(CSR_IRQ));
+
+    printf("04: before irq_wait\n");
     rc = irq_wait();
+    printf("04: irq_wait done, rc=%d\n", rc);
     irq_close();
     if (rc != 0) return 1;
 
