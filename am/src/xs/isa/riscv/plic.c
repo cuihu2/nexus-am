@@ -30,6 +30,7 @@
 #define PLIC_CLAIM(c)          (PLIC_BASE_ADDR + 0x200004UL + c*0x1000UL)
 // External interrupts start with index PLIC_EXT_INTR_OFFSET
 #define PLIC_EXT_INTR_OFFSET   1
+#define PLIC_DISABLE_THRESHOLD 7U
 
 // CSR.MIE
 #define MEIE 11
@@ -109,6 +110,32 @@ void plic_disable_word(uint32_t current_context, uint32_t intr) {
  */
 void plic_set_threshold(uint32_t current_context, uint32_t threshold) {
  WRITE_WORD(PLIC_THRESHOLD(current_context), threshold);
+}
+
+/*
+ * Establish the same quiescent PLIC state used by OpenSBI before a payload
+ * enables individual interrupt sources: all priorities are zero, every
+ * enable word is clear, and each context threshold masks all priorities.
+ *
+ * source_count is the number of implemented 1-based PLIC source IDs.  This
+ * driver stores PLIC_PRIORITY as base + 4, so plic_set_priority() takes the
+ * corresponding zero-based priority-array index.
+ */
+void plic_init(uint32_t source_count, uint32_t context_count) {
+  uint32_t enable_words = source_count / INTR_REG_WIDTH + 1U;
+
+  for (uint32_t priority_index = 0U;
+       priority_index < source_count;
+       ++priority_index) {
+    plic_set_priority(priority_index, 0U);
+  }
+
+  for (uint32_t context = 0U; context < context_count; ++context) {
+    for (uint32_t word = 0U; word < enable_words; ++word) {
+      WRITE_WORD(PLIC_ENABLE(context) + word * sizeof(uint32_t), 0U);
+    }
+    plic_set_threshold(context, PLIC_DISABLE_THRESHOLD);
+  }
 }
 
 /*

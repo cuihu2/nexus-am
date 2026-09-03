@@ -12,6 +12,8 @@
 #define PLIC_CONTEXT_S      1U
 #define SIE_SEIE            (UINT64_C(1) << 9U)
 
+extern int g_config_disable_timer;
+
 /* 只能由中断处理函数写，主程序仅轮询。 */
 static volatile uint32_t irq_done;
 static volatile uint32_t irq_error;
@@ -54,6 +56,8 @@ static _Context *handler(_Event event, _Context *context) {
 
 int irq_open(void) {
     _intr_write(0);
+    /* HPU中断用例只观察外部中断，禁止CTE同时打开定时器中断。 */
+    g_config_disable_timer = 1;
     if (_cte_init(NULL) != 0) return 1;
 
     irq_done = 0U;

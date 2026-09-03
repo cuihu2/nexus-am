@@ -14,6 +14,11 @@
 #define INTR_RANDOM            (INTR_GEN_ADDR + (MAX_EXTERNAL_INTR / 8))
 #define INTR_RANDOM_MASK       (INTR_GEN_ADDR + (MAX_EXTERNAL_INTR / 8) * 2)
 #define PLIC_BASE_ADDR         (0x3c000000UL)
+#if defined(__ARCH_RISCV64_XS)
+/* 256 SoC external inputs plus the HPU completion input. */
+#define PLIC_NUM_SOURCES       257UL
+#define PLIC_NUM_CONTEXTS      2UL
+#endif
 #elif defined(__ARCH_RISCV64_XS_SOUTHLAKE) || defined(__ARCH_RISCV64_XS_SOUTHLAKE_FLASH)
 #define MAX_EXTERNAL_INTR      256UL
 #define INTR_GEN_ADDR          (0x1f00060000UL)
