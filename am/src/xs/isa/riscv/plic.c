@@ -67,7 +67,7 @@ void plic_clear_claim(uint32_t current_context, uint32_t claim) {
 
 /*
  * PLIC priority set function
- * intr: interrupt source number
+ * intr: zero-based priority array index (interrupt source number - 1)
  * priority: the priority to be set
  */
 void plic_set_priority(uint32_t intr, uint32_t priority) {
@@ -89,7 +89,7 @@ void plic_enable(uint32_t current_context, uint32_t intr) {
 void plic_disable(uint32_t current_context, uint32_t intr) {
   // must read first to avoid unset other sources
   uint32_t origin = READ_WORD(PLIC_ENABLE(current_context) + (intr / 32) * 4);
-  origin ^= 1UL << (intr % 32);
+  origin &= ~(1UL << (intr % 32));
   WRITE_WORD(PLIC_ENABLE(current_context) + (intr / 32) * 4, origin);
 }
 
@@ -119,4 +119,3 @@ void plic_set_threshold(uint32_t current_context, uint32_t threshold) {
 void plic_set_intr(uint32_t intr) {
  SET_INTR(intr - PLIC_EXT_INTR_OFFSET);
 }
-

@@ -7,9 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PLIC_SOURCE    257U
-#define PLIC_CONTEXT_S 1U
-#define SIE_SEIE       (UINT64_C(1) << 9U)
+#define PLIC_SOURCE         257U
+#define PLIC_PRIORITY_INDEX (PLIC_SOURCE - 1U)
+#define PLIC_CONTEXT_S      1U
+#define SIE_SEIE            (UINT64_C(1) << 9U)
 
 /* 只能由中断处理函数写，主程序仅轮询。 */
 static volatile uint32_t irq_done;
@@ -58,7 +59,8 @@ int irq_open(void) {
     irq_done = 0U;
     irq_error = 0U;
     seip_handler_reg(handler);
-    plic_set_priority(PLIC_SOURCE, 1U);
+    /* priority 接口使用从 0 开始的数组下标；enable/claim 使用 source ID。 */
+    plic_set_priority(PLIC_PRIORITY_INDEX, 1U);
     plic_set_threshold(PLIC_CONTEXT_S, 0U);
     plic_enable(PLIC_CONTEXT_S, PLIC_SOURCE);
     __asm__ volatile("csrs sie, %0" : : "r"(SIE_SEIE) : "memory");
@@ -80,5 +82,5 @@ void irq_close(void) {
     _intr_write(0);
     __asm__ volatile("csrc sie, %0" : : "r"(SIE_SEIE) : "memory");
     plic_disable(PLIC_CONTEXT_S, PLIC_SOURCE);
-    plic_set_priority(PLIC_SOURCE, 0U);
+    plic_set_priority(PLIC_PRIORITY_INDEX, 0U);
 }
