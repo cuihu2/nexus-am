@@ -53,8 +53,8 @@ void __am_init_cte64() {
 #endif
 
   init_machine_exception();
-  init_timer();
   if(!g_config_disable_timer){
+    init_timer();
     enable_timer();
   }
 #if defined(__ARCH_RISCV64_XS)
