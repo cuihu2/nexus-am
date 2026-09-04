@@ -11,7 +11,7 @@
 ```text
 tests/hputest/third_party/inline-asm
 branch encode
-commit 80b4725db7403e7a8a8663ed1344309e058f6a46
+commit 0d205b84b748f863a824ca42e99cabfc2b6016b9
 ```
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并

@@ -134,7 +134,7 @@ self-check returns 0.  No UART text is required for this decision.
 GNU as does not natively recognize HPU mnemonics.  The
 `third_party/inline-asm` git submodule therefore pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`80b4725db7403e7a8a8663ed1344309e058f6a46` from its `encode` branch.  Before
+`0d205b84b748f863a824ca42e99cabfc2b6016b9` from its `encode` branch.  Before
 any testcase is built,
 Nexus-AM runs the producer generation stages needed for its MM delivery and
 validates the selected MM parameters, data geometry, existing producer
