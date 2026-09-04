@@ -107,7 +107,7 @@ outputs/mm/test_data/hardware/
 Nexus-AM 不把 4096 个数展开成不可读的 C 数组。接收层使用 `.incbin`：
 
 ```asm
-hpu_rns_input_a:
+RNS_A:
     .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/images/input_a.u32.bin"
 ```
 

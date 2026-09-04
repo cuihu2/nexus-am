@@ -218,7 +218,7 @@ Planning rows must carry the exact `case_id` from `cases.tsv`; a parallel set
 of informal testcase numbers is not authoritative.
 
 Every migrated ELF links the producer's two immutable one-RNS fixtures
-`hpu_rns_input_a` and `hpu_rns_input_b` (4096 little-endian 32-bit
+`RNS_A` and `RNS_B` (4096 little-endian 32-bit
 coefficients, 16 KiB each).  It does not link the smoke-only MM golden,
 modulus record, or generated `mm.c` program unless its testcase explicitly
 uses that program.

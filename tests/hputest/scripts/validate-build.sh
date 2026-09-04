@@ -489,7 +489,7 @@ require_rns_fixture() {
   local elf=$1
   local symbol
 
-  for symbol in hpu_rns_input_a hpu_rns_input_b; do
+  for symbol in RNS_A RNS_B; do
     "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
       "^[[:xdigit:]]+[[:space:]]+0*4000[[:space:]]+[Rr][[:space:]]+${symbol}$" || {
         printf 'ERROR: %s does not embed 16384-byte %s\n' \
@@ -503,7 +503,7 @@ require_mm_fixture() {
   local elf=$1
   local symbol
 
-  for symbol in hpu_rns_expected hpu_rns_input_a hpu_rns_input_b; do
+  for symbol in RNS_EXPECTED RNS_A RNS_B; do
     "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
       "^[[:xdigit:]]+[[:space:]]+0*4000[[:space:]]+[Rr][[:space:]]+${symbol}$" || {
         printf 'ERROR: %s does not embed 16384-byte %s\n' \
@@ -512,7 +512,7 @@ require_mm_fixture() {
       }
   done
   "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
-    '^[[:xdigit:]]+[[:space:]]+0*100[[:space:]]+[Rr][[:space:]]+hpu_rns_mod_ctx$' || {
+    '^[[:xdigit:]]+[[:space:]]+0*100[[:space:]]+[Rr][[:space:]]+RNS_MOD_CTX$' || {
       printf 'ERROR: %s does not embed the 256-byte modulus context\n' \
         "$elf" >&2
       exit 2
@@ -529,7 +529,7 @@ reject_mm_only_fixture() {
   local elf=$1
 
   if "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
-      '[[:space:]](hpu_rns_expected|hpu_rns_mod_ctx)$'; then
+      '[[:space:]](RNS_EXPECTED|RNS_MOD_CTX)$'; then
     printf 'ERROR: non-MM testcase embeds MM-only golden/modulus data: %s\n' \
       "$elf" >&2
     exit 2

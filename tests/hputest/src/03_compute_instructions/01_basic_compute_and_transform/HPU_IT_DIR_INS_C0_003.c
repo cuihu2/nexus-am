@@ -77,7 +77,7 @@ int main(void) {
         return 1;
 
     /* Compare both 4096-coefficient results with independent C arithmetic. */
-    if (check_pmul(LINE_OUT, POLY_LINES) != 0) return 1;
+    if (check_pmul_result(LINE_OUT, POLY_LINES) != 0) return 1;
     invalidate_lines(LINE_OUT_B, POLY_LINES);
     input_a = ddr_line(LINE_A);
     immediate_output = ddr_line(LINE_OUT_B);

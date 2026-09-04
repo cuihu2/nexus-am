@@ -2,18 +2,18 @@
     .section .rodata.hpu_rns_input_a,"a",@progbits
     .balign 256
 
-    .globl hpu_rns_input_a
-    .type hpu_rns_input_a, @object
-hpu_rns_input_a:
+    .globl RNS_A
+    .type RNS_A, @object
+RNS_A:
     .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/images/input_a.u32.bin"
-    .size hpu_rns_input_a, . - hpu_rns_input_a
+    .size RNS_A, . - RNS_A
 
     .section .rodata.hpu_rns_input_b,"a",@progbits
     .balign 256
-    .globl hpu_rns_input_b
-    .type hpu_rns_input_b, @object
-hpu_rns_input_b:
+    .globl RNS_B
+    .type RNS_B, @object
+RNS_B:
     .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/images/input_b.u32.bin"
-    .size hpu_rns_input_b, . - hpu_rns_input_b
+    .size RNS_B, . - RNS_B
 
     .section .note.GNU-stack,"",@progbits

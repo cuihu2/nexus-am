@@ -26,8 +26,8 @@ _Static_assert(POLY_WORDS == 4096U,
 _Static_assert(MOD_Q0 == HPU_MODULUS,
                "runtime modulus must match the inline-asm MM fixture");
 
-extern const uint32_t hpu_rns_input_a[POLY_WORDS];
-extern const uint32_t hpu_rns_input_b[POLY_WORDS];
+extern const uint32_t RNS_A[POLY_WORDS];
+extern const uint32_t RNS_B[POLY_WORDS];
 
 volatile uint32_t *ddr_line(unsigned line);
 void clean_lines(unsigned first, unsigned lines);

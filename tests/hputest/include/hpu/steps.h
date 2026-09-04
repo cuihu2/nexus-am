@@ -66,7 +66,7 @@ int check_regions(unsigned actual_line, unsigned expected_line,
                   unsigned lines);
 int check_padd(unsigned output_line, unsigned lines);
 int check_psub(unsigned output_line, unsigned lines);
-int check_pmul(unsigned output_line, unsigned lines);
+int check_pmul_result(unsigned output_line, unsigned lines);
 int check_pmac(unsigned output_line, unsigned lines);
 
 /* Keeps producer A/B in a deliberately blocked testcase ELF. */

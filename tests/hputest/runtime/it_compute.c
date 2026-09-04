@@ -44,7 +44,7 @@ int check_psub(unsigned output_line, unsigned lines) {
     return check_binary(CHECK_PSUB, output_line, lines);
 }
 
-int check_pmul(unsigned output_line, unsigned lines) {
+int check_pmul_result(unsigned output_line, unsigned lines) {
     return check_binary(CHECK_PMUL, output_line, lines);
 }
 

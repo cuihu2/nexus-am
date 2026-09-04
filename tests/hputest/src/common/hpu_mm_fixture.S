@@ -2,18 +2,18 @@
     .section .rodata.hpu_rns_expected,"a",@progbits
     .balign 256
 
-    .globl hpu_rns_expected
-    .type hpu_rns_expected, @object
-hpu_rns_expected:
+    .globl RNS_EXPECTED
+    .type RNS_EXPECTED, @object
+RNS_EXPECTED:
     .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/images/expected.u32.bin"
-    .size hpu_rns_expected, . - hpu_rns_expected
+    .size RNS_EXPECTED, . - RNS_EXPECTED
 
     .section .rodata.hpu_rns_mod_ctx,"a",@progbits
     .balign 256
-    .globl hpu_rns_mod_ctx
-    .type hpu_rns_mod_ctx, @object
-hpu_rns_mod_ctx:
+    .globl RNS_MOD_CTX
+    .type RNS_MOD_CTX, @object
+RNS_MOD_CTX:
     .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/constants/mod_ctx.u32.bin"
-    .size hpu_rns_mod_ctx, . - hpu_rns_mod_ctx
+    .size RNS_MOD_CTX, . - RNS_MOD_CTX
 
     .section .note.GNU-stack,"",@progbits

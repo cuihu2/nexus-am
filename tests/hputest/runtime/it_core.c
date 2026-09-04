@@ -136,12 +136,11 @@ int prepare_data(uint32_t seed) {
     unsigned word;
 
     for (word = 0U; word < POLY_WORDS; ++word) {
-        if (hpu_rns_input_a[word] >= MOD_Q0 ||
-            hpu_rns_input_b[word] >= MOD_Q0) {
+        if (RNS_A[word] >= MOD_Q0 || RNS_B[word] >= MOD_Q0) {
             return STEP_ERR_ARGUMENT;
         }
-        input_a[word] = hpu_rns_input_a[word];
-        input_b[word] = hpu_rns_input_b[word];
+        input_a[word] = RNS_A[word];
+        input_b[word] = RNS_B[word];
     }
     for (word = 0U; word < HPU_WORDS_PER_LINE; ++word) modulus[word] = 0U;
     set_mod_record(modulus, MOD_Q0);
@@ -431,8 +430,7 @@ int not_issued(void) {
 
     /* Keep both producer fixtures in fail-closed algorithm ELFs as promised. */
     for (word = 0U; word < POLY_WORDS; ++word) {
-        if (hpu_rns_input_a[word] >= MOD_Q0 ||
-            hpu_rns_input_b[word] >= MOD_Q0) {
+        if (RNS_A[word] >= MOD_Q0 || RNS_B[word] >= MOD_Q0) {
             return STEP_ERR_ARGUMENT;
         }
     }
