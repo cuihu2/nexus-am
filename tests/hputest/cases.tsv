@@ -7,6 +7,7 @@ core	software-self-check	05_dload_psync_irq	src/00_bringup/001_hpu_smoke/05_dloa
 core	software-self-check	06_dload_dstore_poll_mmio	src/00_bringup/001_hpu_smoke/06_dload_dstore_poll_mmio.c
 core	software-self-check	07_dload_dstore_psync_irq	src/00_bringup/001_hpu_smoke/07_dload_dstore_psync_irq.c
 core	software-self-check	08_dload_compute_dstore_psync_irq	src/00_bringup/001_hpu_smoke/08_dload_compute_dstore_psync_irq.c
+core	software-self-check	09_dload_compute_dstore_poll_mmio	src/00_bringup/001_hpu_smoke/09_dload_compute_dstore_poll_mmio.c
 core	termination-probe-pass	01_return_0	src/00_bringup/002_main_return_probe/01_return_0.c
 core	termination-probe-fail	02_return_1	src/00_bringup/002_main_return_probe/02_return_1.c
 core	software-self-check	HPU_IT_DIR_CFG_001	src/01_configuration/01_hpu_register_access/HPU_IT_DIR_CFG_001.c

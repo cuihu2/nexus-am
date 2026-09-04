@@ -37,6 +37,7 @@
 | 06 | `06_dload_dstore_poll_mmio.c` | DLOAD+DSTORE+PSYNC，以 MMIO 轮询完成并逐 4096 系数比对 |
 | 07 | `07_dload_dstore_psync_irq.c` | 同一回环数据流，以 PSYNC 中断完成并逐 4096 系数比对 |
 | 08 | `08_dload_compute_dstore_psync_irq.c` | producer PMUL 程序，以 PSYNC 中断完成并逐 4096 系数与 golden/C oracle 比对 |
+| 09 | `09_dload_compute_dstore_poll_mmio.c` | 同一 producer PMUL 程序，以 MMIO 完成电平轮询并逐 4096 系数与 golden/C oracle 比对 |
 
 当前编号只保留 MMIO 状态访问方式：
 
@@ -45,6 +46,7 @@
 - 05 在 DLOAD 后验证 PSYNC 中断；
 - 06 与 07 使用完全相同的数据回环，仅 CPU 同步方式分别是 MMIO 和中断；
 - 08 增加 producer 生成的 PMUL 计算闭环。
+- 09 与 08 使用同一计算闭环，只把CPU完成等待从PLIC中断改为MMIO轮询。
 
 中断用例公共层使用 `csrs/csrc sie`，只是在 S-mode 打开/关闭标准外部中断，
 不是第二种 HPU 状态寄存器访问方式。

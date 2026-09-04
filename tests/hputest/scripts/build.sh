@@ -89,7 +89,7 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 59 || ${roster_group_counts[core]} -ne 38 || \
+if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
       $roster_migrated_software -ne 25 || $roster_migrated_blocked -ne 24 ]]; then
@@ -235,8 +235,8 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=59 ;;
-    core) expected_cases=38 ;;
+    all) expected_cases=60 ;;
+    core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=13 ;;
   esac
