@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -12,6 +13,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * Fail closed: this receiver lacks a producer-defined mixed instruction
      * stream that fixes the exact ordinary load/store/arithmetic locations
@@ -20,5 +22,6 @@ int main(void) {
      * not prove IT-STR-003, so no HPU command is issued.
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

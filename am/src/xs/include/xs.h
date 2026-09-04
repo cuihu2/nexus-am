@@ -13,8 +13,12 @@
 #define INTR_GEN_ADDR          (0x40070000UL)
 #define INTR_RANDOM            (INTR_GEN_ADDR + (MAX_EXTERNAL_INTR / 8))
 #define INTR_RANDOM_MASK       (INTR_GEN_ADDR + (MAX_EXTERNAL_INTR / 8) * 2)
+#if defined(LINKNAN_HPU_IT)
+#define PLIC_BASE_ADDR         (0x04000000UL)
+#else
 #define PLIC_BASE_ADDR         (0x3c000000UL)
-#if defined(__ARCH_RISCV64_XS)
+#endif
+#if defined(__ARCH_RISCV64_XS) && defined(LINKNAN_HPU_IT)
 /* 256 SoC external inputs plus the HPU completion input. */
 #define PLIC_NUM_SOURCES       257UL
 #define PLIC_NUM_CONTEXTS      2UL

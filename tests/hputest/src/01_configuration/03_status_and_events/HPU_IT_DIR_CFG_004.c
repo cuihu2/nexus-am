@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -10,6 +11,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     const uint32_t seed = 0u;
     uint32_t status = 0U;
     unsigned timeout;
@@ -17,7 +19,7 @@ int main(void) {
     int rc;
 
     /* 准备 producer A/B、模数表和被 poison 的输出，不写任何 CSR。 */
-    if (prepare_data(seed) != 0) return 1;
+    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
@@ -35,35 +37,35 @@ int main(void) {
         expect_csr(HPU_CSR_SIZE_LO_ADDR,
         WINDOW_LINES, UINT32_MAX) != 0 ||
         expect_csr(HPU_CSR_SIZE_HI_ADDR, 0U, 1U) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return 1;
-    if (check_status() != 0) return 1;
+    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
+    if (check_status() != 0) return case_fail(__FILE__, __LINE__);
 
     /* DLOAD→DSTORE→PSYNC 的编码与 x10/x11 参数由 inline-asm producer 提供。 */
     rc = dload(P0, LINE_A, POLY_LINES);
-    if (rc != 0) return 1;
+    if (rc != 0) return case_fail(__FILE__, __LINE__);
     rc = dstore_release(P0, LINE_OUT, POLY_LINES);
-    if (rc != 0) return 1;
+    if (rc != 0) return case_fail(__FILE__, __LINE__);
     psync();
 
     /* 软件必须实际看到 busy，再看到 terminal IRQ 与 idle，避免初始 idle 误判。 */
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
         status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-        if ((status & HPU_STATUS_FAULT_VALID) != 0U) return 1;
+        if ((status & HPU_STATUS_FAULT_VALID) != 0U) return case_fail(__FILE__, __LINE__);
         if ((status & HPU_STATUS_BUSY) != 0U) saw_busy = 1;
         if (saw_busy && (status & HPU_STATUS_BUSY) == 0U &&
             (hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
             break;
     }
-    if (timeout == HPU_TIMEOUT || !saw_busy) return 1;
-    if (check_status() != 0) return 1;
+    if (timeout == HPU_TIMEOUT || !saw_busy) return case_fail(__FILE__, __LINE__);
+    if (check_status() != 0) return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
 
     if (check_regions(LINE_OUT, LINE_A,
         POLY_LINES) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     /* 更细的逐周期 idle→busy→idle 覆盖仍由 IT monitor 波形判定。 */
-    return 0;
+    return case_pass(__FILE__);
 }

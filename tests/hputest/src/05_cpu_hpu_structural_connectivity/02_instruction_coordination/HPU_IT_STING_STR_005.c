@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -15,6 +16,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * Fail closed: the STING-generated mixed RISC-V/HPU code image, replay
      * metadata, x10/x11 DMA relocation spans, architectural result golden,
@@ -22,5 +24,6 @@ int main(void) {
      * PADD/PMUL calls are not a substitute, so issue no HPU command.
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

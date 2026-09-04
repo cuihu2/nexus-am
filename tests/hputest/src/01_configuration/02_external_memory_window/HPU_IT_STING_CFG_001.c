@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -12,12 +13,13 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     const uint32_t seed = 0x04BEA183u;
     static const unsigned offsets[] = {0U, 32U, 64U, 16U, 0U};
     unsigned index;
 
     /* 固定 seed 只负责 data-only fixture；STING 激励仍由外部入口提供。 */
-    if (prepare_data(seed) != 0) return 1;
+    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
 
     hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
@@ -25,7 +27,7 @@ int main(void) {
     if (expect_csr(HPU_CSR_FAULT_ADDR, 0U,
         HPU_FAULT_VALID) != 0 ||
         expect_csr(HPU_CSR_IRQ_ADDR, 0U, HPU_IRQ_LEVEL) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
 
     /*
      * 偶数轮和奇数轮使用不同 shadow 写序；每轮 COMMIT 前都逐项读回。
@@ -57,12 +59,12 @@ int main(void) {
             expect_csr(HPU_CSR_SIZE_LO_ADDR, lines,
         UINT32_MAX) != 0 ||
             expect_csr(HPU_CSR_SIZE_HI_ADDR, 0U, 1U) != 0)
-            return 1;
+            return case_fail(__FILE__, __LINE__);
 
         hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-        if (wait_window(1) != 0) return 1;
-        if (check_status() != 0) return 1;
+        if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
+        if (check_status() != 0) return case_fail(__FILE__, __LINE__);
     }
 
-    return 0;
+    return case_pass(__FILE__);
 }

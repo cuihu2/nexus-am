@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -10,6 +11,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * Fail closed: the producer supplies a PINTT instruction word, but the
      * inverse-stage input layout, inverse twiddle/scaling image, resolved DMA
@@ -17,5 +19,6 @@ int main(void) {
      * HPU command is issued until those assets share one producer revision.
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

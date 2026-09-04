@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -12,6 +13,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * 当前边界 / current boundary:
      * 1. CSR：本用例尚未获得完整算法的窗口布局和寄存器配置契约。
@@ -22,5 +24,6 @@ int main(void) {
      * 外部证据边界：return 0 只表示软件自检通过；IT monitor、外部数据、外部入口 证据仍由 IT/VCS 环境判定。
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

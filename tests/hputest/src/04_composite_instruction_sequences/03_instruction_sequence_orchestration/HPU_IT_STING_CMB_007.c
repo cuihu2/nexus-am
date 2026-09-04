@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -13,6 +14,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * Fail closed: no STING-generated legal HPU program, exact replay seed
      * record, x10/x11 DMA relocation-span manifest, matching input images,
@@ -21,5 +23,6 @@ int main(void) {
      * this testcase deliberately issues no HPU command.
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

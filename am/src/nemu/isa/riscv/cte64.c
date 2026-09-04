@@ -2,7 +2,7 @@
 #include <nemu.h>
 extern void __am_timervec(void);
 
-#if defined(__ARCH_RISCV64_XS)
+#if defined(__ARCH_RISCV64_XS) && defined(LINKNAN_HPU_IT)
 #include <xs.h>
 #endif
 
@@ -57,7 +57,7 @@ void __am_init_cte64() {
     init_timer();
     enable_timer();
   }
-#if defined(__ARCH_RISCV64_XS)
+#if defined(__ARCH_RISCV64_XS) && defined(LINKNAN_HPU_IT)
   /* Initialize the PLIC while still in M-mode and before enabling MEIE. */
   plic_init(PLIC_NUM_SOURCES, PLIC_NUM_CONTEXTS);
 #endif

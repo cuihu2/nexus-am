@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -12,6 +13,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * 当前迁移边界 / current migration boundary:
      * 1. ELF 已嵌入 producer 的 A/B 两组 4096×uint32 输入，防止数据接口退化。
@@ -21,5 +23,6 @@ int main(void) {
      * 5. 算法与性能契约补齐后，才实现同边界计时、逐系数比对和门限判定。
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

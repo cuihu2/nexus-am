@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -12,11 +13,12 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     const uint32_t seed = UINT32_C(0x5002);
     uint32_t status;
     unsigned timeout;
 
-    if (prepare_data(seed) != 0) return 1;
+    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
 
     hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
@@ -27,46 +29,46 @@ int main(void) {
     hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, WINDOW_LINES);
     hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
     if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) !=
-        (uint32_t)HPU_MEM_BASE) return 1;
+        (uint32_t)HPU_MEM_BASE) return case_fail(__FILE__, __LINE__);
     if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_MEM_BASE >> 32U)) return 1;
+        (uint32_t)(HPU_MEM_BASE >> 32U)) return case_fail(__FILE__, __LINE__);
     if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != WINDOW_LINES)
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
+        return case_fail(__FILE__, __LINE__);
+    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return 1;
+    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
 
     /* Four producer DMA commands exercise x10/x11 custom1 traffic. */
     if (dload(P0, LINE_A, POLY_LINES) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     if (dload(P1, LINE_B, POLY_LINES) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     if (dstore_release(P0, LINE_OUT, POLY_LINES) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     if (dstore_release(P1, LINE_OUT_B, POLY_LINES) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
 
     /* PSYNC supplies custom0 traffic; ready/CDC evidence remains monitor-side. */
     psync();
-    if (wait_irq() != 0) return 1;
+    if (wait_irq() != 0) return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
         if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U)
             break;
     }
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    if (timeout == HPU_TIMEOUT) return 1;
+    if (timeout == HPU_TIMEOUT) return case_fail(__FILE__, __LINE__);
     status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-    if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return 1;
+    if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return case_fail(__FILE__, __LINE__);
     if ((status & (HPU_STATUS_BUSY | HPU_STATUS_FAULT_VALID)) != 0U)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
 
     /* Software closes both 4096-word DMA paths; monitor checks channel timing. */
     if (check_regions(LINE_OUT, LINE_A,
-        POLY_LINES) != 0) return 1;
+        POLY_LINES) != 0) return case_fail(__FILE__, __LINE__);
     if (check_regions(LINE_OUT_B, LINE_B,
-        POLY_LINES) != 0) return 1;
-    return 0;
+        POLY_LINES) != 0) return case_fail(__FILE__, __LINE__);
+    return case_pass(__FILE__);
 }

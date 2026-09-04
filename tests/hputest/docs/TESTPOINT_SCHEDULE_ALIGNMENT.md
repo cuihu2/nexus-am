@@ -60,7 +60,8 @@
   timeout。该结果应保留为 RTL/版本复验项；增加 C 侧等待次数不能修复 RTL 内部
   ACK 超时。
 - 05 卡住时，应先确认 DLOAD 是否完成、PSYNC 是否入队、HPU IRQ 电平是否置位、
-  PLIC source 257 是否被 claim。中断用例不会用 UART 文本作为完成证据。
+  PLIC source 257 是否被 claim。UART用于定位阶段，完成判据仍是claim、状态和
+  `main()`返回值，不能只凭打印文本判PASS。
 - 07 的 SRAM 警告中 `X` 表示 unknown，`Z` 表示 high impedance；这是 Verilog
   四态数据，不是 RISC-V 的 `Z*` 指令集扩展。应在同一拍区分
   `wr_dma_valid/wr_dma_data` 与计算写回 `wr0_valid/wr0_data`、

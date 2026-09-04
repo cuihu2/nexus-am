@@ -120,8 +120,50 @@ done
 # false-PASS source elsewhere in the tree.
 for case_id in "${roster_ids[@]}"; do
   source_path=${roster_source[$case_id]}
-  [[ $source_path == src/00_bringup/* ]] && continue
   source_file="$test_root/$source_path"
+  qualifier=${roster_qualifier[$case_id]}
+  if ! grep -Fq '#include <hpu/result.h>' "$source_file" ||
+     ! grep -Fq 'case_start(__FILE__);' "$source_file"; then
+    printf 'ERROR: testcase lacks UART start reporting: %s\n' \
+      "$source_path" >&2
+    exit 2
+  fi
+  case "$qualifier" in
+    software-self-check)
+      if ! grep -Fq 'case_pass(__FILE__)' "$source_file" ||
+         ! grep -Fq 'case_fail(__FILE__, __LINE__)' "$source_file"; then
+        printf 'ERROR: self-check testcase lacks PASS/FAIL reporting: %s\n' \
+          "$source_path" >&2
+        exit 2
+      fi ;;
+    blocked-not-issued)
+      if ! grep -Fq 'case_not_qualified(__FILE__);' "$source_file" ||
+         grep -Fq 'case_pass(__FILE__)' "$source_file"; then
+        printf 'ERROR: blocked testcase has incorrect result reporting: %s\n' \
+          "$source_path" >&2
+        exit 2
+      fi ;;
+    waveform-hold)
+      if ! grep -Fq 'case_hold(__FILE__);' "$source_file" ||
+         grep -Fq 'case_pass(__FILE__)' "$source_file"; then
+        printf 'ERROR: waveform-hold testcase has incorrect reporting: %s\n' \
+          "$source_path" >&2
+        exit 2
+      fi ;;
+    termination-probe-pass)
+      grep -Fq '(void)case_pass(__FILE__);' "$source_file" || {
+        printf 'ERROR: return-zero probe lacks PASS reporting: %s\n' \
+          "$source_path" >&2
+        exit 2
+      } ;;
+    termination-probe-fail)
+      grep -Fq 'case_expected_failure(__FILE__);' "$source_file" || {
+        printf 'ERROR: return-one probe lacks expected-failure reporting: %s\n' \
+          "$source_path" >&2
+        exit 2
+      } ;;
+  esac
+  [[ $source_path == src/00_bringup/* ]] && continue
   if grep -Eq '^#define (CASE_ID|TESTPOINT|DESCRIPTION|TEST_MODE|PRIORITY|CASE_KIND|REQUIREMENTS|SEED)([[:space:]]|$)' \
        "$source_file"; then
     printf 'ERROR: migrated testcase contains obsolete metadata macros: %s\n' \
@@ -140,7 +182,6 @@ for case_id in "${roster_ids[@]}"; do
     exit 2
   fi
   source_code=$("${cross_compile}gcc" -fpreprocessed -E -P "$source_file")
-  qualifier=${roster_qualifier[$case_id]}
   if [[ $qualifier == blocked-not-issued ]]; then
     return_count=$(grep -Eoc '(^|[^[:alnum:]_])return([^[:alnum:]_]|$)' \
       <<< "$source_code" || true)

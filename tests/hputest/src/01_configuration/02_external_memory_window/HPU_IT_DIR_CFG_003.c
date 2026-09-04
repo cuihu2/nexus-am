@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -10,13 +11,14 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     const uint32_t seed = 0u;
     enum { LAST_POLY_LINE = WINDOW_LINES - POLY_LINES };
     unsigned line;
     int rc;
 
     /* 两组输入均来自 inline-asm producer，A 用于本次 4096-word 回环。 */
-    if (prepare_data(seed) != 0) return 1;
+    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
     for (line = 0U; line < POLY_LINES; ++line)
         poison_line(LAST_POLY_LINE + line,
         UINT32_C(0xc1030000) ^ line);
@@ -40,25 +42,25 @@ int main(void) {
         expect_csr(HPU_CSR_SIZE_LO_ADDR,
         WINDOW_LINES, UINT32_MAX) != 0 ||
         expect_csr(HPU_CSR_SIZE_HI_ADDR, 0U, 1U) != 0)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return 1;
-    if (check_status() != 0) return 1;
+    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
+    if (check_status() != 0) return case_fail(__FILE__, __LINE__);
 
     /* x10=0/448，x11=64：覆盖窗口首行到最后一个合法 64-line 区间。 */
     rc = dload(P0, LINE_A, POLY_LINES);
-    if (rc != 0) return 1;
+    if (rc != 0) return case_fail(__FILE__, __LINE__);
     rc = dstore_release(P0, LAST_POLY_LINE, POLY_LINES);
-    if (rc != 0) return 1;
+    if (rc != 0) return case_fail(__FILE__, __LINE__);
     psync();
-    if (wait_irq() != 0) return 1;
-    if (check_status() != 0) return 1;
+    if (wait_irq() != 0) return case_fail(__FILE__, __LINE__);
+    if (check_status() != 0) return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
 
     /* 逐个比较 64 lines × 64 words，即完整 4096 个 32-bit 系数。 */
     if (check_regions(LAST_POLY_LINE, LINE_A,
         POLY_LINES) != 0)
-        return 1;
-    return 0;
+        return case_fail(__FILE__, __LINE__);
+    return case_pass(__FILE__);
 }

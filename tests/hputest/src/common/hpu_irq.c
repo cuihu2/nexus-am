@@ -2,6 +2,7 @@
 #include <hpu/csr.h>
 #include <hpu/irq.h>
 #include <hpu/layout.h>
+#include <klib.h>
 #include <xsextra.h>
 
 #include <stddef.h>
@@ -12,7 +13,54 @@
 #define PLIC_CONTEXT_S      1U
 #define SIE_SEIE            (UINT64_C(1) << 9U)
 
+/* LinkNan device block中的PLIC窗口，不使用通用XS旧地址0x3c000000。 */
+#define HPU_PLIC_BASE UINT64_C(0x04000000)
+
+#define PLIC_PRIORITY_ADDR \
+    (HPU_PLIC_BASE + UINT64_C(0x4) + \
+     (uint64_t)PLIC_PRIORITY_INDEX * sizeof(uint32_t))
+#define PLIC_ENABLE_ADDR \
+    (HPU_PLIC_BASE + UINT64_C(0x2000) + \
+     (uint64_t)PLIC_CONTEXT_S * UINT64_C(0x80) + \
+     (uint64_t)(PLIC_SOURCE / 32U) * sizeof(uint32_t))
+#define PLIC_THRESHOLD_ADDR \
+    (HPU_PLIC_BASE + UINT64_C(0x200000) + \
+     (uint64_t)PLIC_CONTEXT_S * UINT64_C(0x1000))
+#define PLIC_CLAIM_ADDR \
+    (HPU_PLIC_BASE + UINT64_C(0x200004) + \
+     (uint64_t)PLIC_CONTEXT_S * UINT64_C(0x1000))
+
 extern int g_config_disable_timer;
+
+static uint32_t mmio_read32(uint64_t address) {
+    return *(volatile uint32_t *)(uintptr_t)address;
+}
+
+static void mmio_write32(uint64_t address, uint32_t data) {
+    *(volatile uint32_t *)(uintptr_t)address = data;
+}
+
+static uint32_t hpu_plic_claim(void) {
+    return mmio_read32(PLIC_CLAIM_ADDR);
+}
+
+static void hpu_plic_complete(uint32_t claim) {
+    mmio_write32(PLIC_CLAIM_ADDR, claim);
+}
+
+static void hpu_plic_enable(void) {
+    uint32_t enable = mmio_read32(PLIC_ENABLE_ADDR);
+
+    mmio_write32(PLIC_ENABLE_ADDR,
+                 enable | (1U << (PLIC_SOURCE % 32U)));
+}
+
+static void hpu_plic_disable(void) {
+    uint32_t enable = mmio_read32(PLIC_ENABLE_ADDR);
+
+    mmio_write32(PLIC_ENABLE_ADDR,
+                 enable & ~(1U << (PLIC_SOURCE % 32U)));
+}
 
 /* 只能由中断处理函数写，主程序仅轮询。 */
 static volatile uint32_t irq_done;
@@ -38,10 +86,10 @@ static _Context *handler(_Event event, _Context *context) {
         return context;
     }
 
-    claim = plic_get_claim(PLIC_CONTEXT_S);
+    claim = hpu_plic_claim();
     if (claim != PLIC_SOURCE) {
         irq_error = 1U;
-        if (claim != 0U) plic_clear_claim(PLIC_CONTEXT_S, claim);
+        if (claim != 0U) hpu_plic_complete(claim);
         irq_done = 1U;
         return context;
     }
@@ -49,7 +97,7 @@ static _Context *handler(_Event event, _Context *context) {
     if ((csr_read(CSR_IRQ) & IRQ_LEVEL) == 0U || clear_level() != 0) {
         irq_error = 1U;
     }
-    plic_clear_claim(PLIC_CONTEXT_S, claim);
+    hpu_plic_complete(claim);
     irq_done = 1U;
     return context;
 }
@@ -63,10 +111,27 @@ int irq_open(void) {
     irq_done = 0U;
     irq_error = 0U;
     seip_handler_reg(handler);
-    /* priority 接口使用从 0 开始的数组下标；enable/claim 使用 source ID。 */
-    plic_set_priority(PLIC_PRIORITY_INDEX, 1U);
-    plic_set_threshold(PLIC_CONTEXT_S, 0U);
-    plic_enable(PLIC_CONTEXT_S, PLIC_SOURCE);
+    mmio_write32(PLIC_PRIORITY_ADDR, 1U);
+    mmio_write32(PLIC_THRESHOLD_ADDR, 0U);
+    hpu_plic_enable();
+    __asm__ volatile("fence iorw, iorw" : : : "memory");
+
+    /* 配置地址错误时在这里失败，不再等到irq_wait()超时。 */
+    {
+        uint32_t priority = mmio_read32(PLIC_PRIORITY_ADDR);
+        uint32_t enable = mmio_read32(PLIC_ENABLE_ADDR);
+        uint32_t threshold = mmio_read32(PLIC_THRESHOLD_ADDR);
+
+        printf("[HPU][IRQ] plic=0x04000000 priority=0x%x enable=0x%x "
+               "threshold=0x%x\n",
+               priority, enable, threshold);
+        if (priority != 1U ||
+            (enable & (1U << (PLIC_SOURCE % 32U))) == 0U ||
+            threshold != 0U) {
+            printf("[HPU][IRQ][FAIL] PLIC setup readback failed\n");
+            return 1;
+        }
+    }
     __asm__ volatile("csrs sie, %0" : : "r"(SIE_SEIE) : "memory");
     _intr_write(1);
     return 0;
@@ -85,6 +150,6 @@ int irq_wait(void) {
 void irq_close(void) {
     _intr_write(0);
     __asm__ volatile("csrc sie, %0" : : "r"(SIE_SEIE) : "memory");
-    plic_disable(PLIC_CONTEXT_S, PLIC_SOURCE);
-    plic_set_priority(PLIC_PRIORITY_INDEX, 0U);
+    hpu_plic_disable();
+    mmio_write32(PLIC_PRIORITY_ADDR, 0U);
 }

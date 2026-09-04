@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -11,6 +12,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     const uint32_t seed = UINT32_C(0xc008);
     uint32_t input_before[HPU_WORDS_PER_LINE];
     volatile const uint32_t *input;
@@ -19,7 +21,7 @@ int main(void) {
     unsigned word;
 
     /* Data only; save one producer line so PSYNC cannot hide memory damage. */
-    if (prepare_data(seed) != 0) return 1;
+    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
     input = ddr_line(LINE_A);
     for (word = 0U; word < HPU_WORDS_PER_LINE; ++word)
         input_before[word] = input[word];
@@ -33,20 +35,20 @@ int main(void) {
     hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, WINDOW_LINES);
     hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
     if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) !=
-        (uint32_t)HPU_MEM_BASE) return 1;
+        (uint32_t)HPU_MEM_BASE) return case_fail(__FILE__, __LINE__);
     if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_MEM_BASE >> 32U)) return 1;
+        (uint32_t)(HPU_MEM_BASE >> 32U)) return case_fail(__FILE__, __LINE__);
     if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != WINDOW_LINES)
-        return 1;
-    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return 1;
+        return case_fail(__FILE__, __LINE__);
+    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return case_fail(__FILE__, __LINE__);
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return 1;
+    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
 
     /* PSYNC is the command under test; completion must raise the MMIO IRQ. */
     psync();
-    if (wait_irq() != 0) return 1;
+    if (wait_irq() != 0) return case_fail(__FILE__, __LINE__);
     status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-    if ((status & HPU_STATUS_BUSY) != 0U) return 1;
+    if ((status & HPU_STATUS_BUSY) != 0U) return case_fail(__FILE__, __LINE__);
 
     /* HPU_IRQ is W1C.  Verify that the level actually falls after clearing. */
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
@@ -55,16 +57,16 @@ int main(void) {
             break;
     }
     hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    if (timeout == HPU_TIMEOUT) return 1;
+    if (timeout == HPU_TIMEOUT) return case_fail(__FILE__, __LINE__);
     status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-    if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return 1;
+    if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return case_fail(__FILE__, __LINE__);
     if ((status & (HPU_STATUS_BUSY | HPU_STATUS_FAULT_VALID)) != 0U)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
     if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
-        return 1;
+        return case_fail(__FILE__, __LINE__);
 
     /* The protocol oracle also verifies that PSYNC did not modify input DDR. */
     if (check_line(LINE_A, input_before,
-        HPU_WORDS_PER_LINE) != 0) return 1;
-    return 0;
+        HPU_WORDS_PER_LINE) != 0) return case_fail(__FILE__, __LINE__);
+    return case_pass(__FILE__);
 }

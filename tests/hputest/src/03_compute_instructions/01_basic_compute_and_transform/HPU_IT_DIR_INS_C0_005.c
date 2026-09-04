@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -10,6 +11,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * Fail closed: the producer supplies a PNTT instruction word, but this
      * receiver does not yet have the matching N=4096 stage input layout,
@@ -18,5 +20,6 @@ int main(void) {
      * against the placeholder twiddle line would not test IT-INS-C0-005.
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }

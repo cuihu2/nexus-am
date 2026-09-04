@@ -58,6 +58,7 @@ endif
 DST_DIR := $(HPU_DST_DIR)
 INC_DIR += $(HPU_GENERATED_ROOT)/include $(TEST_ROOT)/include
 CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+          -DLINKNAN_HPU_IT=1 \
           -ffile-prefix-map=$(TEST_ROOT)=tests/hputest \
           -fmacro-prefix-map=$(TEST_ROOT)=tests/hputest \
           -ffile-prefix-map=$(INLINE_ASM_ROOT)=inline-asm \

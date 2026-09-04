@@ -1,3 +1,4 @@
+#include <hpu/result.h>
 #include <hpu/steps.h>
 
 /*
@@ -12,6 +13,7 @@
  */
 
 int main(void) {
+    case_start(__FILE__);
     /*
      * Fail closed: no trap-vector entry/handler, architecturally checked
      * exception return path, branch/mispredict placement, or retirement
@@ -19,5 +21,6 @@ int main(void) {
      * cannot stand in for that control-flow scenario; issue no HPU command.
      */
     (void)not_issued();
+    case_not_qualified(__FILE__);
     return 1;
 }
