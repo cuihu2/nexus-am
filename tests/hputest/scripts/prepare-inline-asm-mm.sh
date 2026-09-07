@@ -52,40 +52,48 @@ for tool in cmake python3 "${CXX:-c++}"; do
 done
 
 cmake_build="$output_root/inline-asm-cmake"
+# 按生产者提交隔离输出，切换分支时不读取旧 submodule 内的 outputs。
+producer_work="$output_root/inline-asm-producer/$producer_commit"
+producer_mm="$producer_work/outputs/mm"
 generated_root="$output_root/generated"
 import_root="$generated_root/inline-asm/mm"
 generated_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 tool_root="$output_root/inline-asm-tools"
 encoding_tsv="$tool_root/encoder_words.tsv"
 
-mkdir -p -- "$cmake_build" "$tool_root" "$generated_root"
+mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work"
 required_outputs=(
-  "$inline_asm_root/outputs/mm/mm.c"
-  "$inline_asm_root/outputs/mm/mm.h"
-  "$inline_asm_root/outputs/mm/mm.asm"
-  "$inline_asm_root/outputs/mm/dma_relocation_manifest.csv"
-  "$inline_asm_root/outputs/mm/test_data/params.json"
-  "$inline_asm_root/outputs/mm/test_data/hardware/line_map.csv"
-  "$inline_asm_root/outputs/mm/test_data/hardware/images/input_a.u32.bin"
-  "$inline_asm_root/outputs/mm/test_data/hardware/images/input_b.u32.bin"
-  "$inline_asm_root/outputs/mm/test_data/hardware/images/expected.u32.bin"
-  "$inline_asm_root/outputs/mm/test_data/hardware/constants/mod_ctx.u32.bin"
+  "$producer_mm/mm.c"
+  "$producer_mm/mm.h"
+  "$producer_mm/mm.asm"
+  "$producer_mm/dma_relocation_manifest.csv"
+  "$producer_mm/test_data/params.json"
+  "$producer_mm/test_data/hardware/line_map.csv"
+  "$producer_mm/test_data/hardware/images/input_a.u32.bin"
+  "$producer_mm/test_data/hardware/images/input_b.u32.bin"
+  "$producer_mm/test_data/hardware/images/expected.u32.bin"
+  "$producer_mm/test_data/hardware/constants/mod_ctx.u32.bin"
 )
 
 echo "[hputest] generating selected inline-asm MM inputs at $producer_commit"
 cmake -S "$inline_asm_root" -B "$cmake_build" \
   -DBUILD_TESTING=ON \
+  -DHPU_ENABLE_SEAL_INTEGRATION=OFF \
+  -DHPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE=OFF \
+  -DHPU_ENABLE_SEAL_BFV_ORACLE=OFF \
+  -DHPU_ENABLE_LEGACY_FIXED_PROFILE_TESTS=OFF \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$cmake_build" --parallel "$jobs" --target \
   inline_asm_codegen inline_asm_encode_outputs hpu_reference_vectors
 (
-  cd "$inline_asm_root"
+  cd "$producer_work"
   "$cmake_build/inline_asm_codegen" both \
     --config "$inline_asm_root/config/fhe_test.conf"
-  "$cmake_build/test/encode/inline_asm_encode_outputs"
+  "$cmake_build/test/encode/inline_asm_encode_outputs" \
+    --config "$inline_asm_root/config/fhe_test.conf"
   "$cmake_build/test/reference/hpu_reference_vectors" \
-    "$inline_asm_root/outputs/ciphertext_multiply/test_data" \
-    "$inline_asm_root/outputs" \
+    "$producer_work/outputs/ciphertext_multiply/test_data" \
+    "$producer_work/outputs" \
     --config "$inline_asm_root/config/fhe_test.conf"
 )
 for path in "${required_outputs[@]}"; do
@@ -107,7 +115,7 @@ done
 "$tool_root/generate-inline-asm-encodings" "$encoding_tsv"
 
 python3 "$script_dir/import-inline-asm-mm.py" \
-  --source "$inline_asm_root/outputs/mm" \
+  --source "$producer_mm" \
   --destination "$import_root" \
   --header "$generated_header" \
   --encodings "$encoding_tsv" \

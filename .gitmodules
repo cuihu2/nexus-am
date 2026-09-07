@@ -1,3 +1,4 @@
 [submodule "tests/hputest/third_party/inline-asm"]
 	path = tests/hputest/third_party/inline-asm
 	url = https://github.com/cuihu2/inline-asm.git
+	branch = HPU_SEAL

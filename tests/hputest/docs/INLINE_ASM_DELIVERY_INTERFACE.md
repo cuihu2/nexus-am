@@ -10,17 +10,25 @@
 
 ```text
 tests/hputest/third_party/inline-asm
-branch encode
-commit 0d205b84b748f863a824ca42e99cabfc2b6016b9
+branch HPU_SEAL
+commit d79efb4030a15cfd293e919355868f24eb4c54d9
 ```
+
+`.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
+固定的 gitlink，不自动追踪远端分支最新提交。
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
 被 `.gitignore` 排除：
 
 ```text
-third_party/inline-asm/{build,output,outputs}/
-tests/hputest/build/
+tests/hputest/build/inline-asm-producer/<producer_commit>/
+tests/hputest/build/generated/
+tests/hputest/build/artifact/
 ```
+
+上述目录的默认根目录为 `OUTPUT_ROOT=tests/hputest/build`，已校验交付目录默认
+为 `HPU_GENERATED_ROOT=OUTPUT_ROOT/generated`。生产者工具不在 submodule 源码
+目录中生成或覆盖交付文件。
 
 因此 GitHub 仓库不会被 ELF、BIN、数据镜像或 4096 项数组撑大；GitHub Actions
 把选中的交付包和测试产物作为 artifact 提供下载。
@@ -31,17 +39,19 @@ tests/hputest/build/
 三个阶段：
 
 ```bash
-cmake -S tests/hputest/third_party/inline-asm \
-      -B tests/hputest/build/inline-asm-cmake \
-      -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build tests/hputest/build/inline-asm-cmake \
-      --target inline_asm_codegen inline_asm_encode_outputs \
-               hpu_reference_vectors --parallel 4
+git submodule update --init --recursive tests/hputest/third_party/inline-asm
+make -C tests/hputest prepare-inline-asm-mm JOBS=4
 ```
 
-脚本在 submodule 根目录执行这三个可执行文件，产生 `output/`、
-`outputs/` 和 MM 数据表；然后由 Nexus-AM importer 逐字段检查选中的
-MM 契约。这使接收端不依赖未使用算子的整包交付流程。
+该 target 调用 `scripts/prepare-inline-asm-mm.sh`，构建生产者的
+`inline_asm_codegen`、`inline_asm_encode_outputs` 和 `hpu_reference_vectors`。
+三个可执行文件在 `OUTPUT_ROOT/inline-asm-producer/<producer_commit>/` 中运行，
+产生该工作目录下的 `output/`、`outputs/` 和 MM 数据表；Nexus-AM importer
+逐字段检查选中的 MM 契约，再将交付内容导入
+`HPU_GENERATED_ROOT/inline-asm/mm`。这使接收端不依赖未使用算子的整包交付流程，
+也不复用 submodule 源码目录中可能残留的旧生成数据。
+构建配置显式关闭 SEAL 集成、差分 oracle 和旧固定 profile 测试选项；这些可选
+流程不属于本次 MM 用例的数据生成依赖。
 
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
@@ -54,6 +64,8 @@ MM 契约。这使接收端不依赖未使用算子的整包交付流程。
 
 生产者还会生成其他算子和 twiddle。Nexus-AM 不把整个大镜像链接进
 ELF，只严格选择 MM 冒烟所需的四个数据文件和一个程序。
+切换到 `HPU_SEAL` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
+4096 系数、1 RNS 分量的 MM 路径。
 
 ## 3. 数据文件和人工可读表格
 
@@ -77,14 +89,17 @@ line offset   relative to configured HPU_MEM_BASE
 | `images/expected.u32.bin` | PMUL golden | 4096 | `[128,192)` |
 | `constants/mod_ctx.u32.bin` | q/mu48 记录 | 1×4，补零到1 line | `[192,193)` |
 
-路径前缀均为：
+这些路径在生产者隔离工作目录中的前缀为：
 
 ```text
 outputs/mm/test_data/hardware/
 ```
 
+校验导入后，对应文件位于
+`HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware/`。
+
 每个 `.u32.bin` 的人工可读伴随文件由 `hardware_manifest.csv` 的
-`readable_path` 字段指定；当前 `encode` 分支生成 `.u32.dec.txt` 十进制文本。
+`readable_path` 字段指定；当前 `HPU_SEAL` MM 路径生成 `.u32.dec.txt` 十进制文本。
 接收端不再猜测或写死展示文件后缀。生产者还给出：
 
 - `test_data/params.json`：N、operation、domain、模数；
@@ -104,16 +119,27 @@ outputs/mm/test_data/hardware/
 
 ## 4. 数据如何进入 testcase ELF
 
-Nexus-AM 不把 4096 个数展开成不可读的 C 数组。接收层使用 `.incbin`：
+Nexus-AM 不把 4096 个数展开成不可读的 C 数组。接收层使用 `.incbin`，且只读取
+已校验导入目录中的数据。例如 `RNS_A` 对应：
+
+```text
+HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware/images/input_a.u32.bin
+```
+
+汇编源保持简短的相对路径：
 
 ```asm
 RNS_A:
-    .incbin "third_party/inline-asm/outputs/mm/test_data/hardware/images/input_a.u32.bin"
+    .incbin "images/input_a.u32.bin"
 ```
 
-`src/common/hpu_rns_fixture.S` 只放 A/B，并链接到 7 个 smoke-001 用例和
+`Makefile.case` 通过 `-Wa,-I$(INLINE_ASM_MM_ROOT)/test_data/hardware` 指定 GNU as
+的搜索目录，其中 `INLINE_ASM_MM_ROOT` 指向已校验的
+`HPU_GENERATED_ROOT/inline-asm/mm`，而不是 submodule 的 `outputs/mm`。
+
+`src/common/hpu_rns_fixture.S` 只放 A/B，并链接到 9 个 smoke-001 用例和
 49 个迁移 IT 用例；两个 `main return` 探针刻意不带数据。
-`src/common/hpu_mm_fixture.S` 放 expected/mod_ctx，仅链接到计算用例 07。
+`src/common/hpu_mm_fixture.S` 放 expected/mod_ctx，仅链接到计算用例 08、09。
 
 运行时：
 
@@ -200,7 +226,7 @@ __asm__ volatile(".word 0x..."
 
 ## 7. 简单用例的单指令适配
 
-01–06 和迁移 IT 中的基础指令用例需要独立
+01–07 和迁移 IT 中的基础指令用例需要独立
 DLOAD/DSTORE/PMODLD/算术/PFREE/PSYNC，而不是完整 MM 程序。它们使用的 named
 word 也不再手写在 Git 中。`prepare-inline-asm-mm.sh` 编译生产者的真实 encoder，
 把 mnemonic 编成 build-only header：
@@ -264,9 +290,14 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 
 ## 10. 当前边界
 
-当前 producer 的完整程序闭环只覆盖 `MM/PMUL, N=4096, Q=1`；迁移 IT 中的基础
+当前 Nexus-AM 接收的完整程序闭环只覆盖 `MM/PMUL, N=4096, Q=1`，不代表
+`HPU_SEAL` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
+迁移 IT 中的基础
 CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
 program/data/golden/relocation 契约的 24 个测试点被标成
 `blocked-not-issued`，不发明指令并固定返回 1。GitHub Actions 的绿色结果也只证明
 生成、导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS
 失败记录应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。
+
+本次分支切换本身不解决新手册 STG 字段公式与示例之间的编码争议。相关变换用例
+继续保持 blocked，不能因为 producer 来源变为 `HPU_SEAL` 就将其标记为已验证。

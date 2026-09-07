@@ -45,11 +45,13 @@ runtime/                       # mechanical helpers, never whole scenarios
 └── it_compute.c               # coefficient-wise C reference comparisons
 
 third_party/
-└── inline-asm/                 # pinned producer git submodule
+└── inline-asm/                 # pinned HPU_SEAL producer git submodule
 
-build/generated/                # ignored: validated, selected MM delivery
-├── include/hpu/inline_asm_mm_delivery.h
-└── inline-asm/mm/
+build/                          # ignored: generated outputs only
+├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
+└── generated/                  # validated, selected MM delivery
+    ├── include/hpu/inline_asm_mm_delivery.h
+    └── inline-asm/mm/
 ```
 
 Each source has its own readable `main()`.  The MMIO register setup, data preparation,
@@ -143,18 +145,28 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 GNU as does not natively recognize HPU mnemonics.  The
 `third_party/inline-asm` git submodule therefore pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`0d205b84b748f863a824ca42e99cabfc2b6016b9` from its `encode` branch.  Before
+`d79efb4030a15cfd293e919355868f24eb4c54d9` from its
+[`HPU_SEAL` branch](https://github.com/cuihu2/inline-asm/tree/HPU_SEAL).
+The branch recorded in `.gitmodules` identifies the upstream source; normal
+builds and CI use the committed gitlink, not the latest remote branch head.
+Before
 any testcase is built,
 Nexus-AM runs the producer generation stages needed for its MM delivery and
 validates the selected MM parameters, data geometry, existing producer
 manifest values, four DMA relocations, ten instruction words, and all 4096
 PMUL golden coefficients.
 
+The three producer tools run under
+`OUTPUT_ROOT/inline-asm-producer/<producer_commit>/`, leaving the submodule
+source tree unchanged. The selected `outputs/mm` delivery is then checked
+and copied into `HPU_GENERATED_ROOT/inline-asm/mm`; no testcase consumes
+unvalidated binaries left in the submodule's `outputs/` directory.
+
 The build then consumes the producer output in two concrete ways:
 
 1. `.incbin` links `input_a`, `input_b`, `expected`, and `mod_ctx` directly
-   from `outputs/mm/test_data/hardware`; Nexus-AM no longer synthesizes these
-   arrays with `.rept`.
+   from the validated `HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware`
+   directory; Nexus-AM no longer synthesizes these arrays with `.rept`.
 2. Cases 08 and 09 link the AM-generated `mm_phases.c` adaptation of the
    producer's `outputs/mm/mm.c`. It preserves the reviewed ten words, four
    relocations, and fixed `x10`/`x11` assignments. `mm_load_mod()` issues the
@@ -170,6 +182,12 @@ Other arithmetic testcases also show this barrier explicitly in main.
 never issue an HPU instruction. See
 [manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the remaining
 STG encoding and object-limit ambiguities.
+
+This branch switch consumes the existing fixed MM path (`N=4096`, one RNS
+component, `q=50061313`). It does not enable the branch's complete SEAL/CKKS
+application flow or settle the conflicting STG instruction layouts in the
+programming manual. The previously blocked transform/application cases stay
+blocked until their own program/data/golden contracts are validated.
 
 The simpler cases still use one-operation C adapters, but their named words
 are generated at build time by the same real encoder.  The tracked

@@ -15,6 +15,8 @@ TEST_ROOT := $(CURDIR)
 INLINE_ASM_ROOT ?= $(TEST_ROOT)/third_party/inline-asm
 HPU_GENERATED_ROOT ?= $(TEST_ROOT)/build/generated
 INLINE_ASM_MM_ROOT := $(HPU_GENERATED_ROOT)/inline-asm/mm
+# .incbin 只从本次已校验的交付目录取数据，不读取 submodule 遗留输出。
+ASFLAGS += -Wa,-I$(INLINE_ASM_MM_ROOT)/test_data/hardware
 INLINE_ASM_DELIVERY_HEADER := \
   $(HPU_GENERATED_ROOT)/include/hpu/inline_asm_mm_delivery.h
 
@@ -67,6 +69,14 @@ CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -fmacro-prefix-map=$(AM_HOME)=nexus-am
 
 include $(AM_HOME)/Makefile.app
+
+# .incbin 的二进制依赖不会出现在预处理器生成的 .d 中。
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/hpu_rns_fixture.o: \
+  $(INLINE_ASM_MM_ROOT)/test_data/hardware/images/input_a.u32.bin \
+  $(INLINE_ASM_MM_ROOT)/test_data/hardware/images/input_b.u32.bin
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/hpu_mm_fixture.o: \
+  $(INLINE_ASM_MM_ROOT)/test_data/hardware/images/expected.u32.bin \
+  $(INLINE_ASM_MM_ROOT)/test_data/hardware/constants/mod_ctx.u32.bin
 
 # Nexus-AM adds -ggdb in Makefile.compile.  Published smoke ELFs do not need
 # checkout-specific debug paths.
