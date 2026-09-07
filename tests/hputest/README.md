@@ -45,7 +45,7 @@ runtime/                       # mechanical helpers, never whole scenarios
 └── it_compute.c               # coefficient-wise C reference comparisons
 
 third_party/
-└── inline-asm/                 # pinned HPU_SEAL producer git submodule
+└── inline-asm/                 # pinned HPU_SEAL_manual_0905 trial branch
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
@@ -145,8 +145,10 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 GNU as does not natively recognize HPU mnemonics.  The
 `third_party/inline-asm` git submodule therefore pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`45b51d5704b0d8f1c00bf5903cdfc6fac8dd9d6d` from its
-[`HPU_SEAL` branch](https://github.com/cuihu2/inline-asm/tree/HPU_SEAL).
+`62985e45702e9130a0aa39bca6140a3c4fd6c72a` from its
+[`HPU_SEAL_manual_0905` branch](https://github.com/cuihu2/inline-asm/tree/HPU_SEAL_manual_0905).
+This separate trial branch reapplies the September 5 STG encoding fix;
+the original `HPU_SEAL` branch remains reverted and is not modified by this trial.
 The branch recorded in `.gitmodules` identifies the upstream source; normal
 builds and CI use the committed gitlink, not the latest remote branch head.
 Before

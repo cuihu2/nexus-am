@@ -10,12 +10,17 @@
 
 ```text
 tests/hputest/third_party/inline-asm
-branch HPU_SEAL
-commit 45b51d5704b0d8f1c00bf5903cdfc6fac8dd9d6d
+branch HPU_SEAL_manual_0905
+commit 62985e45702e9130a0aa39bca6140a3c4fd6c72a
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
 固定的 gitlink，不自动追踪远端分支最新提交。
+
+这是按 2026-09-05 PDF §3.2 修正 STG 编码的独立试验分支，供 IT 试跑用例。
+它基于原 `HPU_SEAL` 的回退提交 `5404959777c07c25b5b6a65e66020c74740f2e3f`
+恢复编码修正；原 `HPU_SEAL` 分支仍保持回退状态，本次不改动原分支。
+试验分支的源码内容与原编码修正提交 `45b51d5` 相同。
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
 被 `.gitignore` 排除：
@@ -66,7 +71,7 @@ STG 全字段组合及可执行 C 中的 `.word`。
 
 生产者还会生成其他算子和 twiddle。Nexus-AM 不把整个大镜像链接进
 ELF，只严格选择 MM 冒烟所需的四个数据文件和一个程序。
-切换到 `HPU_SEAL` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
+引用 `HPU_SEAL_manual_0905` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
 4096 系数、1 RNS 分量的 MM 路径。
 
 ## 3. 数据文件和人工可读表格
@@ -101,7 +106,7 @@ outputs/mm/test_data/hardware/
 `HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware/`。
 
 每个 `.u32.bin` 的人工可读伴随文件由 `hardware_manifest.csv` 的
-`readable_path` 字段指定；当前 `HPU_SEAL` MM 路径生成 `.u32.dec.txt` 十进制文本。
+`readable_path` 字段指定；当前固定试验分支的 MM 路径生成 `.u32.dec.txt` 十进制文本。
 接收端不再猜测或写死展示文件后缀。生产者还给出：
 
 - `test_data/params.json`：N、operation、domain、模数；
@@ -293,7 +298,7 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 ## 10. 当前边界
 
 当前 Nexus-AM 接收的完整程序闭环只覆盖 `MM/PMUL, N=4096, Q=1`，不代表
-`HPU_SEAL` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
+`HPU_SEAL_manual_0905` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
 迁移 IT 中的基础
 CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
 program/data/golden/relocation 契约的 24 个测试点被标成
