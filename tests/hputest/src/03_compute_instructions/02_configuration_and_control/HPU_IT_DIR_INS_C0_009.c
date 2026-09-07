@@ -1,4 +1,3 @@
-#include <hpu/completion.h>
 #include <hpu/result.h>
 #include <hpu/steps.h>
 
@@ -37,18 +36,11 @@ int main(void) {
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
     if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
 
-    /* 先把 A 装入 p0，并确认 DLOAD 已完成，才能释放该对象。 */
+    /* 先把 A 装入 p0；后续 PFREE 与 DLOAD 的依赖由硬件维护。 */
     if (dload(P0, LINE_A, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);
-    psync();
-    if (completion_wait() != 0 || completion_clear() != 0)
-        return case_fail(__FILE__, __LINE__);
-
     if (pfree(P0) != 0) return case_fail(__FILE__, __LINE__);
-    /* 等待 PFREE 完成并清除本次完成事件，再用同一个对象号装入 B。 */
-    psync();
-    if (completion_wait() != 0 || completion_clear() != 0)
-        return case_fail(__FILE__, __LINE__);
+    /* 同一程序内按顺序释放并复用 p0，只在整段程序末尾发出一次 PSYNC。 */
     if (dload(P0, LINE_B, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);
     if (dstore_release(P0, LINE_OUT, POLY_LINES) != 0)

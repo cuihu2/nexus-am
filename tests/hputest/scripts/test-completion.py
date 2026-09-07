@@ -236,8 +236,7 @@ int check_pmul(void);
 int dload(unsigned object, unsigned line, unsigned length);
 int dstore(unsigned object, unsigned line, unsigned length);
 void psync(void);
-int mm_load_mod(const hpu_dma_span_t *spans, unsigned count);
-int mm_compute(const hpu_dma_span_t *spans, unsigned count);
+int hpu_program_mm(const hpu_dma_span_t *spans, unsigned count);
 #endif
 """
 
@@ -262,7 +261,6 @@ uint32_t csr_read(uintptr_t address) {
     if (address == CSR_FAULT) return fault;
     assert(address == CSR_IRQ);
     if (clearing) return 0U;
-    if (phase == 1U) return IRQ_LEVEL; /* 09 的模表阶段先正常完成。 */
     if (phase != 2U) return 0U;
 
     ++polls;
@@ -336,12 +334,7 @@ void psync(void) {
         status = STATUS_VALID;
     }
 }
-int mm_load_mod(const hpu_dma_span_t *spans, unsigned count) {
-    (void)spans;
-    assert(count == HPU_PROGRAM_MM_DMA_COUNT);
-    return 0;
-}
-int mm_compute(const hpu_dma_span_t *spans, unsigned count) {
+int hpu_program_mm(const hpu_dma_span_t *spans, unsigned count) {
     (void)spans;
     assert(count == HPU_PROGRAM_MM_DMA_COUNT);
     start_final_phase();
@@ -391,7 +384,7 @@ class CompletionTests(unittest.TestCase):
         for header in ("result", "dma", "fixture", "layout", "sync"):
             (root / "hpu" / f"{header}.h").write_text(
                 '#include "mock_case_api.h"\n', encoding="utf-8")
-        (root / "mm_phases.h").write_text(
+        (root / "mm.h").write_text(
             '#include "mock_case_api.h"\n', encoding="utf-8")
         case_source = root / "case_test.c"
         case_source.write_text(CASE_HARNESS, encoding="utf-8")

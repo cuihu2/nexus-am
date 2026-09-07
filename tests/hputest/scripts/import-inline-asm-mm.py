@@ -22,21 +22,21 @@ EXPECTED_IMAGES = {
 }
 
 EXPECTED_DMA = [
-    (0, 0, "dload", 3, 2, 1, "0x5A820E2B"),
-    (2, 1, "dload", 1, 1, 0, "0x5A80052B"),
-    (3, 2, "dload", 2, 1, 0, "0x5A80092B"),
-    (7, 3, "dstore", 0, 1, 0, "0x5A8002AB"),
+    (0, 0, "dload", 3, 2, 1, "0x06B540AB"),
+    (2, 1, "dload", 1, 1, 0, "0x02B5202B"),
+    (3, 2, "dload", 2, 1, 0, "0x04B5202B"),
+    (7, 3, "dstore", 0, 1, 0, "0x00B5502B"),
 ]
 
 EXPECTED_MM_WORDS = [
-    0x5A820E2B,
+    0x06B540AB,
     0x6000000B,
-    0x5A80052B,
-    0x5A80092B,
+    0x02B5202B,
+    0x04B5202B,
     0x2040800B,
     0x8040000B,
     0x8080000B,
-    0x5A8002AB,
+    0x00B5502B,
     0x80C0000B,
     0x7000000B,
 ]
@@ -139,8 +139,8 @@ def validate_program(source: Path) -> None:
     if words != EXPECTED_MM_WORDS:
         fail("mm.inst32 does not match the reviewed executable MM program")
 
-    # main/04d1825 起 custom1 与 custom0 一样直通 payload；DMA 额外置 kind。
-    # 必须保留 rs1/rs2 编号，不能继续接受旧版丢弃高位的 cmd26。
+    # main/b405f2a 使用标准 GPR 位段；custom1 仍直通 payload 并置 kind。
+    # 必须保留 rs1/rs2 编号，不能接受旧版重排/丢弃操作数的 cmd26。
     commands = [int(line, 2) for line in
                 (source / "mm.cmd26").read_text().splitlines() if line.strip()]
     expected_commands = [(word >> 7) | (1 << 25 if word & 0x7F == 0x2B else 0)
@@ -156,9 +156,12 @@ def validate_program(source: Path) -> None:
         fail("mm.c does not provide the executable hpu_program_mm entry")
     if generated_c.count('__asm__("x10")') != 4 or generated_c.count('__asm__("x11")') != 4:
         fail("mm.c does not bind x10/x11 for every DMA instruction")
-    for word in EXPECTED_MM_WORDS:
-        if f".word 0x{word:08X}" not in generated_c:
-            fail(f"mm.c is missing generated word 0x{word:08X}")
+    c_words = [int(word, 16) for word in
+               re.findall(r"\.word 0x([0-9a-fA-F]{8})", generated_c)]
+    if c_words != EXPECTED_MM_WORDS:
+        fail("mm.c does not preserve the complete reviewed instruction stream")
+    if "spans[3].line_count != hpu_obj_len[0]" not in generated_c:
+        fail("mm.c is missing the DSTORE span/OBJ.len guard")
     if "x0, x0" in (source / "mm.asm").read_text(encoding="utf-8"):
         fail("mm.asm contains unresolved x0/x0 DMA operands")
 
@@ -247,48 +250,6 @@ def read_encodings(path: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
-def render_mm_phases(generated_c: str) -> tuple[str, str]:
-    """Split the reviewed producer body; the caller inserts/consumes PSYNC.
-
-    Keep the original words, fixed x10/x11 bindings and span validation.
-    These are AM adapters, not new files supplied by the upstream producer.
-    """
-    first = "    /* 0: dload x10, x11, p3, 2, 1 */"
-    second = "    /* 1: pmodld 0 */"
-    end = "#if !defined(__riscv)"
-    signature = "int hpu_program_mm("
-    if any(generated_c.count(token) != 1
-           for token in (first, second, end, signature)):
-        fail("MM phase split: unrecognized producer C structure")
-    start = generated_c.index(first)
-    split = generated_c.index(second)
-    stop = generated_c.index(end)
-    if not start < split < stop:
-        fail("MM phase split: invalid instruction order")
-    prefix = generated_c[:start]
-    footer = generated_c[stop:]
-    mod_body = generated_c[start:split]
-    compute_body = generated_c[split:stop]
-    emitted = mod_body + compute_body
-    words = [int(word, 16) for word in
-             re.findall(r"\.word 0x([0-9a-fA-F]{8})", emitted)]
-    if words != EXPECTED_MM_WORDS:
-        fail("MM phase split changed producer instruction stream")
-    mod = prefix.replace(signature, "int mm_load_mod(") + mod_body + footer
-    # Retain the shared definitions from prefix once; repeat only validation.
-    compute_prefix = prefix[prefix.index(signature):]
-    compute = compute_prefix.replace(signature, "int mm_compute(") + compute_body + footer
-    header = (
-        "/* Generated AM adaptation for manual v0.4 (2026-09-05). */\n"
-        "#ifndef AM_MM_PHASES_H\n#define AM_MM_PHASES_H\n"
-        '#include "mm.h"\n'
-        "int mm_load_mod(const hpu_dma_span_t *spans, size_t span_count);\n"
-        "int mm_compute(const hpu_dma_span_t *spans, size_t span_count);\n"
-        "#endif\n"
-    )
-    return header, mod + "\n" + compute
-
-
 def render_header(commit: str, coefficient_count: int, modulus: int,
                   selected: dict[str, dict[str, str]],
                   encodings: list[tuple[str, str, str]]) -> str:
@@ -340,8 +301,6 @@ def main() -> int:
         fail("producer commit must be a 40-character lowercase Git object ID")
 
     validate_program(source)
-    phase_header, phase_source = render_mm_phases(
-        (source / "mm.c").read_text(encoding="utf-8"))
     coefficient_count, modulus, selected = validate_data(source)
     encodings = read_encodings(arguments.encodings)
     header_text = render_header(arguments.producer_commit, coefficient_count,
@@ -362,8 +321,6 @@ def main() -> int:
             arguments.encodings.read_text(encoding="utf-8"), encoding="utf-8")
         (staging / "inline_asm_mm_delivery.h").write_text(
             header_text, encoding="utf-8")
-        (staging / "mm_phases.h").write_text(phase_header, encoding="utf-8")
-        (staging / "mm_phases.c").write_text(phase_source, encoding="utf-8")
         (staging / "RESOLVED_DMA_SPANS.csv").write_text(
             "dma_index,role,path,line_offset,line_count\n"
             "0,modulus_context,constants/mod_ctx.u32.bin,192,1\n"
@@ -379,10 +336,9 @@ def main() -> int:
             "- DMA spans: MOD=(192,1), A=(0,64), B=(64,64), OUT=(128,64)\n"
             "- `images/expected.u32.bin` is immutable golden data; Nexus-AM "
             "poisons line 128 before DSTORE and never preloads this golden.\n"
-            "- AM-generated `mm_phases.c/h` split the original producer C "
-            "at the mod-table DLOAD / PMODLD boundary without changing words "
-            "or DMA bindings. Callers must issue PSYNC, wait and clear/rearm "
-            "completion between mm_load_mod and mm_compute.\n",
+            "- Nexus-AM links the producer's complete `mm.c` unchanged, "
+            "including its DSTORE span/OBJ.len guard and one terminal PSYNC. "
+            "No extra PSYNC is inserted between modulus DLOAD and PMODLD.\n",
             encoding="utf-8")
         if destination.exists():
             backup = destination.with_name(

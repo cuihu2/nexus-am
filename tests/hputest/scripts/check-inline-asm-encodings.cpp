@@ -31,17 +31,17 @@ struct DmaCheck {
 };
 
 // main 分支修正后的 DMA 位段；固定数值独立于构建时生成的头文件。
-// 非对称 x0/x31 抓住 GPR 互换/截断；STORE 的 rel 在 bit9，不是 LOAD 的 type。
+// GPR 恢复标准位置；非对称 x0/x31 抓住互换/截断；STORE 的 rel 在 bit14。
 constexpr std::array<DmaCheck, 10> kDmaChecks{{
-    {"dload x10, x11, p0, 1, 0", 0x5A80012BU, 0x2B50002U, 10, 11, 0, 1, 0, 0},
-    {"dload x10, x11, p1, 1, 0", 0x5A80052BU, 0x2B5000AU, 10, 11, 1, 1, 0, 0},
-    {"dload x10, x11, p4, 2, 1", 0x5A82122BU, 0x2B50424U, 10, 11, 4, 2, 1, 0},
-    {"dstore x10, x11, p0, 1", 0x5A8002ABU, 0x2B50005U, 10, 11, 0, 1, 0, 1},
-    {"dstore x10, x11, p2, 1", 0x5A800AABU, 0x2B50015U, 10, 11, 2, 1, 0, 1},
-    {"dload x0, x31, p7, 0, 1", 0xF8021C2BU, 0x3F00438U, 0, 31, 7, 0, 1, 0},
-    {"dload x31, x0, p5, 2, 0", 0x07C0162BU, 0x20F802CU, 31, 0, 5, 2, 0, 0},
-    {"dstore x31, x0, p7, 0", 0x07C01CABU, 0x20F8039U, 31, 0, 7, 0, 0, 1},
-    {"dstore x0, x31, p1, 1", 0xF80006ABU, 0x3F0000DU, 0, 31, 1, 1, 0, 1},
+    {"dload x10, x11, p0, 1, 0", 0x00B5202BU, 0x2016A40U, 10, 11, 0, 1, 0, 0},
+    {"dload x10, x11, p1, 1, 0", 0x02B5202BU, 0x2056A40U, 10, 11, 1, 1, 0, 0},
+    {"dload x10, x11, p4, 2, 1", 0x08B540ABU, 0x2116A81U, 10, 11, 4, 2, 1, 0},
+    {"dstore x10, x11, p0, 1", 0x00B5502BU, 0x2016AA0U, 10, 11, 0, 1, 0, 1},
+    {"dstore x10, x11, p2, 1", 0x04B5502BU, 0x2096AA0U, 10, 11, 2, 1, 0, 1},
+    {"dload x0, x31, p7, 0, 1", 0x0FF000ABU, 0x21FE001U, 0, 31, 7, 0, 1, 0},
+    {"dload x31, x0, p5, 2, 0", 0x0A0FC02BU, 0x2141F80U, 31, 0, 5, 2, 0, 0},
+    {"dstore x31, x0, p7, 0", 0x0E0F902BU, 0x21C1F20U, 31, 0, 7, 0, 0, 1},
+    {"dstore x0, x31, p1, 1", 0x03F0502BU, 0x207E0A0U, 0, 31, 1, 1, 0, 1},
     {"dload x0, x0, p0, 0, 0", 0x0000002BU, 0x2000000U, 0, 0, 0, 0, 0, 0},
 }};
 
@@ -81,19 +81,20 @@ int main() {
         const auto operation = check.direction != 0U
             ? check.type_or_release << 1U : check.type_or_release;
         if (word != check.word || encoded.command26 != check.command26
-            || ((word >> 27U) & 31U) != check.rs2
-            || ((word >> 22U) & 31U) != check.rs1
-            || ((word >> 18U) & 15U) != 0U
-            || ((word >> 17U) & 1U) != check.flag
-            || ((word >> 13U) & 15U) != 0U
-            || ((word >> 10U) & 7U) != check.object
-            || ((word >> 8U) & 3U) != operation
-            || ((word >> 7U) & 1U) != check.direction
+            || (word >> 28U) != 0U
+            || ((word >> 25U) & 7U) != check.object
+            || ((word >> 20U) & 31U) != check.rs2
+            || ((word >> 15U) & 31U) != check.rs1
+            || ((word >> 13U) & 3U) != operation
+            || ((word >> 12U) & 1U) != check.direction
+            || ((word >> 8U) & 15U) != 0U
+            || ((word >> 7U) & 1U) != check.flag
             || (word & 127U) != 0x2BU
             || encoded.command26 != ((1U << 25U) | (word >> 7U))
             || (encoded.command26 >> 25U) != 1U
-            || ((encoded.command26 >> 20U) & 31U) != check.rs2
-            || ((encoded.command26 >> 15U) & 31U) != check.rs1) {
+            || ((encoded.command26 >> 18U) & 7U) != check.object
+            || ((encoded.command26 >> 13U) & 31U) != check.rs2
+            || ((encoded.command26 >> 8U) & 31U) != check.rs1) {
             std::cerr << "main DMA encoding/precode mismatch: "
                       << check.assembly << '\n';
             return 1;

@@ -104,8 +104,8 @@ no architectural HPU CSR number, privilege level, or idle encoding.
 `saw_busy`。这样既不会把命令尚未启动时的初始空闲当作完成，也不会把
 DLOAD 与 DSTORE 之间的 DMA 空闲间隔当作 DSTORE 完成。若 CPU 未观察到
 某阶段的忙状态，用例会保守地超时报失败；这表示未取得完成证据，不能单凭
-该结果认定 RTL 有错。07 的中断同步、09 的模表屏障和计算阶段 PSYNC 后
-MMIO 完成轮询，以及各用例的超时上限，本次均不改变。
+该结果认定 RTL 有错。07/08 使用程序末尾的 PSYNC 中断同步，09 轮询末尾
+PSYNC 的 MMIO 完成电平；08/09 的模表 DLOAD 与 PMODLD 之间不再插入 PSYNC。
 
 For `LINKNAN_HPU_IT` builds, the `riscv64-xs` AM startup uses the LinkNan PLIC
 window at `0x04000000`.  Before entering S-mode it establishes an
@@ -167,7 +167,7 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 GNU as does not natively recognize HPU mnemonics.  The
 `third_party/inline-asm` git submodule therefore pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`04d1825bdbce4dc649a683a722e59cf100c1a686` from its
+`b405f2ad7b0901930d81edb79a5167ab028c4dbd` from its
 [`main` branch](https://github.com/cuihu2/inline-asm/tree/main).
 This upstream commit includes the STG and DMA encoding fixes. AM no longer
 uses the `HPU_SEAL_manual_0905` trial branch; this switch does not modify
@@ -192,33 +192,39 @@ The build then consumes the producer output in two concrete ways:
 1. `.incbin` links `input_a`, `input_b`, `expected`, and `mod_ctx` directly
    from the validated `HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware`
    directory; Nexus-AM no longer synthesizes these arrays with `.rept`.
-2. Cases 08 and 09 link the AM-generated `mm_phases.c` adaptation of the
-   producer's `outputs/mm/mm.c`. It preserves the reviewed ten words, four
-   relocations, and fixed `x10`/`x11` assignments. `mm_load_mod()` issues the
-   table DLOAD; main explicitly issues PSYNC and consumes its completion;
-   `mm_compute()` then starts at PMODLD and ends with the producer's final
-   PSYNC. The complete testcase therefore has two PSYNC events.
+2. Cases 08 and 09 directly link the validated producer `outputs/mm/mm.c`
+   and call `hpu_program_mm()`. Its ten words, four relocations, fixed
+   `x10`/`x11` assignments, and software object-length checks remain intact.
+   The producer emits exactly one PSYNC at the end of the complete program;
+   AM does not split it into phases or insert a modulus-load barrier.
 
-The 2026-09-05 manual v0.4 requires this mod-table barrier. Case 08 handles
-both events through PLIC and calls `irq_rearm()` between phases; case 09
-polls and clears the first MMIO event before starting the second phase.
-Other arithmetic testcases also show this barrier explicitly in main.
+The programming manual at the pinned commit, sections 6.1 and 6.3, supersedes
+the earlier PDF's intermediate-barrier requirement. Hardware maintains the
+dependencies between modulus DLOAD, PMODLD, computation, and object reuse.
+Case 08 consumes the final notification through PLIC; case 09 polls and
+clears the final MMIO event. Other arithmetic and object-lifecycle cases
+also omit internal PSYNC barriers and retain their terminal completion wait.
 `completion_wait()` and `completion_clear()` only wait/acknowledge; they
 never issue an HPU instruction. See
 [manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the selected
-STG/DMA encodings and the remaining object-limit ambiguities.
+STG/DMA encodings and current object-length/lifecycle constraints.
 
 This branch switch consumes the existing fixed MM path (`N=4096`, one RNS
 component, `q=50061313`). It does not enable a complete SEAL/CKKS
-application flow. STG words follow the 2026-09-05 manual section 3.2:
+application flow. STG words follow the pinned manual section 3.2:
 `pdata` occupies both bits [27:25] and [24:22], while `ptwid` occupies [16:14].
 The stale example words are superseded by that field formula. Independent
 word/precode checks prevent falling back to the old layout. DMA words now
-place `rs2` in [31:27], `rs1` in [26:22], flag in bit 17, object in [12:10],
-operation in [9:8], and direction in bit 7. DSTORE operation is `rel << 1`.
+place the object in [27:25], `rs2` in [24:20], `rs1` in [19:15], operation
+in [14:13], direction in bit 12, and the small-bank flag in bit 7.
+DSTORE operation is `rel << 1`.
 For both custom opcodes, cmd26 retains the complete `inst32 >> 7`; custom1
 additionally sets bit 25. The runtime `x10=line offset`, `x11=line count`
-ABI is unchanged. The previously
+ABI is unchanged. DSTORE hardware uses `OBJ.len`, not `x11`, for its actual
+length; the producer still loads `x11` and checks that the supplied span
+count equals its software-tracked object length. Both DSTORE `rel` values
+release the source object, so a successful store must not be followed by
+another PFREE for that same allocation. The previously
 blocked transform/application cases stay blocked until their own complete
 program/data/golden contracts are validated; fixing encoding alone does not
 qualify a functional testcase.

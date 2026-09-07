@@ -3,8 +3,7 @@
 #include <hpu/fixture.h>
 #include <hpu/irq.h>
 #include <hpu/layout.h>
-#include <hpu/sync.h>
-#include "mm_phases.h"
+#include "mm.h"
 
 /*
  * 目的：形成 DLOAD -> PMUL -> DSTORE -> PSYNC 的最小计算闭环。
@@ -100,37 +99,18 @@ int main(void) {
         return case_fail(__FILE__, __LINE__);
     }
 
-    /* 手册0.4：模表DLOAD后先同步。两个阶段保留producer的机器码和x10/x11绑定。 */
-    printf("[HPU][08][PHASE] issue mod-table DLOAD -> PSYNC; wait IRQ\n");
-    rc = mm_load_mod(spans, HPU_PROGRAM_MM_DMA_COUNT);
+    /*
+     * 完整执行库生成的指令流，保留其机器码及 x10/x11 操作数绑定。
+     * 模表 DLOAD 与 PMODLD 的依赖由硬件维护，只在程序末尾发出一次 PSYNC。
+     */
+    printf("[HPU][08][PHASE] issue MM: mod DLOAD -> PMODLD -> input DLOAD -> PMUL -> DSTORE -> PSYNC\n");
+    rc = hpu_program_mm(spans, HPU_PROGRAM_MM_DMA_COUNT);
     if (rc != 0) {
         irq_close();
-        printf("[HPU][08][FAIL] phase=mod-load rc=%d\n", rc);
+        printf("[HPU][08][FAIL] phase=mm-program rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
-    psync();
-    /* handler清电平并complete第一轮PLIC；重新准备标志后才允许第二轮。 */
-    rc = irq_wait();
-    if (rc != 0) {
-        irq_close();
-        printf("[HPU][08][FAIL] phase=mod-irq-wait rc=%d\n", rc);
-        return case_fail(__FILE__, __LINE__);
-    }
-    rc = irq_rearm();
-    if (rc != 0) {
-        irq_close();
-        printf("[HPU][08][FAIL] phase=compute-irq-rearm rc=%d\n", rc);
-        return case_fail(__FILE__, __LINE__);
-    }
-    printf("[HPU][08][PHASE] mod-table synchronized; issue PMODLD -> DLOAD -> PMUL -> DSTORE -> PSYNC\n");
-
-    /* 第二阶段从PMODLD开始，包含输入DLOAD、PMUL、DSTORE和末尾PSYNC。 */
-    rc = mm_compute(spans, HPU_PROGRAM_MM_DMA_COUNT);
-    if (rc != 0) {
-        irq_close();
-        printf("[HPU][08][FAIL] phase=mm-compute rc=%d\n", rc);
-        return case_fail(__FILE__, __LINE__);
-    }
+    /* 中断处理函数清除完成电平并完成 PLIC claim；主程序再检查最终状态。 */
     rc = irq_wait();
     irq_close();
     if (rc != 0) {

@@ -1,37 +1,40 @@
-# 2026-09-05 编程手册 0.4：用例同步更新
+# 编程手册 0.4：当前用例适配与历史差异
 
-本次依据用户提供的 `HPU_PROGRAMMING_MANUAL.pdf`（22页，2026-09-05，v0.4）
-第6.1、6.3、8.1节更新测试软件。2026-09-07 按用户确认，进一步采用该 PDF
-第3.2节位段图及公式修正 STG 编码器和 AM 接收检查。该修正曾按用户要求
-从原 `HPU_SEAL` 分支撤销，再放入独立试验分支 `HPU_SEAL_manual_0905`。
-现在按用户要求改用上游 `main`，固定引用其“修复 ntt dma 的 encode 问题”提交
-`04d1825bdbce4dc649a683a722e59cf100c1a686`。当前来源已不是试验分支；本次不修改
-原 `HPU_SEAL` 或 `HPU_SEAL_manual_0905` 分支。
-RTL 未修改，未进行 VCS 仿真。
+当前规范来源是 `inline-asm/main` 固定提交
+`b405f2ad7b0901930d81edb79a5167ab028c4dbd` 中的
+`doc/HPU_PROGRAMMING_MANUAL.md`。其版本标题仍为 v0.4，但 DMA 字段及
+同步约定已经更新，不能把标题相同当作内容相同。
+
+历史上 AM 曾按 2026-09-05 PDF 在模表 DLOAD 后增加屏障，并使用
+`HPU_SEAL_manual_0905` 试验分支；这两项已被当前上游来源和约定替代。
+本次只修改测试软件及接收检查，不修改任何 RTL 或历史 inline-asm 分支，
+也没有进行 VCS 仿真。
 
 ## 明确落实的流程
 
-模表加载后先执行 `PSYNC → 等待完成 → 清除通知`，再执行PMODLD。
-等待过程中检查FAULT和STATUS，收到通知后重新确认窗口有效且空闲。
-MMIO完成电平必须清到0并释放清除请求后，才能开始下一阶段。
+新手册第 6.1、6.3 节明确：DMA、配置、计算和对象生命周期的依赖由硬件
+维护，完整程序只在末尾发一次 PSYNC，模表 DLOAD 与 PMODLD 之间及算子
+内部不插入 PSYNC。
 
-- 08：AM接收脚本将producer MM函数拆成`mm_load_mod()`和`mm_compute()`，
-  原有十条机器码及四笔x10/x11绑定保留。main在两者之间增加PSYNC。
-  两次PSYNC均走PLIC；第一轮handler完成claim/HPU清除/complete后，
-  `irq_rearm()`核对状态并重置完成标志，不重复执行CTE初始化。
-- 09：相同两个程序阶段；通过MMIO轮询和清除第一轮事件，再等待计算阶段事件。
+- 06 保持纯 MMIO STATUS 同步：DLOAD → 观察 BUSY 1→0 → DSTORE →
+  再次观察 BUSY 1→0 → 4096 系数自检；不发 PSYNC、不读取 IRQ。
+- 07 连续提交 DLOAD、DSTORE 和末尾 PSYNC，再由 PLIC 中断完成同步。
+- 08/09 直接编译已校验的上游 `mm.c`，调用 `hpu_program_mm()`，十条指令
+  仅含末尾一次 PSYNC。08 通过 PLIC 中断等待，09 通过 MMIO 完成电平等待。
+  不再派生 `mm_phases.c/h`，不再调用 `irq_rearm()`。
 - PATH_001、STING_CMD_001、PATH_004、INS_C0_001/002/003/004/007、
-  CMB_009、STR_002/006：main中的模表DLOAD与PMODLD之间增加同样同步。
-- INS_C0_003：DSTORE完成并清除事件后才复用目的对象p2。
-- INS_C0_009：DLOAD完成后再PFREE；PFREE完成后再复用相同对象号。
+  CMB_009、STR_002/006 删除模表 DLOAD 与 PMODLD 之间的屏障。
+- INS_C0_003 的 DSTORE/对象复用和 INS_C0_009 的 DLOAD/PFREE/重新分配
+  按程序顺序提交，不在中间插入 PSYNC；仍保留末尾完成和数据检查。
 
-各阶段失败均返回1并保留UART定位。最终4096系数比较仍决定自检结果。
-用例数量和ID不变。原始producer `mm.c/.inst32/.cmd26`随工件保留，
-`mm_phases.c/h`明确属于AM派生适配文件，并非上游原始交付。
+等待过程中仍检查 FAULT、窗口有效和忙状态，PSYNC 的 MMIO 等待必须同时
+取得完成事件与 BUSY 清零的证据，不能重新引入旧快照误判。阶段诊断和最终逐系数
+比较均保留，失败返回 1。用例数量和 ID 不变，上游 `mm.c/.inst32/.cmd26`
+随工件保留，生成函数的 `hpu_obj_len` 检查不因移除阶段适配而删减。
 
 ## 已确定的 STG 编码
 
-用户已明确选择最新 PDF 第3.2节的位段图和公式，不再沿用其后文的旧编码示例：
+当前上游手册第 3.2 节的位段图、公式及编码器一致：
 
 ```text
 word = (OPC << 28) | (pdata << 25) | (pdata << 22)
@@ -60,30 +63,36 @@ NTT 功能已在 IT 环境通过。
 导入检查和产物检查随之更新；简单用例也通过同一编码器重新生成单指令头文件。
 
 ```text
-inst32 = (rs2 << 27) | (rs1 << 22) | (flag << 17) | (obj << 10)
-       | (operation << 8) | (dir << 7) | 0x2B
+inst32 = (obj << 25) | (rs2 << 20) | (rs1 << 15)
+       | (operation << 13) | (dir << 12) | (flag << 7) | 0x2B
 DLOAD: dir=0, operation=type
 DSTORE: dir=1, operation=rel << 1
 custom0 cmd26 = inst32 >> 7
 custom1 cmd26 = (1 << 25) | (inst32 >> 7)
 ```
 
-旧 DMA 位段和丢弃 GPR 编号后重排的 cmd26 都不再适用。MM 的模表 DLOAD、
-输入 A DLOAD、输入 B DLOAD、输出 DSTORE 依次为 `0x5A820E2B`、`0x5A80052B`、
-`0x5A80092B`、`0x5A8002AB`。运行时仍由 `x10` 传 line offset、`x11` 传 line count；
-4096 系数、一个 RNS 分量、`q=50061313`、四笔数据 span 和两阶段 PSYNC 屏障不变。
+此前把寄存器号放在 `[26:22]` / `[31:27]` 的 DMA 编码不再适用。
+CPU 使用标准 `RS1=[19:15]`、`RS2=[24:20]`；其他字段仍必须按当前公式解析。
+MM 的模表 DLOAD、输入 A DLOAD、输入 B DLOAD、输出 DSTORE 依次为
+`0x06B540AB`、`0x02B5202B`、`0x04B5202B`、`0x00B5502B`。
+运行时仍由 `x10` 传 line offset、`x11` 传 line count；4096 系数、一个 RNS
+分量、`q=50061313` 和四笔数据 span 不变，整个 MM 程序只有末尾一次 PSYNC。
 上游当前自测覆盖固定 STG/DMA 等向量，不再沿用试验分支的 16,384 组穷举描述。
 
-## 仍须统一的定义
+## 当前长度与生命周期约束
 
-- MOD_ID出现编码256项、物理128项和应用64项三种表述；本次只使用已绑定的0/6。
-- small bank物理32 lines与单次装载8 lines的说明并存；本次模表只装1 line。
-- DSTORE表格的rel=0保留语义与正文“当前实现两种rel均释放”冲突。
-  当前用例没有调用`dstore_keep()`；正向回环均使用rel=1，释放后不重复PFREE。
+- MOD_ID 编码为 8 bit，可表示 0..255；应用 ABI 限定 0..63，两者不是
+  同一限制。当前测试使用的 0/6 不变，不据此启用更大模表场景。
+- small bank 允许不超过 32 lines 的小对象，当前模表仍只装 1 line。
+- DSTORE 实际传输长度为 `OBJ.len`，硬件忽略 `x11`；生成 C 仍设置非零
+  `span.line_count` 并验证它等于软件跟踪的对象长度。
+- DSTORE 的 `rel=0` 和 `rel=1` 都在成功后释放源对象，不能在成功写回后
+  对同一份分配再 PFREE。当前正向回环仍使用 `rel=1`，没有调用 `dstore_keep()`。
 
 ## IT运行条件
 
-用例仍发合法的PSYNC `0x7000000b`。软件同步不能修复RTL的custom0/DASICS
+要求完成通知的用例在程序末尾发 PSYNC `0x7000000b`，06 不发该指令。
+软件同步不能修复 RTL 的 custom0/DASICS
 重叠译码、DMA控制字或AWCACHE/ARCACHE属性。运行时应记录实际RTL版本及
 CPU接收/HPU接收/PSYNC事件波形。构建成功不等于VCS仿真通过。
 06、07、08 已收到 IT 未通过反馈。本次升级后应替换新 ELF/BIN 再跑并保留日志；

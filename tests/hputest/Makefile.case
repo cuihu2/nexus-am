@@ -37,11 +37,11 @@ SRCS += $(TEST_ROOT)/src/common/hpu_irq.c
 endif
 ifneq ($(filter %/001_hpu_smoke/08_dload_compute_dstore_psync_irq.c \
                 %/001_hpu_smoke/09_dload_compute_dstore_poll_mmio.c,$(CASE_SOURCE)),)
-ifeq ($(wildcard $(INLINE_ASM_MM_ROOT)/mm_phases.c),)
-$(error missing AM MM phase adaptation; run 'make prepare-inline-asm-mm')
+ifeq ($(wildcard $(INLINE_ASM_MM_ROOT)/mm.c),)
+$(error missing complete producer MM program; run 'make prepare-inline-asm-mm')
 endif
 SRCS += $(TEST_ROOT)/src/common/hpu_mm_fixture.S
-SRCS += $(INLINE_ASM_MM_ROOT)/mm_phases.c
+SRCS += $(INLINE_ASM_MM_ROOT)/mm.c
 INC_DIR += $(INLINE_ASM_MM_ROOT)
 endif
 else

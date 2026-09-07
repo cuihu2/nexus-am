@@ -58,8 +58,9 @@
 就通过。如果某一阶段的 BUSY=1 未被 CPU 采到，保守地等待至超时报失败；
 该结果不单独证明 RTL 错误，需要结合对应阶段波形复验。
 
-本次只纠正 06 的测试语义。07 保留 PSYNC/CPU 中断，09 保留模表加载屏障
-及计算阶段 PSYNC 后 MMIO 轮询，均不调整超时上限。旧 06 的 IRQ/BUSY
+当前 07/08 使用程序末尾的 PSYNC/CPU 中断，09 使用末尾 PSYNC 后 MMIO
+轮询。按当前编程手册，08/09 的模表加载和算子内部不插入 PSYNC，完整计算
+程序只产生一次完成通知；06 保持无 PSYNC 的分步状态轮询。旧 06 的 IRQ/BUSY
 竞态修复记录保留在 [`MMIO_COMPLETION_RACE.md`](MMIO_COMPLETION_RACE.md)，
 不能再把其中的 PSYNC+MMIO 流程当成当前 06 的要求。
 

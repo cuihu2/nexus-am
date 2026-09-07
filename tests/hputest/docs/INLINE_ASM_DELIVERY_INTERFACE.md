@@ -11,14 +11,16 @@
 ```text
 tests/hputest/third_party/inline-asm
 branch main
-commit 04d1825bdbce4dc649a683a722e59cf100c1a686
+commit b405f2ad7b0901930d81edb79a5167ab028c4dbd
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
 固定的 gitlink，不自动追踪远端分支最新提交。
 
-当前引用上游 `main` 的“修复 ntt dma 的 encode 问题”提交，接收其 STG 与 DMA
-编码修正。AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
+当前引用上游 `main` 的上述固定提交，接收其 STG 与 DMA 编码、生成程序和
+编程约定更新；规范来源为该提交中的 `doc/HPU_PROGRAMMING_MANUAL.md`，
+不能仅用仍标作 v0.4 的文档标题判断内容相同。
+AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
 `HPU_SEAL` 保留为历史来源，本次不修改它们。
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
@@ -171,7 +173,7 @@ outputs/mm/mm.h
 outputs/mm/mm.c
 ```
 
-其中 `.inst32`/`.cmd26` 是decode对照文本。原始producer入口是：
+其中 `.inst32`/`.cmd26` 是 decode 对照文本。用例直接调用生产者入口：
 
 ```c
 int hpu_program_mm(const hpu_dma_span_t *spans, size_t span_count);
@@ -187,23 +189,25 @@ static const hpu_dma_span_t mm_spans[HPU_PROGRAM_MM_DMA_COUNT] = {
     {HPU_LINE_OUTPUT, HPU_RNS_LINES},
 };
 
-if (mm_load_mod(mm_spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return 1;
-psync();
-if (completion_wait() != 0 || completion_clear() != 0) return 1;
-if (mm_compute(mm_spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return 1;
+if (hpu_program_mm(mm_spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return 1;
 if (completion_wait() != 0 || completion_clear() != 0) return 1;
 ```
 
-2026-09-05手册0.4要求模表装载后先同步。AM接收脚本保留原始`mm.c`用于追踪，
-另生成并链接`mm_phases.c/h`，把第一笔DLOAD和后续计算拆开。用例中的顺序是：
+上例展示 09 的 MMIO 完成等待；08 在调用生产者程序前执行 `irq_open()`，
+之后通过 `irq_wait()` 接收同一末尾事件。当前固定版本手册第 6.1、6.3 节
+明确 DMA/计算依赖由硬件维护，完整程序只在末尾发一次 PSYNC。
+这替代此前依据旧 PDF 添加模表屏障的适配。AM 直接编译已校验导入的 `mm.c`，
+不再生成 `mm_phases.c/h`，不再拆分或插入指令。顺序为：
 
 ```text
-DLOAD mod -> PSYNC -> 等待并清完成通知 -> PMODLD 0 -> DLOAD A -> DLOAD B -> PMUL
+DLOAD mod -> PMODLD 0 -> DLOAD A -> DLOAD B -> PMUL
 -> PFREE inputs -> DSTORE output -> PFREE mod -> terminal PSYNC
 ```
 
-完整MM用例有两次PSYNC。08通过中断处理并在阶段间`irq_rearm()`；09使用上述MMIO等待。
-两份阶段函数不改producer原机器码或x10/x11绑定。阶段不应独立乱序调用。
+完整 MM 用例只有一次 PSYNC，不调用 `irq_rearm()`。生产者的十条机器码、
+四笔 x10/x11 绑定和 `hpu_obj_len` 软件生命周期检查均保持原样；接收端必须
+校验 DSTORE 的 `span.line_count` 等于已建立对象的长度，不能删掉该检查来
+迎合新的生成文件格式。
 
 ## 6. x10/x11 到底怎么传
 
@@ -221,8 +225,8 @@ index、方向、对象、word、`rs1=x10` 和 `rs2=x11`。当前 MM 有四条 D
 当前 `main` 的 32-bit DMA 字段是：
 
 ```text
-inst32 = (rs2 << 27) | (rs1 << 22) | (flag << 17) | (obj << 10)
-       | (operation << 8) | (dir << 7) | 0x2B
+inst32 = (obj << 25) | (rs2 << 20) | (rs1 << 15)
+       | (operation << 13) | (dir << 12) | (flag << 7) | 0x2B
 DLOAD: dir=0, operation=type
 DSTORE: dir=1, operation=rel << 1
 custom0 cmd26 = inst32 >> 7
@@ -234,13 +238,15 @@ cmd26 不再丢弃 GPR 编号后重排 DMA 位段，必须保留 `inst32[31:7]`�
 
 | DMA | inst32 | cmd26 | line offset/count |
 | --- | --- | --- | --- |
-| 模表 DLOAD | `0x5A820E2B` | `0x2B5041C` | 192 / 1 |
-| 输入 A DLOAD | `0x5A80052B` | `0x2B5000A` | 0 / 64 |
-| 输入 B DLOAD | `0x5A80092B` | `0x2B50012` | 64 / 64 |
-| 输出 DSTORE（rel=1） | `0x5A8002AB` | `0x2B50005` | 128 / 64 |
+| 模表 DLOAD（p3） | `0x06B540AB` | `0x20D6A81` | 192 / 1 |
+| 输入 A DLOAD（p1） | `0x02B5202B` | `0x2056A40` | 0 / 64 |
+| 输入 B DLOAD（p2） | `0x04B5202B` | `0x2096A40` | 64 / 64 |
+| 输出 DSTORE（p0，rel=1） | `0x00B5502B` | `0x2016AA0` | 128 / 64 |
 
 这是指令字的位段更新，不是运行时 offset/count ABI 的变化。旧 ELF/BIN 不会随
 submodule 更新自动改变，IT 复测必须替换成重新构建的文件。
+CPU 取源寄存器现在使用标准位置 `[19:15]` 和 `[24:20]`；对象号、操作与标志
+仍必须按上式解析，不能只因为 GPR 位置相同就使用更早一版的整条 DMA 编码。
 
 生产者生成的 `mm.c` 在每条 custom1 前都执行等价代码：
 
@@ -255,6 +261,10 @@ __asm__ volatile(".word 0x..."
 `x11=64`，所以反汇编不保证每条 custom1 前都出现一条独立的文本 `li x11,64`；
 验收的是 custom1 执行点寄存器值，不是伪指令的外观。如将来必须固定每条 `li`
 形态，生产者应改为生成 `.S`，而不是由消费者手写。
+
+DSTORE 的实际硬件长度取 `OBJ.len`，不取 `x11`；统一 ABI 仍填写非零
+`span.line_count`，由生成函数在发射前核对其与软件跟踪的 `OBJ.len` 相等。
+`rel=0` 与 `rel=1` 在当前约定中都释放对象，后续不得对同一份分配再次 PFREE。
 
 ## 7. 简单用例的单指令适配
 
@@ -288,8 +298,7 @@ make -C tests/hputest \
 producer instruction/data generation stages
 -> validate/import selected MM files
 -> generate encoder header
--> generate AM mm_phases.c/h from reviewed producer mm.c
--> compile testcase + AM phases + selected producer data
+-> compile testcase + validated producer mm.c + selected producer data
 -> validate ELF symbols/instruction words/bin/disassembly
 -> package artifact
 ```
@@ -301,7 +310,7 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 
 - 分组目录中的 ELF/BIN/TXT（完整三组共 60 个用例）；
 - `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
-- `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、AM派生mm_phases.c/h、producer commit、
+- `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、producer commit、
   resolved spans 和 summary。
 
 生成物不进入 Git history。
@@ -315,7 +324,8 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 - N/q/shape/byte order/line geometry 改变；
 - FNV、文件长度、mod_ctx 或 4096 项 golden 不匹配；
 - DMA 不是四条、rs1/rs2 不是 x10/x11、存在 `x0,x0` placeholder；
-- 原始producer MM指令流不是经过审查的十条或缺少末尾PSYNC；AM派生阶段不能逐字保留原指令；
+- 原始 producer MM 指令流不是经过审查的十条、PSYNC 不止末尾一次，
+  或生成 C 的机器码、固定 GPR 绑定与软件对象长度检查不符合该契约；
 - 选中的 MM producer 数据越过其 256-line 接收窗口；
 - ELF 未嵌入正确尺寸的数据符号，或反汇编缺少 producer 指令字；
 - output 被预装成 golden。
@@ -333,7 +343,7 @@ program/data/golden/relocation 契约的 24 个测试点被标成
 06、07、08 已有 IT 失败反馈；本次接收上游编码修正后仍需重新运行这些用例，
 没有新一轮日志和波形前，不将其标为 PASS，也不把编码修正认定为全部失败的根因。
 
-STG 编码按用户指定的 2026-09-05 手册 §3.2 字段公式执行：`pdata` 同时写入
+STG 编码按固定版本手册 §3.2 字段公式执行：`pdata` 同时写入
 `[27:25]` 和 `[24:22]`，`ptwid` 写入 `[16:14]`，`[21:17]` 为 0。
 旧示例的机器码不再作为预期值；接收端用独立的手册向量检查 word/cmd26。
 这仅解决指令位段，不补齐完整变换用例的 program/data/golden/relocation 契约；

@@ -39,7 +39,7 @@ prepare-inline-asm-mm:
 verify-inline-asm: prepare-inline-asm-mm
 	@HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
 	  scripts/verify-inline-asm-encodings.sh "$(INLINE_ASM_ROOT)"
-	@python3 scripts/test-mm-phases.py "$(HPU_GENERATED_ROOT)/inline-asm/mm/mm.c"
+	@python3 scripts/test-mm-delivery.py "$(HPU_GENERATED_ROOT)/inline-asm/mm/mm.c"
 	@python3 scripts/test-completion.py
 	@python3 scripts/test-dma-poll.py
 	@python3 scripts/test-fixture-diagnostics.py

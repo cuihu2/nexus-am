@@ -404,10 +404,37 @@ if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
   exit 2
 fi
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
-                mm.c mm.h mm_phases.c mm_phases.h mm.asm mm.inst32 dma_relocation_manifest.csv; do
+                mm.c mm.h mm.asm mm.inst32 dma_relocation_manifest.csv; do
   if [[ ! -s $mm_artifact/$required ]]; then
     printf 'ERROR: selected inline-asm MM provenance omits %s\n' \
       "$required" >&2
+    exit 2
+  fi
+done
+# 08/09 直接调用生成器的完整程序，不再交付插入额外 PSYNC 的旧分阶段程序。
+if [[ -e $mm_artifact/mm_phases.c || -e $mm_artifact/mm_phases.h ]]; then
+  printf 'ERROR: obsolete AM MM phases remain in producer provenance\n' >&2
+  exit 2
+fi
+for register in x10 x11; do
+  binding_count=$(grep -Ec \
+    "register uintptr_t hpu_rs[12] __asm__\(\"${register}\"\) = \(uintptr_t\)spans\[[0-3]\]\.line_(offset|count);" \
+    "$mm_artifact/mm.c" || true)
+  if [[ $binding_count -ne 4 ]]; then
+    printf 'ERROR: generated MM program must retain four DMA %s bindings\n' \
+      "$register" >&2
+    exit 2
+  fi
+done
+for span in 0 1 2 3; do
+  if ! grep -Fq \
+      "register uintptr_t hpu_rs1 __asm__(\"x10\") = (uintptr_t)spans[$span].line_offset;" \
+      "$mm_artifact/mm.c" || \
+     ! grep -Fq \
+      "register uintptr_t hpu_rs2 __asm__(\"x11\") = (uintptr_t)spans[$span].line_count;" \
+      "$mm_artifact/mm.c"; then
+    printf 'ERROR: generated MM DMA span %u has changed offset/count GPR bindings\n' \
+      "$span" >&2
     exit 2
   fi
 done
@@ -500,6 +527,8 @@ require_generated_mm_stream() {
   local inst32="$mm_artifact/mm.inst32"
   local bits
   local word
+  local expected_words=()
+  local actual_words=()
 
   if [[ ! -s $inst32 ]]; then
     printf 'ERROR: generated MM instruction stream is missing: %s\n' \
@@ -513,12 +542,33 @@ require_generated_mm_stream() {
       exit 2
     fi
     printf -v word '%08x' "$((2#$bits))"
-    require_word "$txt" "$word"
+    expected_words+=("$word")
   done < "$inst32"
+  if [[ ${#expected_words[@]} -ne 10 || ${expected_words[9]} != 7000000b ]]; then
+    printf 'ERROR: producer MM stream must have ten commands ending in PSYNC\n' >&2
+    exit 2
+  fi
+  # 只提取实际链接的上游函数，逐条比较，不能只证明每个字在 ELF 中出现过。
+  while IFS= read -r word; do
+    if (( (16#$word & 127) == 11 || (16#$word & 127) == 43 )); then
+      actual_words+=("$word")
+    fi
+  done < <(awk '
+    /<hpu_program_mm>:/ { in_program = 1; next }
+    in_program && /^[[:xdigit:]]+ <[^>]+>:/ { in_program = 0 }
+    in_program && /^[[:space:]]*[[:xdigit:]]+:/ && length($2) == 8 {
+      print tolower($2)
+    }
+  ' "$txt")
+  if [[ ${#actual_words[@]} -ne 10 || ${actual_words[*]} != "${expected_words[*]}" ]]; then
+    printf 'ERROR: linked hpu_program_mm differs from producer instruction stream: %s\n' \
+      "$txt" >&2
+    exit 2
+  fi
   local sync_count
   sync_count=$(grep -Eic '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000000b[[:space:]]' "$txt" || true)
-  if [[ $sync_count -ne 2 ]]; then
-    printf 'ERROR: MM testcase must contain mod-table and final PSYNC: %s\n' "$txt" >&2
+  if [[ $sync_count -ne 1 ]]; then
+    printf 'ERROR: MM testcase must contain only the producer final PSYNC: %s\n' "$txt" >&2
     exit 2
   fi
 }
@@ -564,13 +614,16 @@ require_mm_fixture() {
         "$elf" >&2
       exit 2
     }
-  for symbol in mm_load_mod mm_compute; do
-    "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
-      "[[:space:]][Tt][[:space:]]+${symbol}$" || {
-        printf 'ERROR: %s does not link the AM MM phase %s\n' "$elf" "$symbol" >&2
-        exit 2
-      }
-  done
+  "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
+    '[[:space:]][Tt][[:space:]]+hpu_program_mm$' || {
+      printf 'ERROR: %s does not link the upstream MM program\n' "$elf" >&2
+      exit 2
+    }
+  if "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
+      '[[:space:]](mm_load_mod|mm_compute)$'; then
+    printf 'ERROR: obsolete AM MM phase is linked: %s\n' "$elf" >&2
+    exit 2
+  fi
 }
 
 reject_mm_only_fixture() {
@@ -645,23 +698,23 @@ for elf in "${elfs[@]}"; do
 
   case "$name" in
     01_dload_hold|03_dload_poll_mmio)
-      require_word "$txt" 5a80012b ;;
+      require_word "$txt" 00b5202b ;;
     04_psync_irq)
       require_word "$txt" 7000000b ;;
     05_dload_psync_irq)
-      require_word "$txt" 5a80012b
+      require_word "$txt" 00b5202b
       require_word "$txt" 7000000b ;;
     06_dload_dstore_poll_mmio)
-      require_word "$txt" 5a80012b
-      require_word "$txt" 5a8002ab
+      require_word "$txt" 00b5202b
+      require_word "$txt" 00b5502b
       # 06 必须是真正的无 PSYNC 状态轮询，不能因构建成功而漏掉测试意图。
       if grep -Eq '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000000b([[:space:]]|$)' "$txt"; then
         printf 'ERROR: pure MMIO case 06 contains PSYNC: %s\n' "$txt" >&2
         exit 2
       fi ;;
     07_dload_dstore_psync_irq)
-      require_word "$txt" 5a80012b
-      require_word "$txt" 5a8002ab
+      require_word "$txt" 00b5202b
+      require_word "$txt" 00b5502b
       require_word "$txt" 7000000b ;;
     08_dload_compute_dstore_psync_irq|09_dload_compute_dstore_poll_mmio)
       require_mm_fixture "$elf"
