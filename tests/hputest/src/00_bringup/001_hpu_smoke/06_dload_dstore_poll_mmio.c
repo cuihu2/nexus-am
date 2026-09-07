@@ -12,6 +12,7 @@
 int main(void) {
     case_start(__FILE__);
     uint32_t status = 0U;
+    uint32_t irq = 0U;
     unsigned timeout;
 
     if (fixture_validate() != 0) return case_fail(__FILE__, __LINE__);
@@ -42,13 +43,21 @@ int main(void) {
     if (dstore(P0, LINE_OUT, RNS_LINES) != 0) return case_fail(__FILE__, __LINE__);
     psync();
 
-    /* CPU 不开中断，只轮询 MMIO 完成电平。 */
+    /*
+     * CPU 不开中断；先读 IRQ，再采样 STATUS，不能复用通知到达前的 BUSY。
+     * 两个寄存器不是原子快照，IRQ 已到但 BUSY 仍为 1 时继续轮询。
+     */
     for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
+        irq = csr_read(CSR_IRQ);
         status = csr_read(CSR_STATUS);
-        if ((status & STATUS_FAULT) != 0U) return case_fail(__FILE__, __LINE__);
-        if ((csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U) break;
+        if ((status & STATUS_FAULT) != 0U ||
+            (csr_read(CSR_FAULT) & FAULT_VALID) != 0U)
+            return case_fail(__FILE__, __LINE__);
+        if ((irq & IRQ_LEVEL) != 0U &&
+            (status & (STATUS_VALID | STATUS_BUSY)) == STATUS_VALID)
+            break;
     }
-    if (timeout == TIMEOUT || (status & STATUS_BUSY) != 0U) return case_fail(__FILE__, __LINE__);
+    if (timeout == TIMEOUT) return case_fail(__FILE__, __LINE__);
 
     csr_write(CSR_IRQ, IRQ_LEVEL);
     for (timeout = 0U; timeout < TIMEOUT / 16U; ++timeout) {

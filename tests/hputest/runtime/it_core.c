@@ -179,10 +179,16 @@ int wait_irq(void) {
     unsigned timeout;
 
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U) {
+        /* 完成电平与 BUSY 独立同步，通知先到时不能提前返回。 */
+        uint32_t irq = hpu_csr_read32(HPU_CSR_IRQ_ADDR);
+        uint32_t status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
+        if ((status & HPU_STATUS_FAULT_VALID) != 0U ||
+            (hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U) {
             return STEP_ERR_FAULT;
         }
-        if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) != 0U)
+        if ((irq & HPU_IRQ_LEVEL) != 0U &&
+            (status & (HPU_STATUS_WINDOW_VALID | HPU_STATUS_BUSY)) ==
+                HPU_STATUS_WINDOW_VALID)
             return STEP_OK;
     }
     return STEP_ERR_TIMEOUT;

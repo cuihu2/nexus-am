@@ -11,11 +11,13 @@ static inline int completion_wait(void) {
             (csr_read(CSR_FAULT) & FAULT_VALID) != 0U)
             return 1;
         if ((csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U) {
-            /* 收到完成后重新采样状态，不能把通知到达前的busy读值当成结果。 */
+            /* IRQ 与 BUSY 独立同步：通知到达后重新采样，仍忙则继续等。 */
             status = csr_read(CSR_STATUS);
-            return (status & (STATUS_VALID | STATUS_BUSY | STATUS_FAULT)) !=
-                       STATUS_VALID ||
-                   (csr_read(CSR_FAULT) & FAULT_VALID) != 0U;
+            if ((status & STATUS_FAULT) != 0U ||
+                (csr_read(CSR_FAULT) & FAULT_VALID) != 0U ||
+                (status & STATUS_VALID) == 0U)
+                return 1;
+            if ((status & STATUS_BUSY) == 0U) return 0;
         }
     }
     return 1;
