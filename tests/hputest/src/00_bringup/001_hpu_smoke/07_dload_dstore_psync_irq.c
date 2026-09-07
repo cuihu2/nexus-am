@@ -8,7 +8,7 @@
 
 /*
  * 目的：使用 PSYNC 中断完成 DDR -> HPU -> DDR 回环，并逐项自检。
- * 数据路径与 06 相同，唯一差别是 CPU 的完成等待方式。
+ * 本例连续发出 DLOAD/DSTORE 后等中断；06 则分步轮询 DMA 状态，不发 PSYNC。
  */
 int main(void) {
     case_start(__FILE__);

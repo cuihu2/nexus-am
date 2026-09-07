@@ -41,6 +41,7 @@ verify-inline-asm: prepare-inline-asm-mm
 	  scripts/verify-inline-asm-encodings.sh "$(INLINE_ASM_ROOT)"
 	@python3 scripts/test-mm-phases.py "$(HPU_GENERATED_ROOT)/inline-asm/mm/mm.c"
 	@python3 scripts/test-completion.py
+	@python3 scripts/test-dma-poll.py
 	@python3 scripts/test-runtime-wait.py
 
 validate:

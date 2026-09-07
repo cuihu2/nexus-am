@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """用主机编译器运行实际 completion.h，验证 MMIO 完成事件的状态处理。
 
-另外编译实际 06/09 用例，替换硬件访问和数据接口，检查其完成轮询。
+另外编译实际 09 用例，替换硬件访问和数据接口，检查其 PSYNC 完成轮询。
+06 的纯 STATUS 同步由 test-dma-poll.py 单独验证。
 不模拟 RISC-V、PLIC、HPU 运算或实际跨时钟域时序。
 """
 
@@ -396,8 +397,7 @@ class CompletionTests(unittest.TestCase):
         case_source.write_text(CASE_HARNESS, encoding="utf-8")
         cls.case_binaries = []
         smoke = TEST_ROOT / "src" / "00_bringup" / "001_hpu_smoke"
-        for name in ("06_dload_dstore_poll_mmio",
-                     "09_dload_compute_dstore_poll_mmio"):
+        for name in ("09_dload_compute_dstore_poll_mmio",):
             binary = root / name
             subprocess.run(
                 shlex.split(os.environ.get("HOST_CC", "cc"))

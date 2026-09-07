@@ -651,7 +651,15 @@ for elf in "${elfs[@]}"; do
     05_dload_psync_irq)
       require_word "$txt" 5a80012b
       require_word "$txt" 7000000b ;;
-    06_dload_dstore_poll_mmio|07_dload_dstore_psync_irq)
+    06_dload_dstore_poll_mmio)
+      require_word "$txt" 5a80012b
+      require_word "$txt" 5a8002ab
+      # 06 必须是真正的无 PSYNC 状态轮询，不能因构建成功而漏掉测试意图。
+      if grep -Eq '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000000b([[:space:]]|$)' "$txt"; then
+        printf 'ERROR: pure MMIO case 06 contains PSYNC: %s\n' "$txt" >&2
+        exit 2
+      fi ;;
+    07_dload_dstore_psync_irq)
       require_word "$txt" 5a80012b
       require_word "$txt" 5a8002ab
       require_word "$txt" 7000000b ;;

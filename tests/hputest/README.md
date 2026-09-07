@@ -83,18 +83,29 @@ and must be stopped by the simulation cycle limit.
 | `03_dload_poll_mmio.c` | 64-line DLOAD and poll MMIO STATUS busy | Return 0/1 |
 | `04_psync_irq.c` | Idle PSYNC; PLIC handler handles the completion IRQ | Return 0/1 |
 | `05_dload_psync_irq.c` | DLOAD + PSYNC; PLIC handler sets `volatile sync_flag` | Return 0/1 |
-| `06_dload_dstore_poll_mmio.c` | DMA loopback; poll MMIO completion; compare 4096 coefficients | Return 0/1 |
-| `07_dload_dstore_psync_irq.c` | Same DMA loopback; wait by PSYNC interrupt; compare 4096 coefficients | Return 0/1 |
+| `06_dload_dstore_poll_mmio.c` | DLOAD → poll STATUS busy 1→0 → DSTORE → poll STATUS busy 1→0; compare 4096 coefficients; no PSYNC | Return 0/1 |
+| `07_dload_dstore_psync_irq.c` | DLOAD + DSTORE + PSYNC; wait by PLIC interrupt; compare 4096 coefficients | Return 0/1 |
 | `08_dload_compute_dstore_psync_irq.c` | Producer MM program; PSYNC interrupt; PMUL/golden/C check | Return 0/1 |
 | `09_dload_compute_dstore_poll_mmio.c` | Same producer MM program; poll MMIO completion; PMUL/golden/C check | Return 0/1 |
 
 Cases 04 and 05 both test interrupt completion, but they are not duplicates:
 case 04 submits only an idle PSYNC and isolates the interrupt path; case 05
-places a real 64-line DLOAD before PSYNC.  Cases 06 and 07 submit the same
-loopback workload and differ only in CPU synchronization: case 06 polls the
-MMIO register file, while case 07 waits for PLIC source 257.  A `csrr`-based
+places a real 64-line DLOAD before PSYNC. Cases 06 and 07 check the same
+loopback data, but deliberately use different command sequences. Case 06
+finishes DLOAD through MMIO STATUS polling before submitting DSTORE, then
+polls DSTORE separately. It issues no PSYNC, never accesses `CSR_IRQ`, and
+does not call the PLIC interrupt path. Case 07 submits DLOAD and DSTORE
+without a software wait between them, then uses PSYNC and PLIC source 257
+for completion. A `csrr`-based
 HPU-status case is deliberately absent because the current hardware defines
 no architectural HPU CSR number, privilege level, or idle encoding.
+
+06 的每个阶段都单独观察 `BUSY=1` 后再等待 `BUSY=0`，并重新清零
+`saw_busy`。这样既不会把命令尚未启动时的初始空闲当作完成，也不会把
+DLOAD 与 DSTORE 之间的 DMA 空闲间隔当作 DSTORE 完成。若 CPU 未观察到
+某阶段的忙状态，用例会保守地超时报失败；这表示未取得完成证据，不能单凭
+该结果认定 RTL 有错。07 的中断同步、09 的模表屏障和计算阶段 PSYNC 后
+MMIO 完成轮询，以及各用例的超时上限，本次均不改变。
 
 For `LINKNAN_HPU_IT` builds, the `riscv64-xs` AM startup uses the LinkNan PLIC
 window at `0x04000000`.  Before entering S-mode it establishes an
@@ -132,8 +143,10 @@ line 256     configured window end (lines 193..255 remain unused)
 ```
 
 Cases 06, 07, 08, and 09 initialize the whole output region with poison before
-issuing HPU commands.  After terminal PSYNC they invalidate 16 KiB and compare
-all 4096 coefficients against immutable ELF data.  Cases 08 and 09 also
+issuing HPU commands. Case 06 waits for DSTORE's observed BUSY 1→0 transition;
+cases 07, 08, and 09 wait for their terminal PSYNC completion. Only then do
+they invalidate 16 KiB and compare all 4096 coefficients against immutable
+ELF data. Cases 08 and 09 also
 recompute every
 pointwise product as `(uint64_t)A[i] * B[i] % 50061313` in C, so both the
 producer golden and the HPU result must agree with an independent oracle.
@@ -227,8 +240,10 @@ The smoke sequence deliberately checks configuration in layers:
 4. Case 03 observes DLOAD `busy` go high and then low.  Case 04 isolates the
    idle-PSYNC interrupt path, while case 05 proves DLOAD followed by PSYNC can
    reach the same interrupt handler.
-5. Cases 06 and 07 close the DMA path with the same 4096-coefficient loopback,
-   using MMIO polling and interrupt synchronization respectively.  Cases 08
+5. Case 06 closes the DMA path by polling each DMA transfer's BUSY 1→0
+   transition separately, without PSYNC or IRQ-register accesses. Case 07
+   submits DLOAD + DSTORE + PSYNC and waits for a CPU interrupt. Both compare
+   all 4096 loopback coefficients. Cases 08
    and 09 add the same PMUL program and three-way comparison; case 08 waits by
    interrupt, while case 09 polls the MMIO completion level.
 

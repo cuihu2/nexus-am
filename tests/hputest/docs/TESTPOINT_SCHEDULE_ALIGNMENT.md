@@ -16,7 +16,7 @@
 | 性能测试 | `src/06_performance` | 6 | `HPU_IT_DIR_PERF_001..006` |
 | 应用测试 | `src/07_full_application` | 1 | `HPU_IT_DIR_APP_001` |
 
-以上共 49 个迁移测试点。`src/00_bringup` 下的 7 个冒烟用例和 2 个
+以上共 49 个迁移测试点。`src/00_bringup` 下的 9 个冒烟用例和 2 个
 `main()` 返回值探针是上板/仿真辅助程序，不应在甘特图中重复计为这 49 个 IT
 测试点。测试是否已经具备真实指令和 self-check，还必须同时查看 `cases.tsv` 的
 `qualifier`；`blocked-not-issued` 不能因为排进甘特图就改写成已完成。
@@ -34,8 +34,8 @@
 | 03 | `03_dload_poll_mmio.c` | DLOAD，轮询 MMIO STATUS 的 busy 由 0→1→0 |
 | 04 | `04_psync_irq.c` | 空闲 PSYNC，以 PLIC source 257 中断完成 |
 | 05 | `05_dload_psync_irq.c` | DLOAD+PSYNC，以 PLIC 中断和 `volatile` flag 完成 |
-| 06 | `06_dload_dstore_poll_mmio.c` | DLOAD+DSTORE+PSYNC，以 MMIO 轮询完成并逐 4096 系数比对 |
-| 07 | `07_dload_dstore_psync_irq.c` | 同一回环数据流，以 PSYNC 中断完成并逐 4096 系数比对 |
+| 06 | `06_dload_dstore_poll_mmio.c` | DLOAD→MMIO 等待 BUSY 1→0→DSTORE→MMIO 等待 BUSY 1→0，逐 4096 系数比对；无 PSYNC |
+| 07 | `07_dload_dstore_psync_irq.c` | 连续提交 DLOAD+DSTORE+PSYNC，以 CPU 中断完成并逐 4096 系数比对 |
 | 08 | `08_dload_compute_dstore_psync_irq.c` | producer PMUL 程序，以 PSYNC 中断完成并逐 4096 系数与 golden/C oracle 比对 |
 | 09 | `09_dload_compute_dstore_poll_mmio.c` | 同一 producer PMUL 程序，以 MMIO 完成电平轮询并逐 4096 系数与 golden/C oracle 比对 |
 
@@ -44,12 +44,24 @@
 - 03 只验证 DLOAD 的 MMIO busy 轮询；
 - 04 单独隔离空闲 PSYNC 的中断路径；
 - 05 在 DLOAD 后验证 PSYNC 中断；
-- 06 与 07 使用完全相同的数据回环，仅 CPU 同步方式分别是 MMIO 和中断；
+- 06 分别轮询 DLOAD、DSTORE 的 MMIO STATUS；不发 PSYNC、不访问 `CSR_IRQ`、不调用 PLIC 中断路径；
+- 07 连续提交 DLOAD、DSTORE，再以 PSYNC 中断完成；与 06 比较相同回环数据，但命令序列和等待位置不同；
 - 08 增加 producer 生成的 PMUL 计算闭环。
 - 09 与 08 使用同一计算闭环，只把CPU完成等待从PLIC中断改为MMIO轮询。
 
 中断用例公共层使用 `csrs/csrc sie`，只是在 S-mode 打开/关闭标准外部中断，
 不是第二种 HPU 状态寄存器访问方式。
+
+06 必须在 DLOAD 完成后才提交 DSTORE，并为每次 DMA 重新清零 `saw_busy`，
+各自观察忙状态由 1→0。MMIO 的 BUSY 来自 DMA busy，不能把 DLOAD 结束后的
+空闲间隔作为整个回环完成的证据，也不能在命令刚提交时第一次读到 BUSY=0
+就通过。如果某一阶段的 BUSY=1 未被 CPU 采到，保守地等待至超时报失败；
+该结果不单独证明 RTL 错误，需要结合对应阶段波形复验。
+
+本次只纠正 06 的测试语义。07 保留 PSYNC/CPU 中断，09 保留模表加载屏障
+及计算阶段 PSYNC 后 MMIO 轮询，均不调整超时上限。旧 06 的 IRQ/BUSY
+竞态修复记录保留在 [`MMIO_COMPLETION_RACE.md`](MMIO_COMPLETION_RACE.md)，
+不能再把其中的 PSYNC+MMIO 流程当成当前 06 的要求。
 
 ## 3. IT 回传失败记录的解释边界
 
