@@ -153,6 +153,15 @@ producer golden and the HPU result must agree with an independent oracle.
 Any mismatch or other detected failure returns 1 from `main()`; a completed
 self-check returns 0.  UART records expose that decision but do not replace it.
 
+### 06/07/08 失败日志定位
+
+失败输出保留文件名和行号，并补充触发条件：配置寄存器的 actual/expected、
+初始化/DLOAD/DSTORE/计算/中断等待阶段，以及实际采样的 STATUS/FAULT/IRQ。
+06 的超时区分 `busy_not_observed`（未观察到忙）和 `busy_not_cleared`（忙不退出）。
+数据自检只报告首个错误系数的索引、实际值和期望值，并区分 golden/C 与 HPU/C
+不一致。中断处理程序只缓存诊断信息，由主程序在失败后打印，不重复 claim PLIC。
+这些日志不放宽任何判据，也不在正常轮询的每一轮或中断处理函数中打印。
+
 ## HPU instruction source
 
 GNU as does not natively recognize HPU mnemonics.  The
