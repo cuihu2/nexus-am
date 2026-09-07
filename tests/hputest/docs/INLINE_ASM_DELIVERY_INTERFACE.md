@@ -10,17 +10,16 @@
 
 ```text
 tests/hputest/third_party/inline-asm
-branch HPU_SEAL_manual_0905
-commit 62985e45702e9130a0aa39bca6140a3c4fd6c72a
+branch main
+commit 04d1825bdbce4dc649a683a722e59cf100c1a686
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
 固定的 gitlink，不自动追踪远端分支最新提交。
 
-这是按 2026-09-05 PDF §3.2 修正 STG 编码的独立试验分支，供 IT 试跑用例。
-它基于原 `HPU_SEAL` 的回退提交 `5404959777c07c25b5b6a65e66020c74740f2e3f`
-恢复编码修正；原 `HPU_SEAL` 分支仍保持回退状态，本次不改动原分支。
-试验分支的源码内容与原编码修正提交 `45b51d5` 相同。
+当前引用上游 `main` 的“修复 ntt dma 的 encode 问题”提交，接收其 STG 与 DMA
+编码修正。AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
+`HPU_SEAL` 保留为历史来源，本次不修改它们。
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
 被 `.gitignore` 排除：
@@ -50,15 +49,17 @@ make -C tests/hputest prepare-inline-asm-mm JOBS=4
 
 该 target 调用 `scripts/prepare-inline-asm-mm.sh`，构建生产者的
 `inline_asm_codegen`、`inline_asm_encode_outputs` 和 `hpu_reference_vectors`。
-生成前还会运行生产者的 `hpu_encode_self_test`，覆盖固定机器码、26-bit precode、
-STG 全字段组合及可执行 C 中的 `.word`。
+生成前还会运行生产者的 `hpu_encode_self_test`，覆盖固定 STG/DMA 等机器码、
+26-bit precode 及可执行 C 中的 `.word`。当前上游自测不是此前试验分支的
+16,384 组 STG 全字段穷举，不能继续把那个测试数量当作本版本的验证结果。
 三个可执行文件在 `OUTPUT_ROOT/inline-asm-producer/<producer_commit>/` 中运行，
 产生该工作目录下的 `output/`、`outputs/` 和 MM 数据表；Nexus-AM importer
 逐字段检查选中的 MM 契约，再将交付内容导入
 `HPU_GENERATED_ROOT/inline-asm/mm`。这使接收端不依赖未使用算子的整包交付流程，
 也不复用 submodule 源码目录中可能残留的旧生成数据。
-构建配置显式关闭 SEAL 集成、差分 oracle 和旧固定 profile 测试选项；这些可选
-流程不属于本次 MM 用例的数据生成依赖。
+构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
+`HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
+当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
 
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
@@ -71,7 +72,7 @@ STG 全字段组合及可执行 C 中的 `.word`。
 
 生产者还会生成其他算子和 twiddle。Nexus-AM 不把整个大镜像链接进
 ELF，只严格选择 MM 冒烟所需的四个数据文件和一个程序。
-引用 `HPU_SEAL_manual_0905` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
+引用 `main` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
 4096 系数、1 RNS 分量的 MM 路径。
 
 ## 3. 数据文件和人工可读表格
@@ -106,7 +107,7 @@ outputs/mm/test_data/hardware/
 `HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware/`。
 
 每个 `.u32.bin` 的人工可读伴随文件由 `hardware_manifest.csv` 的
-`readable_path` 字段指定；当前固定试验分支的 MM 路径生成 `.u32.dec.txt` 十进制文本。
+`readable_path` 字段指定；当前固定版本的 MM 路径生成 `.u32.dec.txt` 十进制文本。
 接收端不再猜测或写死展示文件后缀。生产者还给出：
 
 - `test_data/params.json`：N、operation、domain、模数；
@@ -217,6 +218,30 @@ GPR[x11] = line_count
 `dma_relocation_manifest.csv` 必须逐条写明 custom1 的 instruction index、DMA
 index、方向、对象、word、`rs1=x10` 和 `rs2=x11`。当前 MM 有四条 DMA。
 
+当前 `main` 的 32-bit DMA 字段是：
+
+```text
+inst32 = (rs2 << 27) | (rs1 << 22) | (flag << 17) | (obj << 10)
+       | (operation << 8) | (dir << 7) | 0x2B
+DLOAD: dir=0, operation=type
+DSTORE: dir=1, operation=rel << 1
+custom0 cmd26 = inst32 >> 7
+custom1 cmd26 = (1 << 25) | (inst32 >> 7)
+```
+
+cmd26 不再丢弃 GPR 编号后重排 DMA 位段，必须保留 `inst32[31:7]`。
+当前 MM 的四笔 DMA 固定为：
+
+| DMA | inst32 | cmd26 | line offset/count |
+| --- | --- | --- | --- |
+| 模表 DLOAD | `0x5A820E2B` | `0x2B5041C` | 192 / 1 |
+| 输入 A DLOAD | `0x5A80052B` | `0x2B5000A` | 0 / 64 |
+| 输入 B DLOAD | `0x5A80092B` | `0x2B50012` | 64 / 64 |
+| 输出 DSTORE（rel=1） | `0x5A8002AB` | `0x2B50005` | 128 / 64 |
+
+这是指令字的位段更新，不是运行时 offset/count ABI 的变化。旧 ELF/BIN 不会随
+submodule 更新自动改变，IT 复测必须替换成重新构建的文件。
+
 生产者生成的 `mm.c` 在每条 custom1 前都执行等价代码：
 
 ```c
@@ -298,13 +323,15 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 ## 10. 当前边界
 
 当前 Nexus-AM 接收的完整程序闭环只覆盖 `MM/PMUL, N=4096, Q=1`，不代表
-`HPU_SEAL_manual_0905` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
+`main` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
 迁移 IT 中的基础
 CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
 program/data/golden/relocation 契约的 24 个测试点被标成
 `blocked-not-issued`，不发明指令并固定返回 1。GitHub Actions 的绿色结果也只证明
 生成、导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS
 失败记录应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。
+06、07、08 已有 IT 失败反馈；本次接收上游编码修正后仍需重新运行这些用例，
+没有新一轮日志和波形前，不将其标为 PASS，也不把编码修正认定为全部失败的根因。
 
 STG 编码按用户指定的 2026-09-05 手册 §3.2 字段公式执行：`pdata` 同时写入
 `[27:25]` 和 `[24:22]`，`ptwid` 写入 `[16:14]`，`[21:17]` 为 0。

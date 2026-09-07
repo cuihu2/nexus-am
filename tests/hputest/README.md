@@ -45,7 +45,7 @@ runtime/                       # mechanical helpers, never whole scenarios
 └── it_compute.c               # coefficient-wise C reference comparisons
 
 third_party/
-└── inline-asm/                 # pinned HPU_SEAL_manual_0905 trial branch
+└── inline-asm/                 # pinned main branch, including STG/DMA fixes
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
@@ -145,10 +145,11 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 GNU as does not natively recognize HPU mnemonics.  The
 `third_party/inline-asm` git submodule therefore pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`62985e45702e9130a0aa39bca6140a3c4fd6c72a` from its
-[`HPU_SEAL_manual_0905` branch](https://github.com/cuihu2/inline-asm/tree/HPU_SEAL_manual_0905).
-This separate trial branch reapplies the September 5 STG encoding fix;
-the original `HPU_SEAL` branch remains reverted and is not modified by this trial.
+`04d1825bdbce4dc649a683a722e59cf100c1a686` from its
+[`main` branch](https://github.com/cuihu2/inline-asm/tree/main).
+This upstream commit includes the STG and DMA encoding fixes. AM no longer
+uses the `HPU_SEAL_manual_0905` trial branch; this switch does not modify
+that historical branch or `HPU_SEAL`.
 The branch recorded in `.gitmodules` identifies the upstream source; normal
 builds and CI use the committed gitlink, not the latest remote branch head.
 Before
@@ -183,17 +184,26 @@ Other arithmetic testcases also show this barrier explicitly in main.
 `completion_wait()` and `completion_clear()` only wait/acknowledge; they
 never issue an HPU instruction. See
 [manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the selected
-STG encoding and the remaining object-limit ambiguities.
+STG/DMA encodings and the remaining object-limit ambiguities.
 
 This branch switch consumes the existing fixed MM path (`N=4096`, one RNS
-component, `q=50061313`). It does not enable the branch's complete SEAL/CKKS
-application flow. STG words now follow the 2026-09-05 manual section 3.2:
+component, `q=50061313`). It does not enable a complete SEAL/CKKS
+application flow. STG words follow the 2026-09-05 manual section 3.2:
 `pdata` occupies both bits [27:25] and [24:22], while `ptwid` occupies [16:14].
 The stale example words are superseded by that field formula. Independent
-word/precode checks prevent falling back to the old layout. The previously
+word/precode checks prevent falling back to the old layout. DMA words now
+place `rs2` in [31:27], `rs1` in [26:22], flag in bit 17, object in [12:10],
+operation in [9:8], and direction in bit 7. DSTORE operation is `rel << 1`.
+For both custom opcodes, cmd26 retains the complete `inst32 >> 7`; custom1
+additionally sets bit 25. The runtime `x10=line offset`, `x11=line count`
+ABI is unchanged. The previously
 blocked transform/application cases stay blocked until their own complete
 program/data/golden contracts are validated; fixing encoding alone does not
 qualify a functional testcase.
+
+IT has reported failures in cases 06, 07, and 08. They need new ELF/BIN
+files built with this pinned producer and another IT run; switching the
+encoder does not establish the cause of those failures or make them PASS.
 
 The simpler cases still use one-operation C adapters, but their named words
 are generated at build time by the same real encoder.  The tracked

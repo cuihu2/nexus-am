@@ -22,21 +22,21 @@ EXPECTED_IMAGES = {
 }
 
 EXPECTED_DMA = [
-    (0, 0, "dload", 3, 2, 1, "0x00B5272B"),
-    (2, 1, "dload", 1, 1, 0, "0x00B5122B"),
-    (3, 2, "dload", 2, 1, 0, "0x00B5142B"),
-    (7, 3, "dstore", 0, 1, 0, "0x00B5502B"),
+    (0, 0, "dload", 3, 2, 1, "0x5A820E2B"),
+    (2, 1, "dload", 1, 1, 0, "0x5A80052B"),
+    (3, 2, "dload", 2, 1, 0, "0x5A80092B"),
+    (7, 3, "dstore", 0, 1, 0, "0x5A8002AB"),
 ]
 
 EXPECTED_MM_WORDS = [
-    0x00B5272B,
+    0x5A820E2B,
     0x6000000B,
-    0x00B5122B,
-    0x00B5142B,
+    0x5A80052B,
+    0x5A80092B,
     0x2040800B,
     0x8040000B,
     0x8080000B,
-    0x00B5502B,
+    0x5A8002AB,
     0x80C0000B,
     0x7000000B,
 ]
@@ -138,6 +138,15 @@ def validate_program(source: Path) -> None:
     words = [int(line, 2) for line in bits]
     if words != EXPECTED_MM_WORDS:
         fail("mm.inst32 does not match the reviewed executable MM program")
+
+    # main/04d1825 起 custom1 与 custom0 一样直通 payload；DMA 额外置 kind。
+    # 必须保留 rs1/rs2 编号，不能继续接受旧版丢弃高位的 cmd26。
+    commands = [int(line, 2) for line in
+                (source / "mm.cmd26").read_text().splitlines() if line.strip()]
+    expected_commands = [(word >> 7) | (1 << 25 if word & 0x7F == 0x2B else 0)
+                         for word in EXPECTED_MM_WORDS]
+    if commands != expected_commands:
+        fail("mm.cmd26 does not preserve the reviewed instruction payload")
 
     generated_c = (source / "mm.c").read_text(encoding="utf-8")
     generated_h = (source / "mm.h").read_text(encoding="utf-8")

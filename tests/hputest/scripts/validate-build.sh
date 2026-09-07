@@ -645,15 +645,15 @@ for elf in "${elfs[@]}"; do
 
   case "$name" in
     01_dload_hold|03_dload_poll_mmio)
-      require_word "$txt" 00b5102b ;;
+      require_word "$txt" 5a80012b ;;
     04_psync_irq)
       require_word "$txt" 7000000b ;;
     05_dload_psync_irq)
-      require_word "$txt" 00b5102b
+      require_word "$txt" 5a80012b
       require_word "$txt" 7000000b ;;
     06_dload_dstore_poll_mmio|07_dload_dstore_psync_irq)
-      require_word "$txt" 00b5102b
-      require_word "$txt" 00b5502b
+      require_word "$txt" 5a80012b
+      require_word "$txt" 5a8002ab
       require_word "$txt" 7000000b ;;
     08_dload_compute_dstore_psync_irq|09_dload_compute_dstore_poll_mmio)
       require_mm_fixture "$elf"

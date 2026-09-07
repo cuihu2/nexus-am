@@ -3,14 +3,17 @@
 import importlib.util
 from pathlib import Path
 import re
+import shutil
 import sys
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location(
     "mm_import", Path(__file__).with_name("import-inline-asm-mm.py"))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-source = Path(sys.argv.pop(1)).read_text(encoding="utf-8")
+source_path = Path(sys.argv.pop(1))
+source = source_path.read_text(encoding="utf-8")
 
 
 def words(text):
@@ -40,6 +43,22 @@ class PhaseTests(unittest.TestCase):
     def test_changed_instruction_is_rejected(self):
         with self.assertRaises(RuntimeError):
             module.render_mm_phases(source.replace('0x6000000B', '0x6000400B'))
+
+    def test_stale_dma_precode_is_rejected(self):
+        # 使用真实交付文件，只破坏 cmd26 中的 GPR 字段，确保不能混用旧格式。
+        build = Path(__file__).resolve().parents[1] / "build"
+        build.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="mm-precode-", dir=build) as tmp:
+            root = Path(tmp)
+            for name in ("mm.c", "mm.h", "mm.asm", "mm.inst32", "mm.cmd26",
+                         "dma_relocation_manifest.csv"):
+                shutil.copy2(source_path.parent / name, root / name)
+            module.validate_program(root)
+            commands = (root / "mm.cmd26").read_text().splitlines()
+            commands[0] = f"{int(commands[0], 2) & ~(0x3FF << 15):026b}"
+            (root / "mm.cmd26").write_text("\n".join(commands) + "\n")
+            with self.assertRaisesRegex(RuntimeError, "mm.cmd26"):
+                module.validate_program(root)
 
 
 if __name__ == "__main__":

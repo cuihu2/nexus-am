@@ -78,15 +78,13 @@ required_outputs=(
 echo "[hputest] generating selected inline-asm MM inputs at $producer_commit"
 cmake -S "$inline_asm_root" -B "$cmake_build" \
   -DBUILD_TESTING=ON \
-  -DHPU_ENABLE_SEAL_INTEGRATION=OFF \
   -DHPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE=OFF \
   -DHPU_ENABLE_SEAL_BFV_ORACLE=OFF \
-  -DHPU_ENABLE_LEGACY_FIXED_PROFILE_TESTS=OFF \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$cmake_build" --parallel "$jobs" --target \
   inline_asm_codegen inline_asm_encode_outputs hpu_reference_vectors \
   hpu_encode_self_test
-# 先验证手册固定向量、STG 全字段和生成 C 的机器码，再接收生产者交付。
+# 先验证生产者的 STG/DMA 固定向量与生成 C 的机器码，再接收交付。
 "$cmake_build/test/encode/hpu_encode_self_test"
 (
   cd "$producer_work"
