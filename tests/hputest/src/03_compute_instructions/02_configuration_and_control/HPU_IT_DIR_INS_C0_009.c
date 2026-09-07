@@ -1,3 +1,4 @@
+#include <hpu/completion.h>
 #include <hpu/result.h>
 #include <hpu/steps.h>
 
@@ -36,10 +37,18 @@ int main(void) {
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
     if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
 
-    /* Load A as p0, free p0, reuse p0 for B, and store the reused object. */
+    /* 先把 A 装入 p0，并确认 DLOAD 已完成，才能释放该对象。 */
     if (dload(P0, LINE_A, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
+
     if (pfree(P0) != 0) return case_fail(__FILE__, __LINE__);
+    /* 等待 PFREE 完成并清除本次完成事件，再用同一个对象号装入 B。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     if (dload(P0, LINE_B, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);
     if (dstore_release(P0, LINE_OUT, POLY_LINES) != 0)
@@ -61,7 +70,7 @@ int main(void) {
     if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
         return case_fail(__FILE__, __LINE__);
 
-    /* The output must be all 4096 words of B, not the freed A object. */
+    /* 输出的全部 4096 个系数应与 B 一致，以检查 p0 复用后的数据。 */
     if (check_regions(LINE_OUT, LINE_B,
         POLY_LINES) != 0) return case_fail(__FILE__, __LINE__);
     return case_pass(__FILE__);

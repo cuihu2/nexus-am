@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -47,6 +48,10 @@ int main(void) {
 
     /* Load the table, select record 6 (q1), then make PMUL observe q1. */
     if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
+    /* 模表装载完成并清除本阶段事件后，PMODLD 才能选取记录 6。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     if (pmodld(6U) != 0) return case_fail(__FILE__, __LINE__);
     if (dload(P0, LINE_A, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);

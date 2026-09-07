@@ -147,6 +147,21 @@ int irq_wait(void) {
     return 1;
 }
 
+int irq_rearm(void) {
+    _intr_write(0);
+    __asm__ volatile("fence iorw, iorw" : : : "memory");
+    uint32_t status = csr_read(CSR_STATUS);
+    if (irq_done != 1U || irq_error != 0U ||
+        (csr_read(CSR_IRQ) & IRQ_LEVEL) != 0U ||
+        (csr_read(CSR_FAULT) & FAULT_VALID) != 0U ||
+        (status & (STATUS_VALID | STATUS_BUSY | STATUS_FAULT)) != STATUS_VALID)
+        return 1;
+    irq_done = 0U;
+    __asm__ volatile("fence iorw, iorw" : : : "memory");
+    _intr_write(1);
+    return 0;
+}
+
 void irq_close(void) {
     _intr_write(0);
     __asm__ volatile("csrc sie, %0" : : "r"(SIE_SEIE) : "memory");

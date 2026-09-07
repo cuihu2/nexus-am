@@ -7,6 +7,8 @@
  */
 int irq_open(void);
 int irq_wait(void);
+/* 等待处理函数清除并complete上一轮中断后，重置完成标志供下一阶段使用。 */
+int irq_rearm(void);
 void irq_close(void);
 
 #endif

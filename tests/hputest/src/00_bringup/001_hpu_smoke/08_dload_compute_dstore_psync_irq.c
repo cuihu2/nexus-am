@@ -3,7 +3,8 @@
 #include <hpu/fixture.h>
 #include <hpu/irq.h>
 #include <hpu/layout.h>
-#include "mm.h"
+#include <hpu/sync.h>
+#include "mm_phases.h"
 
 /*
  * 目的：形成 DLOAD -> PMUL -> DSTORE -> PSYNC 的最小计算闭环。
@@ -53,11 +54,21 @@ int main(void) {
 
     if (irq_open() != 0) return case_fail(__FILE__, __LINE__);
 
-    /*
-     * producer 函数会在每条 custom1 前写 x10/x11，并且内部只发一次
-     * terminal PSYNC，因此 main 不再额外补发 PSYNC。
-     */
-    rc = hpu_program_mm(spans, HPU_PROGRAM_MM_DMA_COUNT);
+    /* 手册0.4：模表DLOAD后先同步。两个阶段保留producer的机器码和x10/x11绑定。 */
+    if (mm_load_mod(spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) {
+        irq_close();
+        return case_fail(__FILE__, __LINE__);
+    }
+    psync();
+    /* handler清电平并complete第一轮PLIC；重新准备标志后才允许第二轮。 */
+    if (irq_wait() != 0 || irq_rearm() != 0) {
+        irq_close();
+        return case_fail(__FILE__, __LINE__);
+    }
+    printf("[HPU][PHASE] mod-table synchronized; compute IRQ armed\n");
+
+    /* 第二阶段从PMODLD开始，包含输入DLOAD、PMUL、DSTORE和末尾PSYNC。 */
+    rc = mm_compute(spans, HPU_PROGRAM_MM_DMA_COUNT);
     if (rc == 0) rc = irq_wait();
     irq_close();
     if (rc != 0) return case_fail(__FILE__, __LINE__);

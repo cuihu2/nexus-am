@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -50,6 +51,10 @@ int main(void) {
     if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
 
     if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
+    /* 先同步并清除模表装载事件，再验证 PMODLD 与 CPU 指令交叉保序。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     for (command = 0U; command < 8U; ++command) {
         uint32_t cpu_value = seed ^ command;
 

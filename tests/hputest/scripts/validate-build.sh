@@ -404,7 +404,7 @@ if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
   exit 2
 fi
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
-                mm.c mm.h mm.asm mm.inst32 dma_relocation_manifest.csv; do
+                mm.c mm.h mm_phases.c mm_phases.h mm.asm mm.inst32 dma_relocation_manifest.csv; do
   if [[ ! -s $mm_artifact/$required ]]; then
     printf 'ERROR: selected inline-asm MM provenance omits %s\n' \
       "$required" >&2
@@ -515,6 +515,12 @@ require_generated_mm_stream() {
     printf -v word '%08x' "$((2#$bits))"
     require_word "$txt" "$word"
   done < "$inst32"
+  local sync_count
+  sync_count=$(grep -Eic '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000000b[[:space:]]' "$txt" || true)
+  if [[ $sync_count -ne 2 ]]; then
+    printf 'ERROR: MM testcase must contain mod-table and final PSYNC: %s\n' "$txt" >&2
+    exit 2
+  fi
 }
 
 require_main_return() {
@@ -558,12 +564,13 @@ require_mm_fixture() {
         "$elf" >&2
       exit 2
     }
-  "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
-    '[[:space:]][Tt][[:space:]]+hpu_program_mm$' || {
-      printf 'ERROR: %s does not link the producer hpu_program_mm entry\n' \
-        "$elf" >&2
-      exit 2
-    }
+  for symbol in mm_load_mod mm_compute; do
+    "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
+      "[[:space:]][Tt][[:space:]]+${symbol}$" || {
+        printf 'ERROR: %s does not link the AM MM phase %s\n' "$elf" "$symbol" >&2
+        exit 2
+      }
+  done
 }
 
 reject_mm_only_fixture() {

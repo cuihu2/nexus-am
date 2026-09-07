@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -48,6 +49,10 @@ int main(void) {
     /* custom1 DLOAD 模数表后，custom0 PMODLD(0) 是本例被观察命令。 */
     rc = dload_mod(LINE_MOD, 1U);
     if (rc != 0) return case_fail(__FILE__, __LINE__);
+    /* 模表装载完成并清除本阶段事件后，PMODLD 才能读取新模表。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     rc = pmodld(0U);
     if (rc != 0) return case_fail(__FILE__, __LINE__);
     psync();

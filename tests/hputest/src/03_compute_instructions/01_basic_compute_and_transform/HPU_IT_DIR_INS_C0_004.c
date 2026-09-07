@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -40,6 +41,10 @@ int main(void) {
 
     /* q0, A, B and accumulator p2 -> PMAC(p2=p2+p0*p1) -> DSTORE. */
     if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
+    /* 模表装载完成并清除本阶段事件后，PMODLD 才能读取新模表。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     if (pmodld(0U) != 0) return case_fail(__FILE__, __LINE__);
     if (dload(P0, LINE_A, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);

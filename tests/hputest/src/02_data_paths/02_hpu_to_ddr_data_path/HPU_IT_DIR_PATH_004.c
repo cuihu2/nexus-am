@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -45,6 +46,10 @@ int main(void) {
     /* 加载模数并选 context 0，再加载两个完整 RNS 分量。 */
     rc = dload_mod(LINE_MOD, 1U);
     if (rc != 0) return case_fail(__FILE__, __LINE__);
+    /* 模表装载完成并清除本阶段事件后，PMODLD 才能读取新模表。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     rc = pmodld(0U);
     if (rc != 0) return case_fail(__FILE__, __LINE__);
     rc = dload(P0, LINE_A, POLY_LINES);

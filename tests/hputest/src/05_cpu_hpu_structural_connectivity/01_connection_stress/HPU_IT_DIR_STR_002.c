@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -46,8 +47,11 @@ int main(void) {
     hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
     if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
 
-    /* One custom1 DLOAD followed by exactly eight queued custom0 commands. */
+    /* 先同步模表装载并清除事件，随后单独观察八条 custom0 命令的队列行为。 */
     if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     for (command = 0U; command < 8U; ++command) {
         if (pmodld(0U) != 0) return case_fail(__FILE__, __LINE__);
     }

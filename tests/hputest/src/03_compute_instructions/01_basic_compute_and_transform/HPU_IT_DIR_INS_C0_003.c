@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/encoding.h>
 #include <hpu/steps.h>
 
@@ -47,6 +48,10 @@ int main(void) {
 
     /* Object mode: p2=p0*p1.  All words are producer-generated encodings. */
     if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
+    /* 模表装载完成并清除本阶段事件后，PMODLD 才能读取新模表。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     if (pmodld(0U) != 0) return case_fail(__FILE__, __LINE__);
     if (dload(P0, LINE_A, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);
@@ -56,7 +61,12 @@ int main(void) {
     if (dstore_release(P2, LINE_OUT, POLY_LINES) != 0)
         return case_fail(__FILE__, __LINE__);
 
-    /* Immediate mode: the producer word means p2=p0*7 modulo active q0. */
+    /* 等待第一份结果写回并释放 p2，清除事件后才能复用 p2。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
+
+    /* 立即数模式：producer 指令将 p0 乘以 7，模 q0 后写入新的 p2。 */
     __asm__ volatile(".word %0" : : "i"(HPU_INSN_PMUL_IMM7_P2_P0)
         : "memory");
     if (dstore_release(P2, LINE_OUT_B, POLY_LINES) != 0)

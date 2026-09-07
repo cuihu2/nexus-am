@@ -137,8 +137,7 @@ outputs/mm/mm.h
 outputs/mm/mm.c
 ```
 
-其中 `.inst32`/`.cmd26` 是 decode 对照文本，不直接执行。Nexus-AM 真正链接的是
-`mm.c`，入口为：
+其中 `.inst32`/`.cmd26` 是decode对照文本。原始producer入口是：
 
 ```c
 int hpu_program_mm(const hpu_dma_span_t *spans, size_t span_count);
@@ -154,17 +153,23 @@ static const hpu_dma_span_t mm_spans[HPU_PROGRAM_MM_DMA_COUNT] = {
     {HPU_LINE_OUTPUT, HPU_RNS_LINES},
 };
 
-if (hpu_program_mm(mm_spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return 1;
+if (mm_load_mod(mm_spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return 1;
+psync();
+if (completion_wait() != 0 || completion_clear() != 0) return 1;
+if (mm_compute(mm_spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return 1;
+if (completion_wait() != 0 || completion_clear() != 0) return 1;
 ```
 
-生成函数内的顺序是：
+2026-09-05手册0.4要求模表装载后先同步。AM接收脚本保留原始`mm.c`用于追踪，
+另生成并链接`mm_phases.c/h`，把第一笔DLOAD和后续计算拆开。用例中的顺序是：
 
 ```text
-DLOAD mod -> PMODLD 0 -> DLOAD A -> DLOAD B -> PMUL
+DLOAD mod -> PSYNC -> 等待并清完成通知 -> PMODLD 0 -> DLOAD A -> DLOAD B -> PMUL
 -> PFREE inputs -> DSTORE output -> PFREE mod -> terminal PSYNC
 ```
 
-完整程序只发一条末尾 PSYNC；用例 C 不再重复发 PSYNC。
+完整MM用例有两次PSYNC。08通过中断处理并在阶段间`irq_rearm()`；09使用上述MMIO等待。
+两份阶段函数不改producer原机器码或x10/x11绑定。阶段不应独立乱序调用。
 
 ## 6. x10/x11 到底怎么传
 
@@ -225,7 +230,8 @@ make -C tests/hputest \
 producer instruction/data generation stages
 -> validate/import selected MM files
 -> generate encoder header
--> compile testcase + selected producer mm.c/data
+-> generate AM mm_phases.c/h from reviewed producer mm.c
+-> compile testcase + AM phases + selected producer data
 -> validate ELF symbols/instruction words/bin/disassembly
 -> package artifact
 ```
@@ -237,7 +243,7 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 
 - 分组目录中的 ELF/BIN/TXT（完整三组共 60 个用例）；
 - `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
-- `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、producer commit、
+- `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、AM派生mm_phases.c/h、producer commit、
   resolved spans 和 summary。
 
 生成物不进入 Git history。
@@ -251,7 +257,7 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 - N/q/shape/byte order/line geometry 改变；
 - FNV、文件长度、mod_ctx 或 4096 项 golden 不匹配；
 - DMA 不是四条、rs1/rs2 不是 x10/x11、存在 `x0,x0` placeholder；
-- MM 指令流不是经过审查的十条或缺少唯一末尾 PSYNC；
+- 原始producer MM指令流不是经过审查的十条或缺少末尾PSYNC；AM派生阶段不能逐字保留原指令；
 - 选中的 MM producer 数据越过其 256-line 接收窗口；
 - ELF 未嵌入正确尺寸的数据符号，或反汇编缺少 producer 指令字；
 - output 被预装成 golden。

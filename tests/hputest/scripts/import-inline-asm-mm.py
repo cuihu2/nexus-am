@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -237,6 +238,48 @@ def read_encodings(path: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
+def render_mm_phases(generated_c: str) -> tuple[str, str]:
+    """Split the reviewed producer body; the caller inserts/consumes PSYNC.
+
+    Keep the original words, fixed x10/x11 bindings and span validation.
+    These are AM adapters, not new files supplied by the upstream producer.
+    """
+    first = "    /* 0: dload x10, x11, p3, 2, 1 */"
+    second = "    /* 1: pmodld 0 */"
+    end = "#if !defined(__riscv)"
+    signature = "int hpu_program_mm("
+    if any(generated_c.count(token) != 1
+           for token in (first, second, end, signature)):
+        fail("MM phase split: unrecognized producer C structure")
+    start = generated_c.index(first)
+    split = generated_c.index(second)
+    stop = generated_c.index(end)
+    if not start < split < stop:
+        fail("MM phase split: invalid instruction order")
+    prefix = generated_c[:start]
+    footer = generated_c[stop:]
+    mod_body = generated_c[start:split]
+    compute_body = generated_c[split:stop]
+    emitted = mod_body + compute_body
+    words = [int(word, 16) for word in
+             re.findall(r"\.word 0x([0-9a-fA-F]{8})", emitted)]
+    if words != EXPECTED_MM_WORDS:
+        fail("MM phase split changed producer instruction stream")
+    mod = prefix.replace(signature, "int mm_load_mod(") + mod_body + footer
+    # Retain the shared definitions from prefix once; repeat only validation.
+    compute_prefix = prefix[prefix.index(signature):]
+    compute = compute_prefix.replace(signature, "int mm_compute(") + compute_body + footer
+    header = (
+        "/* Generated AM adaptation for manual v0.4 (2026-09-05). */\n"
+        "#ifndef AM_MM_PHASES_H\n#define AM_MM_PHASES_H\n"
+        '#include "mm.h"\n'
+        "int mm_load_mod(const hpu_dma_span_t *spans, size_t span_count);\n"
+        "int mm_compute(const hpu_dma_span_t *spans, size_t span_count);\n"
+        "#endif\n"
+    )
+    return header, mod + "\n" + compute
+
+
 def render_header(commit: str, coefficient_count: int, modulus: int,
                   selected: dict[str, dict[str, str]],
                   encodings: list[tuple[str, str, str]]) -> str:
@@ -288,6 +331,8 @@ def main() -> int:
         fail("producer commit must be a 40-character lowercase Git object ID")
 
     validate_program(source)
+    phase_header, phase_source = render_mm_phases(
+        (source / "mm.c").read_text(encoding="utf-8"))
     coefficient_count, modulus, selected = validate_data(source)
     encodings = read_encodings(arguments.encodings)
     header_text = render_header(arguments.producer_commit, coefficient_count,
@@ -308,6 +353,8 @@ def main() -> int:
             arguments.encodings.read_text(encoding="utf-8"), encoding="utf-8")
         (staging / "inline_asm_mm_delivery.h").write_text(
             header_text, encoding="utf-8")
+        (staging / "mm_phases.h").write_text(phase_header, encoding="utf-8")
+        (staging / "mm_phases.c").write_text(phase_source, encoding="utf-8")
         (staging / "RESOLVED_DMA_SPANS.csv").write_text(
             "dma_index,role,path,line_offset,line_count\n"
             "0,modulus_context,constants/mod_ctx.u32.bin,192,1\n"
@@ -322,7 +369,11 @@ def main() -> int:
             "- ABI: little-endian uint32, 64 words / 256-byte line\n"
             "- DMA spans: MOD=(192,1), A=(0,64), B=(64,64), OUT=(128,64)\n"
             "- `images/expected.u32.bin` is immutable golden data; Nexus-AM "
-            "poisons line 128 before DSTORE and never preloads this golden.\n",
+            "poisons line 128 before DSTORE and never preloads this golden.\n"
+            "- AM-generated `mm_phases.c/h` split the original producer C "
+            "at the mod-table DLOAD / PMODLD boundary without changing words "
+            "or DMA bindings. Callers must issue PSYNC, wait and clear/rearm "
+            "completion between mm_load_mod and mm_compute.\n",
             encoding="utf-8")
         if destination.exists():
             backup = destination.with_name(

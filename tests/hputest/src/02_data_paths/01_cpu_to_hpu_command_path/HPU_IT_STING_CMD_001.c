@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/completion.h>
 #include <hpu/steps.h>
 
 /*
@@ -48,6 +49,10 @@ int main(void) {
 
     rc = dload_mod(LINE_MOD, 1U);
     if (rc != 0) return case_fail(__FILE__, __LINE__);
+    /* 先同步并清除模表装载事件，随后八条 PMODLD 才进入命令流测试。 */
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
     /* 八条 producer PMODLD(0) 提供确定性命令流；随机间隔由 STING 外部控制。 */
     for (repeat = 0U; repeat < 8U; ++repeat) {
         rc = pmodld(0U);

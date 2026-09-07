@@ -155,10 +155,21 @@ The build then consumes the producer output in two concrete ways:
 1. `.incbin` links `input_a`, `input_b`, `expected`, and `mod_ctx` directly
    from `outputs/mm/test_data/hardware`; Nexus-AM no longer synthesizes these
    arrays with `.rept`.
-2. Cases 08 and 09 link and call the generated `outputs/mm/mm.c` entry
-   `hpu_program_mm()`.  That generated function assigns each relocation span
-   to fixed RISC-V registers `x10`/`x11` immediately before the corresponding
-   custom1 instruction and contains the PMUL program's only terminal PSYNC.
+2. Cases 08 and 09 link the AM-generated `mm_phases.c` adaptation of the
+   producer's `outputs/mm/mm.c`. It preserves the reviewed ten words, four
+   relocations, and fixed `x10`/`x11` assignments. `mm_load_mod()` issues the
+   table DLOAD; main explicitly issues PSYNC and consumes its completion;
+   `mm_compute()` then starts at PMODLD and ends with the producer's final
+   PSYNC. The complete testcase therefore has two PSYNC events.
+
+The 2026-09-05 manual v0.4 requires this mod-table barrier. Case 08 handles
+both events through PLIC and calls `irq_rearm()` between phases; case 09
+polls and clears the first MMIO event before starting the second phase.
+Other arithmetic testcases also show this barrier explicitly in main.
+`completion_wait()` and `completion_clear()` only wait/acknowledge; they
+never issue an HPU instruction. See
+[manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the remaining
+STG encoding and object-limit ambiguities.
 
 The simpler cases still use one-operation C adapters, but their named words
 are generated at build time by the same real encoder.  The tracked

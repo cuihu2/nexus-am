@@ -1,8 +1,10 @@
 #include <hpu/result.h>
 #include <hpu/csr.h>
+#include <hpu/completion.h>
 #include <hpu/fixture.h>
 #include <hpu/layout.h>
-#include "mm.h"
+#include <hpu/sync.h>
+#include "mm_phases.h"
 
 /*
  * 目的：形成 DLOAD -> PMUL -> DSTORE -> PSYNC 的最小计算闭环，
@@ -52,11 +54,17 @@ int main(void) {
     fixture_copy(LINE_B, RNS_B);
     fixture_poison();
 
-    /*
-     * producer函数负责DLOAD、PMODLD、PMUL、DSTORE和唯一一次terminal
-     * PSYNC；此处不再补发PSYNC，也不配置PLIC。
-     */
-    if (hpu_program_mm(spans, HPU_PROGRAM_MM_DMA_COUNT) != 0) return case_fail(__FILE__, __LINE__);
+    /* 模表加载结束的通知必须先等到并清除，不能留给最后一次完成轮询。 */
+    if (mm_load_mod(spans, HPU_PROGRAM_MM_DMA_COUNT) != 0)
+        return case_fail(__FILE__, __LINE__);
+    psync();
+    if (completion_wait() != 0 || completion_clear() != 0)
+        return case_fail(__FILE__, __LINE__);
+    printf("[HPU][PHASE] mod-table synchronized; compute polling begins\n");
+
+    /* 保留producer的PMODLD、DLOAD、PMUL、DSTORE和末尾PSYNC，不配置PLIC。 */
+    if (mm_compute(spans, HPU_PROGRAM_MM_DMA_COUNT) != 0)
+        return case_fail(__FILE__, __LINE__);
 
     /* CPU只轮询MMIO完成电平，同时持续检查fault。 */
     for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
