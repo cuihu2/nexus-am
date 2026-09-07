@@ -145,7 +145,7 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 GNU as does not natively recognize HPU mnemonics.  The
 `third_party/inline-asm` git submodule therefore pins
 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`d79efb4030a15cfd293e919355868f24eb4c54d9` from its
+`45b51d5704b0d8f1c00bf5903cdfc6fac8dd9d6d` from its
 [`HPU_SEAL` branch](https://github.com/cuihu2/inline-asm/tree/HPU_SEAL).
 The branch recorded in `.gitmodules` identifies the upstream source; normal
 builds and CI use the committed gitlink, not the latest remote branch head.
@@ -180,14 +180,18 @@ polls and clears the first MMIO event before starting the second phase.
 Other arithmetic testcases also show this barrier explicitly in main.
 `completion_wait()` and `completion_clear()` only wait/acknowledge; they
 never issue an HPU instruction. See
-[manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the remaining
-STG encoding and object-limit ambiguities.
+[manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the selected
+STG encoding and the remaining object-limit ambiguities.
 
 This branch switch consumes the existing fixed MM path (`N=4096`, one RNS
 component, `q=50061313`). It does not enable the branch's complete SEAL/CKKS
-application flow or settle the conflicting STG instruction layouts in the
-programming manual. The previously blocked transform/application cases stay
-blocked until their own program/data/golden contracts are validated.
+application flow. STG words now follow the 2026-09-05 manual section 3.2:
+`pdata` occupies both bits [27:25] and [24:22], while `ptwid` occupies [16:14].
+The stale example words are superseded by that field formula. Independent
+word/precode checks prevent falling back to the old layout. The previously
+blocked transform/application cases stay blocked until their own complete
+program/data/golden contracts are validated; fixing encoding alone does not
+qualify a functional testcase.
 
 The simpler cases still use one-operation C adapters, but their named words
 are generated at build time by the same real encoder.  The tracked

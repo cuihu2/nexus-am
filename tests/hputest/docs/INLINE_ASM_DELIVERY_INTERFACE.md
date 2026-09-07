@@ -11,7 +11,7 @@
 ```text
 tests/hputest/third_party/inline-asm
 branch HPU_SEAL
-commit d79efb4030a15cfd293e919355868f24eb4c54d9
+commit 45b51d5704b0d8f1c00bf5903cdfc6fac8dd9d6d
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
@@ -45,6 +45,8 @@ make -C tests/hputest prepare-inline-asm-mm JOBS=4
 
 该 target 调用 `scripts/prepare-inline-asm-mm.sh`，构建生产者的
 `inline_asm_codegen`、`inline_asm_encode_outputs` 和 `hpu_reference_vectors`。
+生成前还会运行生产者的 `hpu_encode_self_test`，覆盖固定机器码、26-bit precode、
+STG 全字段组合及可执行 C 中的 `.word`。
 三个可执行文件在 `OUTPUT_ROOT/inline-asm-producer/<producer_commit>/` 中运行，
 产生该工作目录下的 `output/`、`outputs/` 和 MM 数据表；Nexus-AM importer
 逐字段检查选中的 MM 契约，再将交付内容导入
@@ -299,5 +301,8 @@ program/data/golden/relocation 契约的 24 个测试点被标成
 生成、导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS
 失败记录应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。
 
-本次分支切换本身不解决新手册 STG 字段公式与示例之间的编码争议。相关变换用例
-继续保持 blocked，不能因为 producer 来源变为 `HPU_SEAL` 就将其标记为已验证。
+STG 编码按用户指定的 2026-09-05 手册 §3.2 字段公式执行：`pdata` 同时写入
+`[27:25]` 和 `[24:22]`，`ptwid` 写入 `[16:14]`，`[21:17]` 为 0。
+旧示例的机器码不再作为预期值；接收端用独立的手册向量检查 word/cmd26。
+这仅解决指令位段，不补齐完整变换用例的 program/data/golden/relocation 契约；
+因此相关用例继续保持 blocked，不能将编码校验通过等同于 IT/VCS 功能通过。
