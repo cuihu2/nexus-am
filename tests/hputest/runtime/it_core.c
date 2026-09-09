@@ -11,6 +11,7 @@
                          : "memory");                                     \
     } while (0)
 
+/* 名称沿用内部 cmd_kind=0；生成的物理 RISC-V opcode 已映射为 custom-2/0x5B。 */
 #define CUSTOM0(word_)                                                     \
     __asm__ volatile(".word %0" : : "i"((uint32_t)(word_)) : "memory")
 

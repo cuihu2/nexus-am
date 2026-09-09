@@ -192,9 +192,11 @@ The build then consumes the producer output in two concrete ways:
 1. `.incbin` links `input_a`, `input_b`, `expected`, and `mod_ctx` directly
    from the validated `HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware`
    directory; Nexus-AM no longer synthesizes these arrays with `.rept`.
-2. Cases 08 and 09 directly link the validated producer `outputs/mm/mm.c`
-   and call `hpu_program_mm()`. Its ten words, four relocations, fixed
-   `x10`/`x11` assignments, and software object-length checks remain intact.
+2. Cases 08 and 09 link the validated, opcode-mapped `mm.c` and call
+   `hpu_program_mm()`. AM maps only the low seven opcode bits of the
+   producer's HPU custom0 words from `0x0B` to `0x5B`; all ten payloads,
+   four relocations, fixed `x10`/`x11` assignments, and software
+   object-length checks remain intact.
    The producer emits exactly one PSYNC at the end of the complete program;
    AM does not split it into phases or insert a modulus-load barrier.
 
@@ -234,8 +236,33 @@ files built with this pinned producer and another IT run; switching the
 encoder does not establish the cause of those failures or make them PASS.
 
 The simpler cases still use one-operation C adapters, but their named words
-are generated at build time by the same real encoder.  The tracked
+are generated at build time by the same real encoder and receive the same
+low-seven-bit opcode mapping. The tracked
 `include/hpu/encoding.h` contains no copied instruction values.
+
+### HPU 主 opcode：0x0B → 0x5B
+
+上游固定提交仍生成 `0x0B`。本次在 AM 构建接收层统一映射，**不修改
+inline-asm/main、gitlink 或 RTL**。物理 RISC-V 主 opcode 改用 custom2
+`0x5B`，HPU 内部仍为 `cmd_kind=0`；文档和用例 ID 中的旧称 custom0/C0
+指内部命令类别，不表示新 ELF 仍使用 `0x0B`。
+
+```text
+new_inst = (old_inst & 0xFFFFFF80) | 0x5B
+```
+
+仅对生产者 opcode 为 `0x0B` 的 HPU 指令应用上式。`inst[31:7]`、cmd26、
+寄存器绑定、数据和指令顺序不变；DLOAD/DSTORE 的 custom1 `0x2B` 完全不变。
+例如 PSYNC 为 `0x7000005B`、PMODLD 0 为 `0x6000005B`、PFREE p0 为
+`0x8000005B`。flag 位仍在 bit 7，flag=1 的机器码低字节会是 `0xDB`，
+不能用“所有指令都以 5B 结尾”来检查。
+
+产物 `provenance/inline-asm-mm/` 同时保留目标 `mm.c`、`mm.inst32`、
+`mm.cmd26`、`encoder_words.tsv` 和 `upstream/` 下的原始同名文件，`opcode_map.csv` 按 MM
+指令记录映射前后的 word，便于排查 ELF 与 simv 版本是否配套。
+**运行新 ELF 的 CPU 前端必须已将 `0x5B` 识别为 HPU 并映射到
+`cmd_kind=0`**；仅更新测试文件不能让旧 simv 自动兼容。本次不启用被阻塞的
+功能用例，也不代表已通过 VCS。
 
 The complete producer/consumer contract and the exact current MM file mapping
 are documented in

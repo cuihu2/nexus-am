@@ -23,6 +23,10 @@ commit b405f2ad7b0901930d81edb79a5167ab028c4dbd
 AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
 `HPU_SEAL` 保留为历史来源，本次不修改它们。
 
+上述上游仍使用 HPU 主 opcode `0x0B`。按 IT 新接口要求，AM 在导入时将其
+低 7 位统一映射为 `0x5B`，不修改上游 `main` 或固定 gitlink。指令 payload、
+cmd26、DMA 编码和全部数据仍取该固定提交，具体映射见第 5 节。
+
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
 被 `.gitignore` 排除：
 
@@ -173,7 +177,8 @@ outputs/mm/mm.h
 outputs/mm/mm.c
 ```
 
-其中 `.inst32`/`.cmd26` 是 decode 对照文本。用例直接调用生产者入口：
+其中 `.inst32`/`.cmd26` 是 decode 对照文本。AM 校验上游原始程序，再应用
+主 opcode 映射，编译目标交付中的 `mm.c`。用例仍调用生产者同名入口：
 
 ```c
 int hpu_program_mm(const hpu_dma_span_t *spans, size_t span_count);
@@ -204,10 +209,46 @@ DLOAD mod -> PMODLD 0 -> DLOAD A -> DLOAD B -> PMUL
 -> PFREE inputs -> DSTORE output -> PFREE mod -> terminal PSYNC
 ```
 
-完整 MM 用例只有一次 PSYNC，不调用 `irq_rearm()`。生产者的十条机器码、
-四笔 x10/x11 绑定和 `hpu_obj_len` 软件生命周期检查均保持原样；接收端必须
+完整 MM 用例只有一次 PSYNC，不调用 `irq_rearm()`。十条指令的顺序和
+`inst[31:7]`、四笔 x10/x11 绑定、`hpu_obj_len` 软件生命周期检查均保持原样；
+只有原 custom0 指令的低 7 位发生变化。接收端必须
 校验 DSTORE 的 `span.line_count` 等于已建立对象的长度，不能删掉该检查来
 迎合新的生成文件格式。
+
+### 主 opcode 映射与追溯
+
+物理 RISC-V opcode 从 custom0 `0x0B` 改到 custom2 `0x5B`，HPU 内部仍为
+`cmd_kind=0`。源文件名和历史测试点中的 custom0/C0 只保留内部类别含义。
+接收层仅对 `(old_inst & 0x7F) == 0x0B` 的 HPU 指令执行：
+
+```text
+new_inst = (old_inst & 0xFFFFFF80) | 0x5B
+```
+
+不改变 funct/对象/stage/mode/flag 等 payload 位，不改 custom1 `0x2B` 的
+DLOAD/DSTORE，不增加、删除或重排任何指令。bit 7 不属于 opcode，必须保留，
+所以 flag=1 的目标低字节为 `0xDB`，不是 `0x5B`。
+
+| 指令字示例 | 上游 word | AM 目标 word |
+| --- | --- | --- |
+| PSYNC | `0x7000000B` | `0x7000005B` |
+| PMODLD 0 | `0x6000000B` | `0x6000005B` |
+| PADD 示例 | `0x0400400B` | `0x0400405B` |
+| PFREE p0 | `0x8000000B` | `0x8000005B` |
+
+`HPU_GENERATED_ROOT/inline-asm/mm/` 及产物中的
+`provenance/inline-asm-mm/` 使用相同的追溯结构：
+
+```text
+mm.c / mm.inst32 / mm.cmd26 / encoder_words.tsv       # AM 目标交付
+opcode_map.csv                                      # MM 逐条 word 映射
+upstream/{mm.c,mm.inst32,mm.cmd26,encoder_words.tsv}   # 原始上游交付
+```
+
+目标 `mm.c` 的 `.word`、`mm.inst32` 及单指令头文件必须采用同一映射；
+cmd26 因只依赖 `inst[31:7]` 而不变。`mm.asm` 的助记符、MM 数据、原始
+relocation manifest 和四笔 DMA word 同样不变。保留原始文件是为了区分
+生产者输出与 AM 物理 opcode 适配，不能将目标 C 称为“与上游逐字节相同”。
 
 ## 6. x10/x11 到底怎么传
 
@@ -229,7 +270,7 @@ inst32 = (obj << 25) | (rs2 << 20) | (rs1 << 15)
        | (operation << 13) | (dir << 12) | (flag << 7) | 0x2B
 DLOAD: dir=0, operation=type
 DSTORE: dir=1, operation=rel << 1
-custom0 cmd26 = inst32 >> 7
+HPU cmd_kind=0 cmd26 = inst32 >> 7  # 目标物理 opcode 为 custom2 0x5B
 custom1 cmd26 = (1 << 25) | (inst32 >> 7)
 ```
 
@@ -279,7 +320,8 @@ tests/hputest/build/generated/include/hpu/inline_asm_mm_delivery.h
 
 tracked `include/hpu/encoding.h` 只 include 这个生成头文件。这样每个 `main.c`
 保持“一条 HPU 操作对应一个可见调用”的可读结构，同时编码仍来自同一个
-producer。
+producer。生成的 named word 在写入头文件前同样把 HPU opcode `0x0B` 映射
+到 `0x5B`；不能只改完整 MM 程序而漏掉 PSYNC、PMODLD、PFREE 等单指令适配。
 
 ## 8. 构建和 GitHub Actions
 
@@ -297,8 +339,9 @@ make -C tests/hputest \
 ```text
 producer instruction/data generation stages
 -> validate/import selected MM files
--> generate encoder header
--> compile testcase + validated producer mm.c + selected producer data
+-> map HPU opcode 0x0B to 0x5B and preserve upstream provenance
+-> generate opcode-mapped encoder header
+-> compile testcase + opcode-mapped mm.c + selected producer data
 -> validate ELF symbols/instruction words/bin/disassembly
 -> package artifact
 ```
@@ -310,8 +353,9 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 
 - 分组目录中的 ELF/BIN/TXT（完整三组共 60 个用例）；
 - `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
-- `provenance/inline-asm-mm/`：选中的 bin/readable/table/mm.c/mm.h/mm.asm、producer commit、
-  resolved spans 和 summary。
+- `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
+  mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，
+  以及 `upstream/` 中保留的原始程序与编码表。
 
 生成物不进入 Git history。
 
@@ -326,6 +370,8 @@ push 到 `master` 或手动触发时，GitHub Actions 分别发布
 - DMA 不是四条、rs1/rs2 不是 x10/x11、存在 `x0,x0` placeholder；
 - 原始 producer MM 指令流不是经过审查的十条、PSYNC 不止末尾一次，
   或生成 C 的机器码、固定 GPR 绑定与软件对象长度检查不符合该契约；
+- opcode 映射改变了 `inst[31:7]`、cmd26 或 DMA word，或目标生成 C、
+  `.inst32`、单指令头文件与映射预期不一致；
 - 选中的 MM producer 数据越过其 256-line 接收窗口；
 - ELF 未嵌入正确尺寸的数据符号，或反汇编缺少 producer 指令字；
 - output 被预装成 golden。
@@ -345,6 +391,11 @@ program/data/golden/relocation 契约的 24 个测试点被标成
 
 STG 编码按固定版本手册 §3.2 字段公式执行：`pdata` 同时写入
 `[27:25]` 和 `[24:22]`，`ptwid` 写入 `[16:14]`，`[21:17]` 为 0。
-旧示例的机器码不再作为预期值；接收端用独立的手册向量检查 word/cmd26。
+旧示例的机器码不再作为预期值；接收端用独立的手册向量检查 word/cmd26，
+再核对目标低 7 位为 `0x5B`，其余字段保持不变。
 这仅解决指令位段，不补齐完整变换用例的 program/data/golden/relocation 契约；
 因此相关用例继续保持 blocked，不能将编码校验通过等同于 IT/VCS 功能通过。
+
+IT 的 CPU 前端必须已将 custom2 `0x5B` 分类为 HPU 的 `cmd_kind=0`，
+并保留 DMA custom1 `0x2B` 的当前译码；新 ELF 不能搭配仅识别 HPU `0x0B`
+的旧 simv。本次 AM 适配不修改 CPU/HPU RTL，也不以软件映射宣称硬件已经更新。

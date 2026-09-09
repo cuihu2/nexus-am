@@ -404,13 +404,95 @@ if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
   exit 2
 fi
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
-                mm.c mm.h mm.asm mm.inst32 dma_relocation_manifest.csv; do
+                mm.c mm.h mm.asm mm.inst32 mm.cmd26 dma_relocation_manifest.csv \
+                opcode_map.csv upstream/mm.c upstream/mm.h upstream/mm.asm \
+                upstream/mm.inst32 upstream/mm.cmd26 upstream/encoder_words.tsv \
+                upstream/dma_relocation_manifest.csv; do
   if [[ ! -s $mm_artifact/$required ]]; then
     printf 'ERROR: selected inline-asm MM provenance omits %s\n' \
       "$required" >&2
     exit 2
   fi
 done
+# 独立核对交付前后的机器码，而非仅相信生成器与头文件之间的同源比较。
+# 此检查只处理来源明确的 HPU 交付文件，不修改或限制 AM/DASICS 的 custom0。
+python3 - "$mm_artifact" <<'PY'
+import csv
+from pathlib import Path
+import re
+import sys
+
+root = Path(sys.argv[1])
+raw = root / "upstream"
+
+
+def require(condition, message):
+    if not condition:
+        raise SystemExit("ERROR: HPU opcode mapping provenance: " + message)
+
+
+def mapped(word):
+    opcode = word & 0x7f
+    require(opcode in (0x0b, 0x2b), "unexpected upstream HPU opcode")
+    return (word & ~0x7f) | 0x5b if opcode == 0x0b else word
+
+
+def binary_words(path, width):
+    lines = path.read_text().splitlines()
+    require(bool(lines) and all(re.fullmatch(r"[01]{%d}" % width, line)
+                                for line in lines), str(path))
+    return [int(line, 2) for line in lines]
+
+
+source = binary_words(raw / "mm.inst32", 32)
+target = binary_words(root / "mm.inst32", 32)
+commands = binary_words(root / "mm.cmd26", 26)
+require(len(source) == 10 and source[-1] == 0x7000000b,
+        "raw MM stream must retain ten instructions ending in PSYNC")
+require(target == [mapped(word) for word in source], "mm.inst32 mapping")
+require(commands == binary_words(raw / "mm.cmd26", 26), "cmd26 changed")
+require(commands == [((word & 0x7f) == 0x2b) << 25 | (word >> 7)
+                     for word in target], "payload/cmd_kind changed")
+for directory, words in ((raw, source), (root, target)):
+    c_words = [int(word, 16) for word in re.findall(
+        r"\.word\s+0x([0-9a-fA-F]{8})", (directory / "mm.c").read_text())]
+    require(c_words == words, str(directory / "mm.c"))
+def hide_words(text):
+    return re.sub(r"(\.word\s+)0x[0-9a-fA-F]{8}", r"\1<word>", text)
+require(hide_words((raw / "mm.c").read_text())
+        == hide_words((root / "mm.c").read_text()),
+        "non-opcode C text changed (GPR binding or OBJ.len checks)")
+
+with (root / "opcode_map.csv").open(newline="") as stream:
+    reader = csv.DictReader(stream)
+    require(reader.fieldnames == ["instruction_index", "source_word",
+                                  "target_word", "cmd_kind", "cmd26"],
+            "opcode_map.csv header")
+    rows = list(reader)
+require(len(rows) == len(source), "opcode_map.csv count")
+for index, row in enumerate(rows):
+    require(int(row["instruction_index"]) == index
+            and int(row["source_word"], 16) == source[index]
+            and int(row["target_word"], 16) == target[index]
+            and int(row["cmd_kind"]) == (commands[index] >> 25)
+            and int(row["cmd26"], 16) == commands[index], "opcode_map.csv row")
+
+tables = []
+for directory in (raw, root):
+    with (directory / "encoder_words.tsv").open(newline="") as stream:
+        rows = list(csv.reader(stream, delimiter="\t"))
+    require(rows and rows[0] == ["macro_name", "word_hex", "normalized_asm"]
+            and all(len(row) == 3 for row in rows), "encoder_words.tsv format")
+    tables.append(rows[1:])
+require(bool(tables[0]) and len(tables[0]) == len(tables[1]), "primitive count")
+for before, after in zip(*tables):
+    require(before[0] == after[0] and before[2] == after[2]
+            and mapped(int(before[1], 16)) == int(after[1], 16),
+            "primitive mapping for " + before[0])
+for name in ("mm.h", "mm.asm", "mm.cmd26", "dma_relocation_manifest.csv"):
+    require((raw / name).read_bytes() == (root / name).read_bytes(),
+            "non-opcode input changed: " + name)
+PY
 # 08/09 直接调用生成器的完整程序，不再交付插入额外 PSYNC 的旧分阶段程序。
 if [[ -e $mm_artifact/mm_phases.c || -e $mm_artifact/mm_phases.h ]]; then
   printf 'ERROR: obsolete AM MM phases remain in producer provenance\n' >&2
@@ -544,13 +626,13 @@ require_generated_mm_stream() {
     printf -v word '%08x' "$((2#$bits))"
     expected_words+=("$word")
   done < "$inst32"
-  if [[ ${#expected_words[@]} -ne 10 || ${expected_words[9]} != 7000000b ]]; then
+  if [[ ${#expected_words[@]} -ne 10 || ${expected_words[9]} != 7000005b ]]; then
     printf 'ERROR: producer MM stream must have ten commands ending in PSYNC\n' >&2
     exit 2
   fi
   # 只提取实际链接的上游函数，逐条比较，不能只证明每个字在 ELF 中出现过。
   while IFS= read -r word; do
-    if (( (16#$word & 127) == 11 || (16#$word & 127) == 43 )); then
+    if (( (16#$word & 127) == 91 || (16#$word & 127) == 43 )); then
       actual_words+=("$word")
     fi
   done < <(awk '
@@ -566,11 +648,33 @@ require_generated_mm_stream() {
     exit 2
   fi
   local sync_count
-  sync_count=$(grep -Eic '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000000b[[:space:]]' "$txt" || true)
+  sync_count=$(grep -Eic '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000005b[[:space:]]' "$txt" || true)
   if [[ $sync_count -ne 1 ]]; then
     printf 'ERROR: MM testcase must contain only the producer final PSYNC: %s\n' "$txt" >&2
     exit 2
   fi
+}
+
+reject_old_hpu_opcode() {
+  local txt=$1
+  local word
+
+  # 扫描 HPU 用例和发射函数（含编译器克隆），不全局禁止合法 DASICS 0x0B。
+  while IFS= read -r word; do
+    if (( (16#$word & 127) == 11 )); then
+      printf 'ERROR: HPU testcase contains legacy custom0 instruction %s: %s\n' \
+        "$word" "$txt" >&2
+      exit 2
+    fi
+  done < <(awk '
+    /^[[:xdigit:]]+ <[^>]+>:/ {
+      in_hpu = ($0 ~ /<(main|hpu_program_mm|psync|hpu_psync|pmodld|hpu_pmodld_0|padd|hpu_padd_p2_p0_p1|psub|pmul|pmac|pmac_imm|issue_transform|pntt_stage|pintt_stage|pfree)(\.[^>]*)?>:/)
+      next
+    }
+    in_hpu && /^[[:space:]]*[[:xdigit:]]+:/ && length($2) == 8 {
+      print tolower($2)
+    }
+  ' "$txt")
 }
 
 require_main_return() {
@@ -672,6 +776,7 @@ for elf in "${elfs[@]}"; do
     "${cross_compile}objdump" -d "$(basename "$elf")"
   ) > "$rebuilt_txt"
   cmp "$txt" "$rebuilt_txt"
+  reject_old_hpu_opcode "$txt"
 
   if [[ $qualifier == blocked-not-issued ]]; then
     reject_generated_hpu_words "$txt"
@@ -700,22 +805,22 @@ for elf in "${elfs[@]}"; do
     01_dload_hold|03_dload_poll_mmio)
       require_word "$txt" 00b5202b ;;
     04_psync_irq)
-      require_word "$txt" 7000000b ;;
+      require_word "$txt" 7000005b ;;
     05_dload_psync_irq)
       require_word "$txt" 00b5202b
-      require_word "$txt" 7000000b ;;
+      require_word "$txt" 7000005b ;;
     06_dload_dstore_poll_mmio)
       require_word "$txt" 00b5202b
       require_word "$txt" 00b5502b
       # 06 必须是真正的无 PSYNC 状态轮询，不能因构建成功而漏掉测试意图。
-      if grep -Eq '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+7000000b([[:space:]]|$)' "$txt"; then
+      if grep -Eq '^[[:space:]]*[[:xdigit:]]+:[[:space:]]+700000(0b|5b)([[:space:]]|$)' "$txt"; then
         printf 'ERROR: pure MMIO case 06 contains PSYNC: %s\n' "$txt" >&2
         exit 2
       fi ;;
     07_dload_dstore_psync_irq)
       require_word "$txt" 00b5202b
       require_word "$txt" 00b5502b
-      require_word "$txt" 7000000b ;;
+      require_word "$txt" 7000005b ;;
     08_dload_compute_dstore_psync_irq|09_dload_compute_dstore_poll_mmio)
       require_mm_fixture "$elf"
       require_generated_mm_stream "$txt" ;;

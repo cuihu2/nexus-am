@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""校验实际 MM 交付：保留完整程序和唯一末尾 PSYNC，不再拆分阶段。"""
+"""校验 MM opcode 适配交付：保留完整程序、payload 和唯一末尾 PSYNC。"""
 import importlib.util
 import os
 from pathlib import Path
@@ -27,35 +27,37 @@ class DeliveryTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         for name in ("mm.c", "mm.h", "mm.asm", "mm.inst32", "mm.cmd26",
-                     "dma_relocation_manifest.csv"):
+                     "dma_relocation_manifest.csv", "encoder_words.tsv",
+                     "inline_asm_mm_delivery.h", "opcode_map.csv"):
             shutil.copy2(source_path.parent / name, self.root / name)
+        shutil.copytree(source_path.parent / "upstream", self.root / "upstream")
 
     def test_complete_program_and_bindings(self):
-        module.validate_program(self.root)
+        module.validate_mapped_delivery(self.root)
         words = [int(word, 16) for word in
                  re.findall(r"\.word 0x([0-9a-fA-F]{8})", source)]
-        self.assertEqual(words, module.EXPECTED_MM_WORDS)
-        self.assertEqual(words.count(0x7000000B), 1)
-        self.assertEqual(words[-1], 0x7000000B)
+        self.assertEqual(words, [module.map_word(word) for word in module.EXPECTED_MM_WORDS])
+        self.assertEqual(words.count(0x7000005B), 1)
+        self.assertEqual(words[-1], 0x7000005B)
         self.assertEqual(source.count('__asm__("x10")'), 4)
         self.assertEqual(source.count('__asm__("x11")'), 4)
         self.assertNotIn("mm_load_mod", source)
         self.assertNotIn("mm_compute", source)
 
     def test_extra_psync_is_rejected(self):
-        modified = source.replace('".word 0x7000000B"',
-                                  '".word 0x7000000B; .word 0x7000000B"')
+        modified = source.replace('".word 0x7000005B"',
+                                  '".word 0x7000005B; .word 0x7000005B"')
         self.assertNotEqual(modified, source)
         (self.root / "mm.c").write_text(modified, encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "mm.c"):
-            module.validate_program(self.root)
+            module.validate_mapped_delivery(self.root)
 
     def test_previous_dma_encoding_is_rejected(self):
         words = (self.root / "mm.inst32").read_text().splitlines()
         words[0] = f"{0x5A820E2B:032b}"
         (self.root / "mm.inst32").write_text("\n".join(words) + "\n")
         with self.assertRaisesRegex(RuntimeError, "mm.inst32"):
-            module.validate_program(self.root)
+            module.validate_mapped_delivery(self.root)
 
     def test_precode_must_preserve_standard_gpr_fields(self):
         commands = (self.root / "mm.cmd26").read_text().splitlines()
@@ -63,14 +65,48 @@ class DeliveryTests(unittest.TestCase):
         commands[0] = f"{int(commands[0], 2) & ~(0x3FF << 8):026b}"
         (self.root / "mm.cmd26").write_text("\n".join(commands) + "\n")
         with self.assertRaisesRegex(RuntimeError, "mm.cmd26"):
-            module.validate_program(self.root)
+            module.validate_mapped_delivery(self.root)
 
     def test_store_length_guard_must_survive(self):
         modified = source.replace("spans[3].line_count != hpu_obj_len[0]", "0")
         self.assertNotEqual(modified, source)
         (self.root / "mm.c").write_text(modified, encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "OBJ.len"):
-            module.validate_program(self.root)
+            module.validate_mapped_delivery(self.root)
+
+    def test_unmapped_custom0_is_rejected(self):
+        words = (self.root / "mm.inst32").read_text().splitlines()
+        words[1] = f"{0x6000000B:032b}"
+        (self.root / "mm.inst32").write_text("\n".join(words) + "\n")
+        with self.assertRaisesRegex(RuntimeError, "mm.inst32"):
+            module.validate_mapped_delivery(self.root)
+
+    def test_payload_change_is_rejected(self):
+        words = (self.root / "mm.inst32").read_text().splitlines()
+        words[1] = f"{int(words[1], 2) ^ (1 << 14):032b}"
+        (self.root / "mm.inst32").write_text("\n".join(words) + "\n")
+        with self.assertRaisesRegex(RuntimeError, "payload"):
+            module.validate_mapped_delivery(self.root)
+
+    def test_primitive_header_cannot_retain_old_opcode(self):
+        header = self.root / "inline_asm_mm_delivery.h"
+        content = header.read_text()
+        modified = content.replace("UINT32_C(0x6000005B)", "UINT32_C(0x6000000B)")
+        self.assertNotEqual(modified, content)
+        header.write_text(modified)
+        with self.assertRaisesRegex(RuntimeError, "header"):
+            module.validate_mapped_delivery(self.root)
+
+    def test_mapping_table_cannot_change_cmd_kind(self):
+        path = self.root / "opcode_map.csv"
+        rows = module.read_csv(path)
+        rows[1]["cmd_kind"] = "1"
+        with path.open("w", newline="") as handle:
+            writer = module.csv.DictWriter(handle, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        with self.assertRaisesRegex(RuntimeError, "opcode_map.csv"):
+            module.validate_mapped_delivery(self.root)
 
     def test_real_producer_store_length_validation(self):
         # 主机仅执行生成代码的参数检查；-4 表示无 RISC-V 指令执行支持，非 HPU PASS。

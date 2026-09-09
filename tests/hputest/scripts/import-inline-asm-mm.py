@@ -13,6 +13,8 @@ import shutil
 import struct
 import tempfile
 
+from hpu_opcode_mapping import DMA_OPCODE, TARGET_OPCODE, map_c, map_word
+
 
 EXPECTED_IMAGES = {
     "images/input_a.u32.bin": (0, 64, 4096, "HPU_MM_LINE_SRC_A"),
@@ -58,6 +60,11 @@ BASE_SELECTED_FILES = [
     "test_data/hardware/images/expected.u32.bin",
     "test_data/hardware/constants/mod_ctx.u32.bin",
 ]
+
+UPSTREAM_PROGRAM_FILES = (
+    "mm.c", "mm.h", "mm.asm", "mm.inst32", "mm.cmd26",
+    "dma_relocation_manifest.csv",
+)
 
 
 def fail(message: str) -> None:
@@ -250,6 +257,57 @@ def read_encodings(path: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
+def map_encodings(rows: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    return [(name, f"0x{map_word(parse_int(word)):08X}", assembly)
+            for name, word, assembly in rows]
+
+
+def render_encodings(rows: list[tuple[str, str, str]]) -> str:
+    return "macro_name\tword_hex\tnormalized_asm\n" + "".join(
+        f"{name}\t{word}\t{assembly}\n" for name, word, assembly in rows)
+
+
+def opcode_map_rows() -> list[dict[str, str]]:
+    rows = []
+    for index, word in enumerate(EXPECTED_MM_WORDS):
+        kind = int(word & 0x7F == DMA_OPCODE)
+        rows.append({
+            "instruction_index": str(index),
+            "source_word": f"0x{word:08X}",
+            "target_word": f"0x{map_word(word):08X}",
+            "cmd_kind": str(kind),
+            "cmd26": f"0x{((kind << 25) | (word >> 7)):07X}",
+        })
+    return rows
+
+
+def validate_mapped_delivery(root: Path) -> None:
+    """保留完整上游证据，仅允许计算/控制指令的低 7 位发生指定转换。"""
+    upstream = root / "upstream"
+    validate_program(upstream)
+    expected_source = map_c((upstream / "mm.c").read_text(encoding="utf-8"))
+    if (root / "mm.c").read_text(encoding="utf-8") != expected_source:
+        fail("mapped mm.c changed more than opcode, including possible OBJ.len guard loss")
+    words = [int(line, 2) for line in (root / "mm.inst32").read_text().splitlines()
+             if line.strip()]
+    if words != [map_word(word) for word in EXPECTED_MM_WORDS]:
+        fail("mapped mm.inst32 does not preserve the upstream payload")
+    # cmd26 不变，DMA relocation/GPR、C 接口和助记符来源同样原样保留。
+    for name in ("mm.cmd26", "mm.h", "mm.asm", "dma_relocation_manifest.csv"):
+        if (root / name).read_bytes() != (upstream / name).read_bytes():
+            fail(f"opcode mapping unexpectedly changed {name}")
+    mapped = map_encodings(read_encodings(upstream / "encoder_words.tsv"))
+    if read_encodings(root / "encoder_words.tsv") != mapped:
+        fail("mapped encoder_words.tsv does not preserve upstream payloads")
+    header = (root / "inline_asm_mm_delivery.h").read_text(encoding="utf-8")
+    definitions = re.findall(r"^#define (HPU_INSN_\w+) UINT32_C\((0x[0-9A-Fa-f]{8})\)$",
+                             header, re.MULTILINE)
+    if definitions != [(name, word) for name, word, _assembly in mapped]:
+        fail("generated header does not match mapped encoder words")
+    if read_csv(root / "opcode_map.csv") != opcode_map_rows():
+        fail("opcode_map.csv does not match the source/target/cmd26 contract")
+
+
 def render_header(commit: str, coefficient_count: int, modulus: int,
                   selected: dict[str, dict[str, str]],
                   encodings: list[tuple[str, str, str]]) -> str:
@@ -259,8 +317,9 @@ def render_header(commit: str, coefficient_count: int, modulus: int,
         "",
         "#include <stdint.h>",
         "",
-        "/* Generated from the pinned inline-asm encoder and MM manifests. */",
+        "/* Generated from inline-asm; AM maps only control/compute opcode 0x0B to 0x5B. */",
         f'#define HPU_INLINE_ASM_SOURCE_COMMIT "{commit}"',
+        f"#define HPU_INLINE_ASM_ARITH_OPCODE UINT32_C(0x{TARGET_OPCODE:02X})",
         f"#define HPU_MM_COEFFICIENTS {coefficient_count}U",
         f"#define HPU_MM_MODULUS UINT32_C({modulus})",
         "#define HPU_MM_REQUIRED_WINDOW_LINES 193U",
@@ -274,7 +333,7 @@ def render_header(commit: str, coefficient_count: int, modulus: int,
         lines.append(f"#define HPU_MM_LINES_{suffix} {parse_int(row['line_count'])}U")
         lines.append(
             f"#define HPU_MM_FNV_{suffix} UINT64_C({row['image_fnv1a64']})")
-    lines.extend(["", "/* Words below are emitted by the real inline-asm encoder. */"])
+    lines.extend(["", "/* Encoder payloads unchanged; control/compute use custom-2, DMA stays custom-1. */"])
     for macro, word, assembly in encodings:
         lines.append(f"/* {assembly} */")
         lines.append(f"#define {macro} UINT32_C({word})")
@@ -302,7 +361,7 @@ def main() -> int:
 
     validate_program(source)
     coefficient_count, modulus, selected = validate_data(source)
-    encodings = read_encodings(arguments.encodings)
+    encodings = map_encodings(read_encodings(arguments.encodings))
     header_text = render_header(arguments.producer_commit, coefficient_count,
                                 modulus, selected, encodings)
 
@@ -315,10 +374,25 @@ def main() -> int:
             target = staging / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / relative, target)
+        upstream = staging / "upstream"
+        upstream.mkdir()
+        for name in UPSTREAM_PROGRAM_FILES:
+            shutil.copy2(source / name, upstream / name)
+        shutil.copy2(arguments.encodings, upstream / "encoder_words.tsv")
+        (staging / "mm.c").write_text(
+            map_c((source / "mm.c").read_text(encoding="utf-8")), encoding="utf-8")
+        (staging / "mm.inst32").write_text(
+            "".join(f"{map_word(word):032b}\n" for word in EXPECTED_MM_WORDS),
+            encoding="utf-8")
+        with (staging / "opcode_map.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=(
+                "instruction_index", "source_word", "target_word", "cmd_kind", "cmd26"))
+            writer.writeheader()
+            writer.writerows(opcode_map_rows())
         (staging / "PRODUCER_COMMIT").write_text(
             arguments.producer_commit + "\n", encoding="utf-8")
         (staging / "encoder_words.tsv").write_text(
-            arguments.encodings.read_text(encoding="utf-8"), encoding="utf-8")
+            render_encodings(encodings), encoding="utf-8")
         (staging / "inline_asm_mm_delivery.h").write_text(
             header_text, encoding="utf-8")
         (staging / "RESOLVED_DMA_SPANS.csv").write_text(
@@ -336,10 +410,14 @@ def main() -> int:
             "- DMA spans: MOD=(192,1), A=(0,64), B=(64,64), OUT=(128,64)\n"
             "- `images/expected.u32.bin` is immutable golden data; Nexus-AM "
             "poisons line 128 before DSTORE and never preloads this golden.\n"
-            "- Nexus-AM links the producer's complete `mm.c` unchanged, "
-            "including its DSTORE span/OBJ.len guard and one terminal PSYNC. "
-            "No extra PSYNC is inserted between modulus DLOAD and PMODLD.\n",
+            "- `upstream/` preserves original inline-asm program/encoder files. "
+            "AM maps only low 7 opcode bits 0x0B -> 0x5B in target mm.c/inst32 "
+            "and encoder words; opcode_map.csv records the MM mapping. DMA 0x2B, "
+            "inst[31:7], cmd26, x10/x11 and DSTORE OBJ.len guards are unchanged.\n"
+            "- The program retains one terminal PSYNC (0x7000005B), no internal barrier. "
+            "CPU frontend must route custom-2 (0x5B) to HPU cmd_kind=0.\n",
             encoding="utf-8")
+        validate_mapped_delivery(staging)
         if destination.exists():
             backup = destination.with_name(
                 f".{destination.name}.old-{os.getpid()}")
