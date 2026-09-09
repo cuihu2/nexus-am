@@ -1,5 +1,6 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
+#include <hpu/it_v2.h>
+#include <hpu/completion.h>
 
 /*
  * 测试点：IT-CFG-003
@@ -10,57 +11,91 @@
  *   - HPU_REQ_CACHE_CONTRACT
  */
 
+/* 失败后补充只读 CSR 诊断；各寄存器独立采样，不是原子快照，不读 PLIC claim。 */
+static int failure(unsigned source_line, const char *phase) {
+    const uint32_t status = csr_read(CSR_STATUS);
+    const uint32_t fault = csr_read(CSR_FAULT);
+    const uint32_t irq = csr_read(CSR_IRQ);
+    const uint32_t base_lo = csr_read(CSR_BASE_LO);
+    const uint32_t base_hi = csr_read(CSR_BASE_HI);
+    const uint32_t size_lo = csr_read(CSR_SIZE_LO);
+    const uint32_t size_hi = csr_read(CSR_SIZE_HI);
+
+    printf("[HPU][FAIL] phase=%s source_line=%u status=0x%x fault=0x%x irq=0x%x\n",
+           phase, source_line, status, fault, irq);
+    printf("[HPU][FAIL][window-shadow] base_hi=0x%x base_lo=0x%x "
+           "size_hi=0x%x size_lo=0x%x\n", base_hi, base_lo, size_hi, size_lo);
+    return case_fail(__FILE__, source_line);
+}
+
 int main(void) {
+    static const struct {
+        unsigned source;
+        unsigned output;
+        unsigned lines;
+        const char *point;
+    } ranges[] = {
+        {LINE_A, WINDOW_LINES - 1U, 1U, "first-to-last-one-line"},
+        {LINE_A + 3U, 320U, 3U, "middle-three-lines"},
+        {LINE_A, WINDOW_LINES - POLY_LINES, POLY_LINES, "last-legal-poly"}
+    };
+    const char *phase = "start";
     case_start(__FILE__);
-    const uint32_t seed = 0u;
-    enum { LAST_POLY_LINE = WINDOW_LINES - POLY_LINES };
-    unsigned line;
-    int rc;
 
-    /* 两组输入均来自 inline-asm producer，A 用于本次 4096-word 回环。 */
-    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
-    for (line = 0U; line < POLY_LINES; ++line)
-        poison_line(LAST_POLY_LINE + line,
-        UINT32_C(0xc1030000) ^ line);
-    clean_lines(LAST_POLY_LINE, POLY_LINES);
+    /* 每个范围是一段独立完整程序；末尾一次 PSYNC，再比较数据和非输出区域。 */
+    for (unsigned round = 0U; round < sizeof(ranges) / sizeof(ranges[0]); ++round) {
+        const unsigned source = ranges[round].source;
+        const unsigned output = ranges[round].output;
+        const unsigned lines = ranges[round].lines;
 
-    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+        phase = "range-data";
+        printf("[HPU][RANGE] round=%u point=%s source=%u output=%u lines=%u "
+               "words=%u window=[0,%u)\n", round, ranges[round].point,
+               source, output, lines, lines * WORDS_PER_LINE, WINDOW_LINES);
+        if (v2_prepare(0U, MOD_Q0, MOD_Q1) != 0 ||
+            v2_allow_output(output, lines) != 0)
+            return failure(__LINE__, phase);
 
-    /* BASE/SIZE 单位分别为 byte 地址和 256-byte line 数。 */
-    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
-    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
-        (uint32_t)(HPU_MEM_BASE >> 32U));
-    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, WINDOW_LINES);
-    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
-    if (expect_csr(HPU_CSR_BASE_LO_ADDR,
-        (uint32_t)HPU_MEM_BASE, UINT32_MAX) != 0 ||
-        expect_csr(HPU_CSR_BASE_HI_ADDR,
-        (uint32_t)(HPU_MEM_BASE >> 32U),
-        UINT32_C(0xff)) != 0 ||
-        expect_csr(HPU_CSR_SIZE_LO_ADDR,
-        WINDOW_LINES, UINT32_MAX) != 0 ||
-        expect_csr(HPU_CSR_SIZE_HI_ADDR, 0U, 1U) != 0)
-        return case_fail(__FILE__, __LINE__);
-    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
-    if (check_status() != 0) return case_fail(__FILE__, __LINE__);
+        phase = "range-config";
+        printf("[HPU][CONFIG] expected_base=0x%lx expected_lines=%u\n",
+               (unsigned long)MEM_BASE, WINDOW_LINES);
+        csr_write(CSR_FAULT, FAULT_VALID);
+        csr_write(CSR_IRQ, IRQ_LEVEL);
+        csr_write(CSR_IRQ, 0U);
+        csr_write(CSR_BASE_LO, (uint32_t)MEM_BASE);
+        csr_write(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U));
+        csr_write(CSR_SIZE_LO, WINDOW_LINES);
+        csr_write(CSR_SIZE_HI, 0U);
+        if (expect_csr(CSR_BASE_LO, (uint32_t)MEM_BASE, UINT32_MAX) != 0 ||
+            expect_csr(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U), UINT32_C(0xff)) != 0 ||
+            expect_csr(CSR_SIZE_LO, WINDOW_LINES, UINT32_MAX) != 0 ||
+            expect_csr(CSR_SIZE_HI, 0U, 1U) != 0)
+            return failure(__LINE__, phase);
+        csr_write(CSR_COMMIT, COMMIT);
+        if (wait_window(1) != 0 || check_status() != 0)
+            return failure(__LINE__, phase);
 
-    /* x10=0/448，x11=64：覆盖窗口首行到最后一个合法 64-line 区间。 */
-    rc = dload(P0, LINE_A, POLY_LINES);
-    if (rc != 0) return case_fail(__FILE__, __LINE__);
-    rc = dstore_release(P0, LAST_POLY_LINE, POLY_LINES);
-    if (rc != 0) return case_fail(__FILE__, __LINE__);
-    psync();
-    if (wait_irq() != 0) return case_fail(__FILE__, __LINE__);
-    if (check_status() != 0) return case_fail(__FILE__, __LINE__);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
+        phase = "range-dma";
+        printf("[HPU][ISSUE] p0 DLOAD line=%u count=%u -> "
+               "DSTORE line=%u count=%u -> PSYNC\n", source, lines, output, lines);
+        if (dload(P0, source, lines) != 0 ||
+            dstore_release(P0, output, lines) != 0)
+            return failure(__LINE__, phase);
+        psync();
+        phase = "range-complete";
+        if (wait_irq() != 0 || completion_clear() != 0 || check_status() != 0)
+            return failure(__LINE__, phase);
 
-    /* 逐个比较 64 lines × 64 words，即完整 4096 个 32-bit 系数。 */
-    if (check_regions(LAST_POLY_LINE, LINE_A,
-        POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
+        /* golden 读取 CPU 影子而非现场源 DDR；源/guard 被污染也不能蒙混通过。 */
+        phase = "range-golden";
+        if (v2_check_words(phase, output, v2_expected(source),
+                           lines * WORDS_PER_LINE, MOD_Q0) != 0 ||
+            v2_check_memory("range-readonly-and-guard") != 0)
+            return failure(__LINE__, phase);
+        printf("[HPU][RANGE-PASS] round=%u words=%u readonly-and-guard=pass\n",
+               round, lines * WORDS_PER_LINE);
+    }
+    printf("[HPU][SW-CHECK-PASS] monitor=needs-monitor; "
+           "AXI address/length and window-external side effects not proved by C\n");
     return case_pass(__FILE__);
 }

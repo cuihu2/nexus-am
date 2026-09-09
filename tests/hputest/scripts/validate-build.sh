@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 25 || $roster_migrated_blocked -ne 24 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 33 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 24 || \
+      $roster_migrated_software -ne 29 || $roster_migrated_blocked -ne 20 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 37 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 20 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -131,7 +131,9 @@ for case_id in "${roster_ids[@]}"; do
   case "$qualifier" in
     software-self-check)
       if ! grep -Fq 'case_pass(__FILE__)' "$source_file" ||
-         ! grep -Fq 'case_fail(__FILE__, __LINE__)' "$source_file"; then
+         { ! grep -Fq 'case_fail(__FILE__, __LINE__)' "$source_file" &&
+           ! { grep -Fq 'failure(__LINE__,' "$source_file" &&
+               grep -Eq 'case_fail\(__FILE__, (line|source_line)\)' "$source_file"; }; }; then
         printf 'ERROR: self-check testcase lacks PASS/FAIL reporting: %s\n' \
           "$source_path" >&2
         exit 2
@@ -529,6 +531,7 @@ if [[ ! -s $encoder_words ]] || \
   exit 2
 fi
 declare -A producer_word_seen=()
+declare -A producer_word_by_macro=()
 producer_words=()
 while IFS=$'\t' read -r macro_name word_hex normalized_asm; do
   if [[ ! $macro_name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || \
@@ -541,11 +544,14 @@ while IFS=$'\t' read -r macro_name word_hex normalized_asm; do
   word=${word_hex#0x}
   word=${word#0X}
   word=${word,,}
-  if [[ -n ${producer_word_seen[$word]:-} ]]; then
-    printf 'ERROR: duplicate producer encoder word: %s\n' "$word_hex" >&2
+  if [[ -n ${producer_word_seen[$word]:-} || \
+        -n ${producer_word_by_macro[$macro_name]:-} ]]; then
+    printf 'ERROR: duplicate producer encoder word or macro: %s %s\n' \
+      "$word_hex" "$macro_name" >&2
     exit 2
   fi
   producer_word_seen[$word]=$macro_name
+  producer_word_by_macro[$macro_name]=$word
   producer_words+=("$word")
 done < <(tail -n +2 "$encoder_words")
 if [[ ${#producer_words[@]} -eq 0 ]]; then
@@ -668,7 +674,7 @@ reject_old_hpu_opcode() {
     fi
   done < <(awk '
     /^[[:xdigit:]]+ <[^>]+>:/ {
-      in_hpu = ($0 ~ /<(main|hpu_program_mm|psync|hpu_psync|pmodld|hpu_pmodld_0|padd|hpu_padd_p2_p0_p1|psub|pmul|pmac|pmac_imm|issue_transform|pntt_stage|pintt_stage|pfree)(\.[^>]*)?>:/)
+      in_hpu = ($0 ~ /<(main|hpu_program_(mm|ntt|intt|bconv)|psync|hpu_psync|pmodld|hpu_pmodld_0|padd|hpu_padd_p2_p0_p1|psub|pmul|pmac|pmac_imm|issue_transform|pntt_stage|pintt_stage|pfree|op_[[:alnum:]_]+)(\.[^>]*)?>:/)
       next
     }
     in_hpu && /^[[:space:]]*[[:xdigit:]]+:/ && length($2) == 8 {
@@ -728,6 +734,63 @@ require_mm_fixture() {
     printf 'ERROR: obsolete AM MM phase is linked: %s\n' "$elf" >&2
     exit 2
   fi
+}
+
+require_stage_fixture() {
+  local elf=$1
+  local txt=$2
+  local direction=$3
+  local symbols
+  local symbol
+  local stage
+  local prefix
+  local macro_name
+  local word
+  local emitter_words
+
+  symbols=$("${cross_compile}nm" -S --defined-only "$elf")
+  for stage in 0 1 11; do
+    symbol="${direction}_twiddle_${stage}"
+    if ! grep -Eq \
+        "^[[:xdigit:]]+[[:space:]]+0*2000[[:space:]]+[Rr][[:space:]]+${symbol}$" \
+        <<< "$symbols"; then
+      printf 'ERROR: single-stage ELF lacks 8192-byte read-only %s: %s\n' \
+        "$symbol" "$elf" >&2
+      exit 2
+    fi
+  done
+  if ! grep -Eq "[[:space:]][Tt][[:space:]]+op_${direction}(\\.[^[:space:]]*)?$" \
+      <<< "$symbols" || \
+     grep -Eq '[[:space:]][Tt][[:space:]]+not_issued(\.[^[:space:]]*)?$' \
+      <<< "$symbols"; then
+    printf 'ERROR: single-stage ELF is a placeholder or has no op_%s emitter: %s\n' \
+      "$direction" "$elf" >&2
+    exit 2
+  fi
+
+  # 只在实际 op_ntt/op_intt 发射函数中找指令，不能把数据区中碰巧相同的字当作发令。
+  emitter_words=$(awk -v name="op_${direction}" '
+    /^[[:xdigit:]]+ <[^>]+>:/ {
+      in_emitter = ($0 ~ ("<" name "(\\.[^>]*)?>:"))
+      next
+    }
+    in_emitter && /^[[:space:]]*[[:xdigit:]]+:/ && length($2) == 8 {
+      print tolower($2)
+    }
+  ' "$txt")
+  for prefix in "HPU_INSN_P${direction^^}_STAGE" \
+                "HPU_INSN_P${direction^^}_P2_P3_STAGE"; do
+    for stage in 0 1 11; do
+      macro_name="${prefix}${stage}"
+      word=${producer_word_by_macro[$macro_name]:-}
+      if [[ -z $word ]] || ! grep -Fxq "$word" <<< "$emitter_words"; then
+        printf 'ERROR: single-stage emitter omits producer instruction %s (%s): %s\n' \
+          "$macro_name" "${word:-missing-provenance}" "$txt" >&2
+        exit 2
+      fi
+    done
+  done
+  require_word "$txt" 7000005b
 }
 
 reject_mm_only_fixture() {
@@ -797,7 +860,11 @@ for elf in "${elfs[@]}"; do
     */03_compute_instructions/*.elf|*/04_composite_instruction_sequences/*.elf|\
     */05_cpu_hpu_structural_connectivity/*.elf|*/06_performance/*.elf|\
     */07_full_application/*.elf)
-      require_rns_fixture "$elf"
+      if [[ $qualifier != blocked-not-issued && $name != HPU_IT_DIR_CMB_001 && \
+            $name != HPU_IT_DIR_CMB_002 && \
+            $name != HPU_IT_DIR_CMB_003 ]]; then
+        require_rns_fixture "$elf"
+      fi
       reject_mm_only_fixture "$elf" ;;
   esac
 
@@ -824,6 +891,20 @@ for elf in "${elfs[@]}"; do
     08_dload_compute_dstore_psync_irq|09_dload_compute_dstore_poll_mmio)
       require_mm_fixture "$elf"
       require_generated_mm_stream "$txt" ;;
+    HPU_IT_DIR_INS_C0_005)
+      require_stage_fixture "$elf" "$txt" ntt ;;
+    HPU_IT_DIR_INS_C0_006)
+      require_stage_fixture "$elf" "$txt" intt ;;
+    HPU_IT_DIR_CMB_002|HPU_IT_DIR_CMB_003)
+      operator=ntt
+      [[ $name == HPU_IT_DIR_CMB_003 ]] && operator=intt
+      python3 "$script_dir/verify-operator-elf.py" \
+        --delivery "$artifact_root/provenance/transform-data/$operator" \
+        --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
+    HPU_IT_DIR_CMB_001)
+      python3 "$script_dir/verify-operator-elf.py" \
+        --delivery "$artifact_root/provenance/bconv-data" \
+        --elf "$elf" --disassembly "$txt" --operator bconv ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)

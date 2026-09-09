@@ -1,28 +1,16 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-PERF-004
- * 目的：BConv算子加速比。
- * 模式：定向性能测试（P3）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_CACHE_CONTRACT
- *   - HPU_REQ_PERF_BASELINE
- *   - HPU_REQ_PERF_THRESHOLD
+ * 目的：BConv 纯计算与端到端性能。
+ * 此项尚未完成接入；只打印实际缺口，不发指令、不伪造 golden 或 PASS。
+ * 缺 AM BConv 完整接收和相同输入/参数的 CPU 对照、纯计算计数边界与轮数。
  */
-
 int main(void) {
     case_start(__FILE__);
-    /*
-     * 当前迁移边界 / current migration boundary:
-     * 1. ELF 已嵌入 producer 的 A/B 两组 4096×uint32 输入，防止数据接口退化。
-     * 2. 完整 BConv 尚缺已解析的 DMA span/golden，性能计划也未冻结基线、重复次数和门限。
-     * 3. 因此本用例不写 HPU CSR、不发指令、不输出伪 cycle 或伪 speedup。
-     * 4. not_issued() 仅验证输入符号可链接；main 随后明确 return 1。
-     * 5. 算法与性能契约补齐后，才实现同边界计时、逐系数比对和门限判定。
-     */
-    (void)not_issued();
+    printf("[HPU][BLOCKED] HPU_IT_DIR_PERF_004\n");
+    printf("缺 AM BConv 完整接收和相同输入/参数的 CPU 对照、纯计算计数边界与轮数。\n");
+    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

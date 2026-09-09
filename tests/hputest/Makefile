@@ -45,6 +45,14 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-dma-poll.py
 	@python3 scripts/test-fixture-diagnostics.py
 	@python3 scripts/test-runtime-wait.py
+	@python3 scripts/test-v2-memory.py
+	@python3 scripts/test-package-chapters.py
+	@python3 scripts/test-transform-delivery.py \
+	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs" \
+	  --encodings "$(OUTPUT_ROOT)/inline-asm-tools/encoder_words.tsv"
+	@python3 scripts/test-bconv-delivery.py \
+	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs" \
+	  --encodings "$(OUTPUT_ROOT)/inline-asm-tools/encoder_words.tsv"
 
 validate:
 	@HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \

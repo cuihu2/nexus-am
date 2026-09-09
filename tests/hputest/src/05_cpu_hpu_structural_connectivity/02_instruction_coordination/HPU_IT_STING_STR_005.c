@@ -1,29 +1,16 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-STR-005
- * 目的：RISC-V与HPU混合代码段约束随机。
- * 模式：STING约束随机+功能覆盖（P3）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_READY_CONTROL
- *   - HPU_REQ_CACHE_CONTRACT
- *   - HPU_REQ_EXTERNAL_ENTRY
- *   - HPU_REQ_FUNCTION_COVERAGE
- *   - HPU_REQ_STING
- *   - HPU_REQ_QUEUE_CONTROL
+ * 目的：CPU/HPU 混合随机指令的提交一致性。
+ * 此项尚未完成接入；只打印实际缺口，不发指令、不伪造 golden 或 PASS。
+ * 缺 STING 入口、参考执行模型和错误路径/异常注入契约。
  */
-
 int main(void) {
     case_start(__FILE__);
-    /*
-     * Fail closed: the STING-generated mixed RISC-V/HPU code image, replay
-     * metadata, x10/x11 DMA relocation spans, architectural result golden,
-     * and retirement/queue monitor contract are not connected.  Deterministic
-     * PADD/PMUL calls are not a substitute, so issue no HPU command.
-     */
-    (void)not_issued();
+    printf("[HPU][BLOCKED] HPU_IT_STING_STR_005\n");
+    printf("缺 STING 入口、参考执行模型和错误路径/异常注入契约。\n");
+    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

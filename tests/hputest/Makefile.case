@@ -17,6 +17,9 @@ HPU_GENERATED_ROOT ?= $(TEST_ROOT)/build/generated
 INLINE_ASM_MM_ROOT := $(HPU_GENERATED_ROOT)/inline-asm/mm
 # .incbin 只从本次已校验的交付目录取数据，不读取 submodule 遗留输出。
 ASFLAGS += -Wa,-I$(INLINE_ASM_MM_ROOT)/test_data/hardware
+ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/instruction-data
+ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/transform-data
+ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/bconv-data
 INLINE_ASM_DELIVERY_HEADER := \
   $(HPU_GENERATED_ROOT)/include/hpu/inline_asm_mm_delivery.h
 
@@ -56,6 +59,29 @@ SRCS += $(HPU_IT_RUNTIME_SRCS)
 # Migrated finite cases consume the producer's two 4096-coefficient RNS
 # inputs.  They do not link the smoke-only MM golden/modulus/program payload.
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
+ifneq ($(filter %/HPU_IT_DIR_INS_C0_005.c %/HPU_IT_DIR_INS_C0_006.c,$(CASE_SOURCE)),)
+SRCS += $(TEST_ROOT)/src/common/it_stage_twiddle.S
+endif
+ifneq ($(filter %/HPU_IT_DIR_INS_C0_008.c,$(CASE_SOURCE)),)
+SRCS += $(TEST_ROOT)/src/common/hpu_irq.c
+endif
+ifneq ($(filter %/HPU_IT_DIR_CMB_002.c %/HPU_IT_DIR_CMB_003.c,$(CASE_SOURCE)),)
+SRCS += $(TEST_ROOT)/src/common/it_transform.c
+SRCS += $(TEST_ROOT)/src/common/it_transform_fixture.S
+INC_DIR += $(HPU_GENERATED_ROOT)/transform-data
+endif
+ifneq ($(filter %/HPU_IT_DIR_CMB_002.c,$(CASE_SOURCE)),)
+SRCS += $(HPU_GENERATED_ROOT)/transform-data/ntt/ntt.c
+endif
+ifneq ($(filter %/HPU_IT_DIR_CMB_003.c,$(CASE_SOURCE)),)
+SRCS += $(HPU_GENERATED_ROOT)/transform-data/intt/intt.c
+endif
+ifneq ($(filter %/HPU_IT_DIR_CMB_001.c,$(CASE_SOURCE)),)
+SRCS += $(TEST_ROOT)/src/common/it_bconv.c
+SRCS += $(TEST_ROOT)/src/common/it_bconv_fixture.S
+SRCS += $(HPU_GENERATED_ROOT)/bconv-data/bconv.c
+INC_DIR += $(HPU_GENERATED_ROOT)/bconv-data
+endif
 endif
 DST_DIR := $(HPU_DST_DIR)
 INC_DIR += $(HPU_GENERATED_ROOT)/include $(TEST_ROOT)/include
@@ -77,6 +103,19 @@ $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/hpu_rns_fixture.o: \
 $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/hpu_mm_fixture.o: \
   $(INLINE_ASM_MM_ROOT)/test_data/hardware/images/expected.u32.bin \
   $(INLINE_ASM_MM_ROOT)/test_data/hardware/constants/mod_ctx.u32.bin
+
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_stage_twiddle.o: \
+  $(addprefix $(HPU_GENERATED_ROOT)/instruction-data/,ntt_stage_00.u32.bin \
+  ntt_stage_01.u32.bin ntt_stage_11.u32.bin intt_stage_00.u32.bin \
+  intt_stage_01.u32.bin intt_stage_11.u32.bin)
+
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_transform_fixture.o: \
+  $(addprefix $(HPU_GENERATED_ROOT)/transform-data/,ntt/window.u32.bin \
+  ntt/golden.u32.bin intt/window.u32.bin intt/golden.u32.bin)
+
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_bconv_fixture.o: \
+  $(addprefix $(HPU_GENERATED_ROOT)/bconv-data/,window.u32.bin \
+  golden_p.u32.bin normalized_cpu.u32.bin)
 
 # Nexus-AM adds -ggdb in Makefile.compile.  Published smoke ELFs do not need
 # checkout-specific debug paths.

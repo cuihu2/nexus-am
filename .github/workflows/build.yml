@@ -131,13 +131,9 @@ jobs:
           retention-days: 7
 
   build-hpu:
-    name: build HPU ${{ matrix.group }} workloads
+    name: build HPU workloads by chapter
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        group: ${{ fromJSON(github.event_name == 'pull_request' && '["core"]' || '["core","transform","fhe"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -153,26 +149,20 @@ jobs:
             g++-riscv64-linux-gnu \
             binutils-riscv64-linux-gnu \
             python3
-      - name: Generate and import inline-asm MM delivery
-        run: |
-          make -C tests/hputest prepare-inline-asm-mm JOBS=4
-      - name: Verify HPU instruction words against inline-asm
-        env:
-          HPU_GENERATED_ROOT: ${{ github.workspace }}/tests/hputest/build/generated
-        run: tests/hputest/scripts/verify-inline-asm-encodings.sh
-      - name: Build and validate HPU ${{ matrix.group }} tests
+      - name: Build and validate all HPU tests
         env:
           AM_HOME: ${{ github.workspace }}
         run: |
-          make -C tests/hputest group \
-            GROUP=${{ matrix.group }} \
+          make -C tests/hputest all \
             ARCH=riscv64-xs \
             CROSS_COMPILE=riscv64-linux-gnu- \
             JOBS=4
-      - name: Upload HPU ${{ matrix.group }} ELF, BIN, disassembly, and provenance
+      - name: Package HPU workloads by chapter
+        run: python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/artifact --all
+      - name: Upload HPU chapter package
         uses: actions/upload-artifact@v7
         with:
-          name: nexus-am-hpu-${{ matrix.group }}-workloads
-          path: tests/hputest/build/artifact
+          name: nexus-am-hpu-workloads
+          path: tests/hputest/build/release
           if-no-files-found: error
           retention-days: 7

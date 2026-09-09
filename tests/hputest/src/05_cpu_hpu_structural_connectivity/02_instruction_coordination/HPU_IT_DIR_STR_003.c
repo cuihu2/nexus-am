@@ -1,27 +1,16 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-STR-003
- * 目的：普通运算访存与HPU指令交叉保序。
- * 模式：定向结构连接+功能覆盖（P0）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_READY_CONTROL
- *   - HPU_REQ_CACHE_CONTRACT
- *   - HPU_REQ_FUNCTION_COVERAGE
+ * 目的：分支错误路径、异常与特权切换协同验证。
+ * 此项尚未完成接入；只打印实际缺口，不发指令、不伪造 golden 或 PASS。
+ * 缺项目异常/特权入口与提交 monitor，无法用普通顺序 C 承诺错误路径 HPU 命令无副作用。
  */
-
 int main(void) {
     case_start(__FILE__);
-    /*
-     * Fail closed: this receiver lacks a producer-defined mixed instruction
-     * stream that fixes the exact ordinary load/store/arithmetic locations
-     * between HPU commands, plus the retirement/ordering monitor contract and
-     * memory golden.  Running a PADD before or after unrelated CPU work would
-     * not prove IT-STR-003, so no HPU command is issued.
-     */
-    (void)not_issued();
+    printf("[HPU][BLOCKED] HPU_IT_DIR_STR_003\n");
+    printf("缺项目异常/特权入口与提交 monitor，无法用普通顺序 C 承诺错误路径 HPU 命令无副作用。\n");
+    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

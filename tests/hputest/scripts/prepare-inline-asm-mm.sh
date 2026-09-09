@@ -122,4 +122,19 @@ python3 "$script_dir/import-inline-asm-mm.py" \
   --encodings "$encoding_tsv" \
   --producer-commit "$producer_commit"
 
-echo '[hputest] inline-asm MM generation/import PASS'
+python3 "$script_dir/import-stage-data.py" \
+  --source "$producer_work/outputs" \
+  --destination "$generated_root/instruction-data" \
+  --producer-commit "$producer_commit"
+
+python3 "$script_dir/import-transform-data.py" \
+  --source "$producer_work/outputs" \
+  --destination "$generated_root/transform-data" \
+  --producer-commit "$producer_commit" --encodings "$encoding_tsv"
+
+python3 "$script_dir/import-bconv-data.py" \
+  --source "$producer_work/outputs" \
+  --destination "$generated_root/bconv-data" \
+  --producer-commit "$producer_commit" --encodings "$encoding_tsv"
+
+echo '[hputest] inline-asm MM/stage/transform generation/import PASS'

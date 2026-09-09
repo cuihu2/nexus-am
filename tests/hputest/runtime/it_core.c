@@ -1,4 +1,5 @@
 #include "it_internal.h"
+#include <klib.h>
 
 #define DMA(word_, line_, count_)                                          \
     do {                                                                    \
@@ -16,7 +17,11 @@
     __asm__ volatile(".word %0" : : "i"((uint32_t)(word_)) : "memory")
 
 int expect_csr(uintptr_t address, uint32_t expected, uint32_t mask) {
-    return (hpu_csr_read32(address) & mask) == (expected & mask) ? 0 : 1;
+    uint32_t actual = hpu_csr_read32(address);
+    if ((actual & mask) == (expected & mask)) return 0;
+    printf("[HPU][FAIL][csr-readback] addr=0x%lx actual=0x%x expected=0x%x mask=0x%x\n",
+           (unsigned long)address, actual, expected, mask);
+    return 1;
 }
 
 volatile uint32_t *ddr_line(unsigned line) {
@@ -113,12 +118,15 @@ uint32_t mod_mul(uint32_t a, uint32_t b, uint32_t modulus) {
 
 int wait_window(int expected_valid) {
     unsigned timeout;
+    uint32_t status = 0U;
 
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        uint32_t status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
+        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
         int valid = (status & HPU_STATUS_WINDOW_VALID) != 0U;
         if (valid == (expected_valid != 0)) return STEP_OK;
     }
+    printf("[HPU][FAIL][wait-window] expected_valid=%d status=0x%x polls=%u\n",
+           expected_valid, status, timeout);
     return STEP_ERR_WINDOW;
 }
 
@@ -167,10 +175,13 @@ int check_status(void) {
 
     if ((fault & HPU_FAULT_VALID) != 0U ||
         (status & HPU_STATUS_FAULT_VALID) != 0U) {
+        printf("[HPU][FAIL][status] reason=fault status=0x%x fault=0x%x\n", status, fault);
         return STEP_ERR_FAULT;
     }
     if ((status & HPU_STATUS_WINDOW_VALID) == 0U ||
         (status & HPU_STATUS_BUSY) != 0U) {
+        printf("[HPU][FAIL][status] reason=invalid-or-busy status=0x%x fault=0x%x\n",
+               status, fault);
         return STEP_ERR_WINDOW;
     }
     return STEP_OK;
@@ -178,13 +189,21 @@ int check_status(void) {
 
 int wait_irq(void) {
     unsigned timeout;
+    uint32_t irq = 0U, status = 0U, fault = 0U;
 
     for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
         /* 完成电平与 BUSY 独立同步，通知先到时不能提前返回。 */
-        uint32_t irq = hpu_csr_read32(HPU_CSR_IRQ_ADDR);
-        uint32_t status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-        if ((status & HPU_STATUS_FAULT_VALID) != 0U ||
-            (hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U) {
+        irq = hpu_csr_read32(HPU_CSR_IRQ_ADDR);
+        status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
+        if ((status & HPU_STATUS_FAULT_VALID) != 0U) {
+            printf("[HPU][FAIL][wait-mmio] reason=status-fault irq=0x%x status=0x%x polls=%u\n",
+                   irq, status, timeout + 1U);
+            return STEP_ERR_FAULT;
+        }
+        fault = hpu_csr_read32(HPU_CSR_FAULT_ADDR);
+        if ((fault & HPU_FAULT_VALID) != 0U) {
+            printf("[HPU][FAIL][wait-mmio] reason=detail-fault irq=0x%x status=0x%x fault=0x%x polls=%u\n",
+                   irq, status, fault, timeout + 1U);
             return STEP_ERR_FAULT;
         }
         if ((irq & HPU_IRQ_LEVEL) != 0U &&
@@ -192,6 +211,8 @@ int wait_irq(void) {
                 HPU_STATUS_WINDOW_VALID)
             return STEP_OK;
     }
+    printf("[HPU][FAIL][wait-mmio] reason=timeout irq=0x%x status=0x%x fault=0x%x polls=%u\n",
+           irq, status, fault, timeout);
     return STEP_ERR_TIMEOUT;
 }
 

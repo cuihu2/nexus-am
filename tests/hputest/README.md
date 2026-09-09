@@ -5,6 +5,10 @@ testcases.  It contains the eleven bring-up/return probes plus the 49 migrated
 IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
+本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续49项中29项有软件自检，20项尚未接入；
+软件自检不等于整个测试点或IT验证已通过。00冒烟源码保持不变。
+
 ## Source layout
 
 The bring-up suites are deliberately flat at the testcase level:
@@ -227,7 +231,7 @@ length; the producer still loads `x11` and checks that the supplied span
 count equals its software-tracked object length. Both DSTORE `rel` values
 release the source object, so a successful store must not be followed by
 another PFREE for that same allocation. The previously
-blocked transform/application cases stay blocked until their own complete
+blocked operator/application cases stay blocked until their own complete
 program/data/golden contracts are validated; fixing encoding alone does not
 qualify a functional testcase.
 
@@ -261,8 +265,8 @@ new_inst = (old_inst & 0xFFFFFF80) | 0x5B
 `mm.cmd26`、`encoder_words.tsv` 和 `upstream/` 下的原始同名文件，`opcode_map.csv` 按 MM
 指令记录映射前后的 word，便于排查 ELF 与 simv 版本是否配套。
 **运行新 ELF 的 CPU 前端必须已将 `0x5B` 识别为 HPU 并映射到
-`cmd_kind=0`**；仅更新测试文件不能让旧 simv 自动兼容。本次不启用被阻塞的
-功能用例，也不代表已通过 VCS。
+`cmd_kind=0`**；仅更新测试文件不能让旧 simv 自动兼容。
+当前可执行范围以 v2 覆盖说明为准，不代表已通过 VCS。
 
 The complete producer/consumer contract and the exact current MM file mapping
 are documented in
@@ -318,8 +322,8 @@ The 49 migrated sources retain the original hierarchy and testcase IDs from
 `IT-SCPU-TestCases`.  Files below `src/common/` and `runtime/` are deliberately
 excluded from testcase discovery.  The tracked `cases.tsv` file is the
 canonical roster: deleting, renaming, duplicating, or silently reclassifying a
-case makes the build fail.  Build artifacts are partitioned by what an IT user
-is likely to run together:
+case makes the build fail. Internal build groups remain available for local
+selection, while the downloadable package merges them into source chapters:
 
 The mapping between Gantt-chart labels such as configuration, instruction,
 operator, performance, and application tests and this source hierarchy is
@@ -328,11 +332,9 @@ fixed in
 Planning rows must carry the exact `case_id` from `cases.tsv`; a parallel set
 of informal testcase numbers is not authoritative.
 
-Every migrated ELF links the producer's two immutable one-RNS fixtures
-`RNS_A` and `RNS_B` (4096 little-endian 32-bit
-coefficients, 16 KiB each).  It does not link the smoke-only MM golden,
-modulus record, or generated `mm.c` program unless its testcase explicitly
-uses that program.
+基础用例使用producer的两组不可变一RNS输入 `RNS_A/RNS_B`，各4096个32位系数。
+整体NTT/INTT/BConv改用各自的完整数据、常量和golden交付，不用MM输入冒充算子数据。
+未接入用例不再为了凑数据而强制保留无关fixture。
 
 | Group | Contents |
 |---|---|
@@ -340,23 +342,14 @@ uses that program.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-Twenty-five migrated sources issue real CSR/HPU operations and contain a
-software self-check.  The remaining twenty-four sources are deliberately
-fail-closed: the producer has not yet supplied a receiver-ready combination
-of complete N=4096 data, immutable golden results, and a resolved DMA-span
-table for those algorithms/performance measurements.  The blocked set is
-`INS_C0_005/006`,
-`CMB_001/002/003/004/005/010/011/012/013/014/015`,
-`STING_CMB_007`, `STR_003/004`, `STING_STR_005`,
-`PERF_001/002/003/004/005/006`, and `APP_001`.  In particular, the transform
-cases stay blocked until the producer supplies the real N=4096 data,
-pre/post-twist and stage-twiddle layout; a one-line stand-in is not accepted.
+29个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT
+已接入完整producer序列和golden，但仅覆盖各自固定基础组合。
+其它20项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
+也有AM接收工作未实现，不能笼统归因于上游“没有数据”。原HADD的单条PADD替身已取消，
+真实PADD覆盖保留在03-001；HADD需真实算法库API后再启用。
 
-The twenty-four blocked sources are still cross-built so the source/API boundary
-cannot rot, but they do not issue invented HPU commands and deliberately
-return 1.  Both
-`CASE_MANIFEST.tsv` and `NOT_QUALIFIED.tsv` mark them
-`blocked-not-issued`; they are not qualification results.
+未接入源码仍交叉编译以检查接口，执行只报具体原因并return 1。
+`CASE_MANIFEST.tsv`/`NOT_QUALIFIED.tsv`标记它们，但下载包不再包含这些占位ELF/BIN/TXT。
 
 `cases.tsv` uses five explicit qualifiers: `software-self-check`,
 `blocked-not-issued`, `waveform-hold`, `termination-probe-pass`, and
@@ -405,11 +398,17 @@ Local output is ignored under `tests/hputest/build/`.  A full build produces
 `provenance/inline-asm-mm/` directory containing the selected producer
 program, data, tables, producer commit, and resolved DMA spans.
 
-On pushes to `master` and manual runs, GitHub Actions builds and uploads all
-three groups separately as `nexus-am-hpu-core-workloads`,
-`nexus-am-hpu-transform-workloads`, and `nexus-am-hpu-fhe-workloads`.  Pull
-requests build the `core` group as the fast structural gate.  Artifacts are
-retained for seven days; none of them are committed to Git.
+本地生成章节下载包：
+
+```bash
+python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/artifact --all
+```
+
+GitHub Actions在push/PR/手动运行中全量构建，然后统一上传
+`nexus-am-hpu-workloads`，内容来自 `build/release/`。
+包内按00至07章节组织，03的全部九个用例放在一起；`INDEX.tsv`列实际下载路径、用途和未就绪原因。
+当前发布40组非占位产物（含冒烟与返回值探针），20项只保留索引；原始构建清单和provenance各保留一份。
+产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary
 

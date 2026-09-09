@@ -1,28 +1,16 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-CMB-007
- * 目的：HPU可执行代码段约束随机排列组合。
- * 模式：STING约束随机（P3）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_CACHE_CONTRACT
- *   - HPU_REQ_EXTERNAL_DATA
- *   - HPU_REQ_EXTERNAL_ENTRY
- *   - HPU_REQ_STING
+ * 目的：带依赖和生命周期约束的随机长指令链。
+ * 此项尚未完成接入；只打印实际缺口，不发指令、不伪造 golden 或 PASS。
+ * 缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。
  */
-
 int main(void) {
     case_start(__FILE__);
-    /*
-     * Fail closed: no STING-generated legal HPU program, exact replay seed
-     * record, x10/x11 DMA relocation-span manifest, matching input images,
-     * or immutable final golden is connected to this receiver.  A fixed
-     * PADD/PMUL sample is not evidence for the requested random sequence, so
-     * this testcase deliberately issues no HPU command.
-     */
-    (void)not_issued();
+    printf("[HPU][BLOCKED] HPU_IT_STING_CMB_007\n");
+    printf("缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。\n");
+    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

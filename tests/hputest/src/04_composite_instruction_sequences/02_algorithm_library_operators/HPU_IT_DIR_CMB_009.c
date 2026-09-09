@@ -1,71 +1,16 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-CMB-009
- * 目的：Poseidon算法库HADD组合序列。
- * 模式：定向算法库算子（P2）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_CACHE_CONTRACT
+ * 目的：通过真实 HPU/Poseidon 算法库接口验证 HADD。
+ * 此项尚未完成接入；只打印实际缺口，不发指令、不伪造 golden 或 PASS。
+ * 未指定算法库仓库/版本/API/密文参数。逐系数 PADD 不是 HADD 接口验收；PADD 已由 INS_C0_001 验证。
  */
-
 int main(void) {
     case_start(__FILE__);
-    const uint32_t seed = UINT32_C(0xc009a);
-    uint32_t status;
-    unsigned timeout;
-
-    /* HADD's current producer-backed mapping is full-width modular PADD. */
-    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
-
-    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
-    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
-        (uint32_t)(HPU_MEM_BASE >> 32U));
-    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, WINDOW_LINES);
-    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
-    if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) !=
-        (uint32_t)HPU_MEM_BASE) return case_fail(__FILE__, __LINE__);
-    if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_MEM_BASE >> 32U)) return case_fail(__FILE__, __LINE__);
-    if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != WINDOW_LINES)
-        return case_fail(__FILE__, __LINE__);
-    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return case_fail(__FILE__, __LINE__);
-    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
-
-    /* Producer sequence for HADD: load q0/A/B, PADD, then DSTORE p2. */
-    if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
-    /* 硬件维护模表 DLOAD 与 PMODLD 的依赖，程序内部不插入 PSYNC。 */
-    if (pmodld(0U) != 0) return case_fail(__FILE__, __LINE__);
-    if (dload(P0, LINE_A, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
-    if (dload(P1, LINE_B, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
-    if (padd() != 0) return case_fail(__FILE__, __LINE__);
-    if (dstore_release(P2, LINE_OUT, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
-
-    psync();
-    if (wait_irq() != 0) return case_fail(__FILE__, __LINE__);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U)
-            break;
-    }
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    if (timeout == HPU_TIMEOUT) return case_fail(__FILE__, __LINE__);
-    status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-    if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return case_fail(__FILE__, __LINE__);
-    if ((status & (HPU_STATUS_BUSY | HPU_STATUS_FAULT_VALID)) != 0U)
-        return case_fail(__FILE__, __LINE__);
-    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
-        return case_fail(__FILE__, __LINE__);
-
-    /* Compare all 4096 HADD output words with the independent C oracle. */
-    if (check_padd(LINE_OUT, POLY_LINES) != 0) return case_fail(__FILE__, __LINE__);
-    return case_pass(__FILE__);
+    printf("[HPU][BLOCKED] HPU_IT_DIR_CMB_009\n");
+    printf("未指定算法库仓库/版本/API/密文参数。逐系数 PADD 不是 HADD 接口验收；PADD 已由 INS_C0_001 验证。\n");
+    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    case_not_qualified(__FILE__);
+    return 1;
 }

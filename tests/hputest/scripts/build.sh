@@ -92,7 +92,7 @@ done < "$roster"
 if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 25 || $roster_migrated_blocked -ne 24 ]]; then
+      $roster_migrated_software -ne 29 || $roster_migrated_blocked -ne 20 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -183,8 +183,13 @@ for source in "${case_sources[@]}"; do
   printf '%s\t%s\t%s\tsrc/%s\n' \
     "$group" "$qualification" "$case_id" "$relative" >> "$case_manifest"
   if [[ $qualification == blocked-not-issued ]]; then
-    printf '%s\tsrc/%s\tno validated inline-asm algorithm binding; HPU commands are not issued and main returns 1\n' \
-      "$case_id" "$relative" >> "$not_qualified_manifest"
+    reason=$(awk -F '\t' -v id="$case_id" '$1 == id { print $2; found++ } END { if (found != 1) exit 1 }' \
+      "$test_root/blocked.tsv") || {
+      printf 'ERROR: missing/duplicate blocked reason: %s\n' "$case_id" >&2
+      exit 2
+    }
+    printf '%s\tsrc/%s\t%s\n' \
+      "$case_id" "$relative" "$reason" >> "$not_qualified_manifest"
     not_qualified_count=$((not_qualified_count + 1))
   fi
 
@@ -229,6 +234,19 @@ else
   mkdir -p "$mm_delivery_artifact"
 fi
 cp -a "$mm_delivery_source/." "$mm_delivery_artifact/"
+stage_delivery="$generated_root/instruction-data"
+if [[ ! -s $stage_delivery/selection.tsv ]]; then
+  printf 'ERROR: missing current instruction-stage data delivery\n' >&2
+  exit 2
+fi
+cp -a "$stage_delivery" "$artifact_root/provenance/instruction-data"
+test -s "$generated_root/transform-data/producer_commit.txt"
+cp -a "$generated_root/transform-data" "$artifact_root/provenance/transform-data"
+test -s "$generated_root/bconv-data/producer_commit.txt"
+cp -a "$generated_root/bconv-data" "$artifact_root/provenance/bconv-data"
+mkdir -p "$artifact_root/provenance/testplan/docs"
+cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$artifact_root/provenance/testplan/"
 if [[ -n $case_filter ]]; then
   selection="case:$case_filter"
   expected_cases=1

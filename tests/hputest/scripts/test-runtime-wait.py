@@ -18,6 +18,7 @@ TEST_ROOT = Path(__file__).resolve().parents[1]
 MOCK_DECLARATIONS = r"""
 #include <assert.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define HPU_CSR_STATUS_ADDR 0x08000014U

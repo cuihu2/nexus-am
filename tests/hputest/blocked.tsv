@@ -1,0 +1,21 @@
+case_id	reason
+HPU_IT_DIR_CMB_004	缺独立 KeySwitch 程序的已解析 DMA/常量/密钥/中间区绑定，不能借用其它算子的布局。
+HPU_IT_DIR_CMB_005	producer 的 Auto 专用数据和已解析表已具备，AM 对旋转因子、对象和 scratch 的接收校验尚未实现。
+HPU_IT_DIR_CMB_009	未指定算法库仓库/版本/API/密文参数。逐系数 PADD 不是 HADD 接口验收；PADD 已由 INS_C0_001 验证。
+HPU_IT_DIR_CMB_010	缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。
+HPU_IT_DIR_CMB_011	缺 encode 库接口版本、编码参数、精度和可独立校验的数据。
+HPU_IT_DIR_CMB_012	缺 reline 库入口及独立密钥/常量/scratch 绑定；不能以 PMAC 代替。
+HPU_IT_DIR_CMB_013	缺库接口版本、输入 level/scale、输出精度与 rescale golden 契约。
+HPU_IT_DIR_CMB_014	缺算法库 rotate 接口、旋转索引/密钥绑定和接口级 golden；裸 Auto 不等同库接口。
+HPU_IT_DIR_CMB_015	缺库版本、bootstrapping 完整输入/评估数据、精度与可执行入口。
+HPU_IT_STING_CMB_007	缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。
+HPU_IT_DIR_STR_003	缺项目异常/特权入口与提交 monitor，无法用普通顺序 C 承诺错误路径 HPU 命令无副作用。
+HPU_IT_DIR_STR_004	缺可重复的外部事件注入和队列/提交观测接口，不能通过扩大 timeout 代替。
+HPU_IT_STING_STR_005	缺 STING 入口、参考执行模型和错误路径/异常注入契约。
+HPU_IT_DIR_PERF_001	缺匹配的 CPU/HPU RelinOnly 实现、评估数据、统一纯计算计时边界与重复轮数。
+HPU_IT_DIR_PERF_002	功能实现见 CMB_002；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。
+HPU_IT_DIR_PERF_003	功能实现见 CMB_003；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。
+HPU_IT_DIR_PERF_004	缺 AM BConv 完整接收和相同输入/参数的 CPU 对照、纯计算计数边界与轮数。
+HPU_IT_DIR_PERF_005	缺完整 KeySwitch 数据绑定和匹配 CPU 基线，纯计算计数边界与轮数未确认。
+HPU_IT_DIR_PERF_006	缺项目算法库密文乘法接口/基线与纯计算计数边界，不能用单系数 PMUL 计时替代。
+HPU_IT_DIR_APP_001	需确认应用为真实密文/FHE 还是模多项式，并提供对应接口/密钥/输入/精度/golden；当前两项均未实现。

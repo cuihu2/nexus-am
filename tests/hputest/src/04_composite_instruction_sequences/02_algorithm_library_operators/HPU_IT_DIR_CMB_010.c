@@ -1,26 +1,16 @@
 #include <hpu/result.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-CMB-010
- * 目的：Poseidon算法库HMUL组合序列。
- * 模式：定向算法库算子（P2）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_CACHE_CONTRACT
+ * 目的：通过算法库接口验证 HMUL。
+ * 此项尚未完成接入；只打印实际缺口，不发指令、不伪造 golden 或 PASS。
+ * 缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。
  */
-
 int main(void) {
     case_start(__FILE__);
-    /*
-     * 当前迁移边界 / current migration boundary:
-     * 1. ELF 已嵌入 producer 的 A/B 两组 4096×uint32 输入，防止数据接口退化。
-     * 2. 完整算法仍缺少已解析的 DMA span 表、全部中间区布局和不可变 golden。
-     * 3. 因此本用例不写 HPU CSR、不发明 HMUL 指令序列，也不产生假 self-check PASS。
-     * 4. not_issued() 仅验证输入符号可链接；main 随后明确 return 1。
-     * 5. producer 契约补齐后，才在这里展开 CSR→数据→指令→PSYNC→逐系数比对步骤。
-     */
-    (void)not_issued();
+    printf("[HPU][BLOCKED] HPU_IT_DIR_CMB_010\n");
+    printf("缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。\n");
+    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

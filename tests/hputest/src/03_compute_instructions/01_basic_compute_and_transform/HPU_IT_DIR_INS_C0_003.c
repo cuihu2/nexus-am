@@ -1,95 +1,101 @@
+#include <hpu/completion.h>
+#include <hpu/it_v2.h>
 #include <hpu/result.h>
-#include <hpu/encoding.h>
-#include <hpu/steps.h>
 
 /*
  * 测试点：IT-INS-C0-003
- * 目的：PMUL对象与立即数模式闭环。
- * 模式：定向指令闭环（P0）。
- * 外部条件：
- *   - HPU_REQ_IT_MONITOR
- *   - HPU_REQ_CACHE_CONTRACT
+ * 目的：PMUL 对象模式、立即数模式和模回绕。
+ * 六轮依次为基础对象、基础立即数 7、边界原地对象、边界立即数 0/1/255。
+ * 立即数用 unsigned 传入编码器生成的适配接口，不把常量截成有符号 8 位。
  */
-
-static uint32_t c_mod_mul(uint32_t left, uint32_t right, uint32_t modulus) {
-    return (uint32_t)(((uint64_t)left * right) % modulus);
-}
-
 int main(void) {
+    static uint32_t golden[POLY_WORDS];
     case_start(__FILE__);
-    const uint32_t seed = UINT32_C(0xc003);
-    volatile const uint32_t *input_a;
-    volatile const uint32_t *immediate_output;
-    uint32_t status;
-    unsigned timeout;
-    unsigned word;
 
-    /* Data only: copy producer A/B, build q0, and poison both output regions. */
-    if (prepare_data(seed) != 0) return case_fail(__FILE__, __LINE__);
+    for (unsigned variant = 0U; variant < 6U; ++variant) {
+        const unsigned profile = variant < 2U ? 0U : 1U;
+        const unsigned object_mode = variant == 0U || variant == 2U;
+        const unsigned dst = variant == 2U ? P0 : P2;
+        const unsigned immediate = variant == 1U ? 7U :
+            variant == 4U ? 1U : variant == 5U ? 255U : 0U;
+        const uint32_t *a;
+        const uint32_t *b;
+        int rc;
 
-    hpu_csr_write32(HPU_CSR_FAULT_ADDR, HPU_FAULT_VALID);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    hpu_csr_write32(HPU_CSR_BASE_LO_ADDR, (uint32_t)HPU_MEM_BASE);
-    hpu_csr_write32(HPU_CSR_BASE_HI_ADDR,
-        (uint32_t)(HPU_MEM_BASE >> 32U));
-    hpu_csr_write32(HPU_CSR_SIZE_LO_ADDR, WINDOW_LINES);
-    hpu_csr_write32(HPU_CSR_SIZE_HI_ADDR, 0U);
-    if (hpu_csr_read32(HPU_CSR_BASE_LO_ADDR) !=
-        (uint32_t)HPU_MEM_BASE) return case_fail(__FILE__, __LINE__);
-    if (hpu_csr_read32(HPU_CSR_BASE_HI_ADDR) !=
-        (uint32_t)(HPU_MEM_BASE >> 32U)) return case_fail(__FILE__, __LINE__);
-    if (hpu_csr_read32(HPU_CSR_SIZE_LO_ADDR) != WINDOW_LINES)
-        return case_fail(__FILE__, __LINE__);
-    if (hpu_csr_read32(HPU_CSR_SIZE_HI_ADDR) != 0U) return case_fail(__FILE__, __LINE__);
-    hpu_csr_write32(HPU_CSR_COMMIT_ADDR, HPU_COMMIT_REQUEST);
-    if (wait_window(1) != 0) return case_fail(__FILE__, __LINE__);
+        printf("[HPU][PMUL][ROUND] variant=%u profile=%u dst=p%u "
+               "mode=%s immediate=%u words=%u q=%u\n",
+               variant, profile, dst, object_mode ? "object" : "immediate",
+               immediate, POLY_WORDS, MOD_Q0);
+        if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
+            return case_fail(__FILE__, __LINE__);
+        a = v2_expected(LINE_A);
+        b = v2_expected(LINE_B);
+        for (unsigned word = 0U; word < POLY_WORDS; ++word) {
+            const uint32_t rhs = object_mode ? b[word] : immediate;
+            golden[word] = (uint32_t)(((uint64_t)a[word] * rhs) % MOD_Q0);
+        }
+        if (v2_allow_output(LINE_OUT, POLY_LINES) != 0)
+            return case_fail(__FILE__, __LINE__);
+        /* 配置窗口逐寄存器写入、读回；COMMIT 才使这一组 BASE/SIZE 生效。 */
+        csr_write(CSR_FAULT, FAULT_VALID);
+        csr_write(CSR_IRQ, IRQ_LEVEL);
+        csr_write(CSR_IRQ, 0U);
+        csr_write(CSR_BASE_LO, (uint32_t)MEM_BASE);
+        csr_write(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U));
+        csr_write(CSR_SIZE_LO, WINDOW_LINES);
+        csr_write(CSR_SIZE_HI, 0U);
+        if (expect_csr(CSR_BASE_LO, (uint32_t)MEM_BASE, UINT32_MAX) != 0)
+            return case_fail(__FILE__, __LINE__);
+        if (expect_csr(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U),
+                       UINT32_MAX) != 0)
+            return case_fail(__FILE__, __LINE__);
+        if (expect_csr(CSR_SIZE_LO, WINDOW_LINES, UINT32_MAX) != 0)
+            return case_fail(__FILE__, __LINE__);
+        if (expect_csr(CSR_SIZE_HI, 0U, UINT32_MAX) != 0)
+            return case_fail(__FILE__, __LINE__);
+        csr_write(CSR_COMMIT, COMMIT);
+        if (wait_window(1) != 0 || check_status() != 0)
+            return case_fail(__FILE__, __LINE__);
 
-    /* Object mode: p2=p0*p1.  All words are producer-generated encodings. */
-    if (dload_mod(LINE_MOD, 1U) != 0) return case_fail(__FILE__, __LINE__);
-    /* 硬件维护模表 DLOAD 与 PMODLD 的依赖，程序内部不插入 PSYNC。 */
-    if (pmodld(0U) != 0) return case_fail(__FILE__, __LINE__);
-    if (dload(P0, LINE_A, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
-    if (dload(P1, LINE_B, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
-    if (pmul() != 0) return case_fail(__FILE__, __LINE__);
-    if (dstore_release(P2, LINE_OUT, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
+        printf("[HPU][PMUL][ISSUE] mod -> input DLOAD -> PMUL -> "
+               "DSTORE line=%u count=%u -> PFREE inputs -> PSYNC\n",
+               LINE_OUT, POLY_LINES);
+        if (dload_mod(LINE_MOD, 1U) != 0 || pmodld(0U) != 0)
+            return case_fail(__FILE__, __LINE__);
+        if (dload(P0, LINE_A, POLY_LINES) != 0)
+            return case_fail(__FILE__, __LINE__);
+        if (object_mode) {
+            if (dload(P1, LINE_B, POLY_LINES) != 0 ||
+                op_mul(dst, P0, P1) != 0)
+                return case_fail(__FILE__, __LINE__);
+        } else if (op_mul_imm(dst, P0, immediate) != 0) {
+            return case_fail(__FILE__, __LINE__);
+        }
+        if (dstore_release(dst, LINE_OUT, POLY_LINES) != 0)
+            return case_fail(__FILE__, __LINE__);
+        /* 未装载 p1 的立即数轮次，不对 p1 发送 PFREE。 */
+        if ((dst != P0 && pfree(P0) != 0) ||
+            (object_mode && pfree(P1) != 0) || pfree(P4) != 0)
+            return case_fail(__FILE__, __LINE__);
+        /* 整段程序只在末尾 PSYNC；等待完成且空闲，然后消费本轮完成电平。 */
+        psync();
+        rc = wait_irq();
+        if (rc != 0) {
+            printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+            return case_fail(__FILE__, __LINE__);
+        }
+        rc = completion_clear();
+        if (rc != 0) {
+            printf("[HPU][FAIL] phase=clear-completion rc=%d\n", rc);
+            return case_fail(__FILE__, __LINE__);
+        }
+        if (check_status() != 0 || v2_check_memory("readonly-and-guard") != 0)
+            return case_fail(__FILE__, __LINE__);
 
-    /*
-     * 立即数模式：库生成的指令将 p0 乘以 7，模 q0 后写入新的 p2。
-     * 前一条 DSTORE 的写回、释放及 p2 复用依赖由硬件维护，不插入内部 PSYNC。
-     */
-    __asm__ volatile(".word %0" : : "i"(HPU_INSN_PMUL_IMM7_P2_P0)
-        : "memory");
-    if (dstore_release(P2, LINE_OUT_B, POLY_LINES) != 0)
-        return case_fail(__FILE__, __LINE__);
-
-    psync();
-    if (wait_irq() != 0) return case_fail(__FILE__, __LINE__);
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, HPU_IRQ_LEVEL);
-    for (timeout = 0U; timeout < HPU_TIMEOUT; ++timeout) {
-        if ((hpu_csr_read32(HPU_CSR_IRQ_ADDR) & HPU_IRQ_LEVEL) == 0U)
-            break;
-    }
-    hpu_csr_write32(HPU_CSR_IRQ_ADDR, 0U);
-    if (timeout == HPU_TIMEOUT) return case_fail(__FILE__, __LINE__);
-    status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
-    if ((status & HPU_STATUS_WINDOW_VALID) == 0U) return case_fail(__FILE__, __LINE__);
-    if ((status & (HPU_STATUS_BUSY | HPU_STATUS_FAULT_VALID)) != 0U)
-        return case_fail(__FILE__, __LINE__);
-    if ((hpu_csr_read32(HPU_CSR_FAULT_ADDR) & HPU_FAULT_VALID) != 0U)
-        return case_fail(__FILE__, __LINE__);
-
-    /* Compare both 4096-coefficient results with independent C arithmetic. */
-    if (check_pmul_result(LINE_OUT, POLY_LINES) != 0) return case_fail(__FILE__, __LINE__);
-    invalidate_lines(LINE_OUT_B, POLY_LINES);
-    input_a = ddr_line(LINE_A);
-    immediate_output = ddr_line(LINE_OUT_B);
-    for (word = 0U; word < POLY_WORDS; ++word) {
-        if (immediate_output[word] !=
-            c_mod_mul(input_a[word], 7U, MOD_Q0)) return case_fail(__FILE__, __LINE__);
+        if (v2_check_words("PMUL", LINE_OUT, golden, POLY_WORDS, MOD_Q0) != 0)
+            return case_fail(__FILE__, __LINE__);
+        printf("[HPU][PMUL][ROUND-PASS] variant=%u compared=%u "
+               "readonly-and-guard=pass\n", variant, POLY_WORDS);
     }
     return case_pass(__FILE__);
 }
