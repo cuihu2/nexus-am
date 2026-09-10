@@ -5,14 +5,18 @@ OUTPUT_ROOT ?= $(CURDIR)/build
 JOBS ?= 4
 INLINE_ASM_ROOT ?= $(CURDIR)/third_party/inline-asm
 HPU_GENERATED_ROOT ?= $(OUTPUT_ROOT)/generated
+export mainargs
+HPU_DUMP_RESULTS ?= 0
+DIAGNOSTIC_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/diagnostic
 
-.PHONY: all group one prepare-inline-asm-mm verify-inline-asm validate clean
+.PHONY: all group one diagnostic prepare-inline-asm-mm verify-inline-asm validate clean
 
 all: verify-inline-asm
 	@AM_HOME="$(AM_HOME)" ARCH="$(ARCH)" \
 	  CROSS_COMPILE="$(CROSS_COMPILE)" JOBS="$(JOBS)" \
 	  INLINE_ASM_ROOT="$(INLINE_ASM_ROOT)" \
 	  HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
+	  HPU_DUMP_RESULTS="$(HPU_DUMP_RESULTS)" \
 	  scripts/build.sh "$(OUTPUT_ROOT)"
 
 group: verify-inline-asm
@@ -21,6 +25,7 @@ group: verify-inline-asm
 	  CROSS_COMPILE="$(CROSS_COMPILE)" JOBS="$(JOBS)" \
 	  INLINE_ASM_ROOT="$(INLINE_ASM_ROOT)" \
 	  HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
+	  HPU_DUMP_RESULTS="$(HPU_DUMP_RESULTS)" \
 	  HPU_CASE_GROUP="$(GROUP)" \
 	  scripts/build.sh "$(OUTPUT_ROOT)"
 
@@ -30,7 +35,20 @@ one: verify-inline-asm
 	  CROSS_COMPILE="$(CROSS_COMPILE)" JOBS="$(JOBS)" \
 	  INLINE_ASM_ROOT="$(INLINE_ASM_ROOT)" \
 	  HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
+	  HPU_DUMP_RESULTS="$(HPU_DUMP_RESULTS)" \
 	  scripts/build.sh "$(OUTPUT_ROOT)" "$(CASE)"
+
+# 先用 all/verify-inline-asm 准备并校验生产者数据，再复用同一份数据编译诊断版。
+# 诊断对象和产物独立，不能把上一轮常规对象当成全量 UART 版本发布。
+diagnostic:
+	@test -s "$(HPU_GENERATED_ROOT)/include/hpu/inline_asm_mm_delivery.h" || \
+	  { echo 'ERROR: run make all or make verify-inline-asm before make diagnostic'; exit 2; }
+	@AM_HOME="$(AM_HOME)" ARCH="$(ARCH)" \
+	  CROSS_COMPILE="$(CROSS_COMPILE)" JOBS="$(JOBS)" \
+	  INLINE_ASM_ROOT="$(INLINE_ASM_ROOT)" \
+	  HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
+	  HPU_DUMP_RESULTS=1 HPU_CASE_GROUP=diagnostic \
+	  scripts/build.sh "$(DIAGNOSTIC_OUTPUT_ROOT)"
 
 prepare-inline-asm-mm:
 	@scripts/prepare-inline-asm-mm.sh \
@@ -46,6 +64,8 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-fixture-diagnostics.py
 	@python3 scripts/test-runtime-wait.py
 	@python3 scripts/test-v2-memory.py
+	@python3 scripts/test-result-report.py
+	@python3 scripts/test-progress.py
 	@python3 scripts/test-package-chapters.py
 	@python3 scripts/test-transform-delivery.py \
 	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs" \

@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/report.h>
 #include <hpu/it_v2.h>
 #include <hpu/completion.h>
 
@@ -32,6 +33,7 @@ static int failure(unsigned source_line, const char *phase) {
 int main(void) {
     const char *phase = "data-prepare";
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
     const uint32_t seed = 0u;
     printf("[HPU][DATA] profile=producer seed_tag=0x%x A_line=%u B_line=%u "
            "words=%u q=%u window_base=0x%lx window_lines=%u\n",

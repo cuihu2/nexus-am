@@ -1,6 +1,7 @@
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
 
 /*
  * 测试点：IT-STR-001
@@ -21,6 +22,7 @@ static int failure(unsigned line, const char *phase) {
 
 int main(void) {
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
     printf("[HPU][STING-STR001][SCOPE] deterministic adapter sample, NOT a STING generator; "
            "random/replay/ready/CDC evidence must come from the external harness\n");
 

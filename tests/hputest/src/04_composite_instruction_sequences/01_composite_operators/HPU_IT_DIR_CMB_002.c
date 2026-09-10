@@ -1,5 +1,7 @@
 #include <hpu/completion.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
+#include <hpu/progress.h>
 #include <hpu/transform.h>
 #include <ntt/delivery.h>
 
@@ -14,6 +16,10 @@
 int main(void) {
     int rc;
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
+    if (progress_begin(__FILE__, 1U) != 0)
+        return case_fail(__FILE__, __LINE__);
+    phase_mark("prepare");
     printf("[HPU][NTT][CONFIG] N=%u q=%u stages=12 data=p0 twiddle=p1 mod=p2 "
            "input=natural-coefficient output=natural-NTT\n", TRANSFORM_N, TRANSFORM_Q);
     if (transform_prepare(transform_ntt_image) != 0)
@@ -21,6 +27,7 @@ int main(void) {
     transform_print_bindings(transform_ntt_bindings, HPU_PROGRAM_NTT_DMA_COUNT);
 
     /* 新窗口独立容纳全部 12 级表及 guard，不复用 00 的256line窗口。 */
+    phase_mark("configure");
     csr_write(CSR_FAULT, FAULT_VALID);
     csr_write(CSR_IRQ, IRQ_LEVEL);
     csr_write(CSR_IRQ, 0U);
@@ -43,12 +50,14 @@ int main(void) {
     printf("[HPU][NTT][ISSUE] mod/input -> PMUL pre-twist -> "
            "PNTT stage0..11(each DLOAD/PFREE twiddle) -> DSTORE -> PFREE mod -> PSYNC\n");
     /* 函数末尾已包含唯一 PSYNC；这里不再额外发送。 */
+    phase_mark("issue");
     rc = hpu_program_ntt(transform_ntt_spans, HPU_PROGRAM_NTT_DMA_COUNT);
     if (rc != 0) {
         printf("[HPU][NTT][FAIL] phase=producer-program rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     printf("[HPU][NTT][WAIT] terminal-psync issued; wait IRQ and not-busy\n");
+    phase_mark("wait-completion");
     rc = wait_irq();
     if (rc != 0) {
         printf("[HPU][NTT][FAIL] phase=terminal-psync rc=%d\n", rc);
@@ -61,9 +70,11 @@ int main(void) {
     }
     if (check_status() != 0)
         return case_fail(__FILE__, __LINE__);
-    if (transform_check_memory(transform_ntt_image) != 0)
-        return case_fail(__FILE__, __LINE__);
-    if (transform_check_result(transform_ntt_golden) != 0)
-        return case_fail(__FILE__, __LINE__);
+    phase_mark("compare-results");
+    const int data_rc = transform_check_result(transform_ntt_golden);
+    phase_mark("check-guard");
+    const int guard_rc = transform_check_memory(transform_ntt_image);
+    if (data_rc != 0 || guard_rc != 0) return case_fail(__FILE__, __LINE__);
+    phase_mark("case-done");
     return case_pass(__FILE__);
 }

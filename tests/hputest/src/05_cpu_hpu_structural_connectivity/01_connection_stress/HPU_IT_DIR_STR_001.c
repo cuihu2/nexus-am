@@ -1,6 +1,7 @@
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
 
 /*
  * 测试点：IT-STR-001
@@ -21,6 +22,7 @@ static int failure(unsigned line, const char *phase) {
 
 int main(void) {
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
     printf("[HPU][STR001][SCOPE] software checks loopback/guard only; "
            "ready/backpressure/CDC coverage requires IT monitor\n");
 

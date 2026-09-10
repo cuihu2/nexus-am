@@ -1,5 +1,6 @@
 #include <hpu/bconv_case.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
 
 int bconv_prepare(void) {
     volatile uint32_t *memory = ddr_line(0U);
@@ -16,7 +17,8 @@ int bconv_check_memory(void) {
     volatile const uint32_t *memory = ddr_line(0U);
     const unsigned writable_first = BCONV_NORMALIZED * WORDS_PER_LINE;
     const unsigned writable_end = BCONV_MOD * WORDS_PER_LINE;
-    invalidate_lines(0U, BCONV_LINES);
+    invalidate_lines(0U, BCONV_NORMALIZED);
+    invalidate_lines(BCONV_MOD, BCONV_LINES - BCONV_MOD);
     for (unsigned word = 0U; word < BCONV_WORDS; ++word) {
         /* 只有 normalized Q 和 output P 两个 producer scratch/output span 可写。 */
         if (word >= writable_first && word < writable_end) continue;
@@ -34,6 +36,7 @@ int bconv_check_memory(void) {
 }
 
 int bconv_check_results(const uint32_t *moduli) {
+    int failed = 0;
     if (moduli == NULL) return 1;
     /* 中间 normalized Q 用构建时独立 Python 数学式派生，最终 P 用 producer golden。 */
     for (unsigned basis = 0U; basis < BCONV_Q_COUNT + BCONV_P_COUNT; ++basis) {
@@ -43,17 +46,10 @@ int bconv_check_results(const uint32_t *moduli) {
         const char *phase = basis < BCONV_Q_COUNT ? "normalized-Q" : "producer-golden-P";
         volatile const uint32_t *actual_words = ddr_line(line);
         invalidate_lines(line, 64U);
-        for (unsigned word = 0U; word < BCONV_N; ++word) {
-            uint32_t actual = actual_words[word];
-            if (actual != golden[word] || actual >= moduli[basis]) {
-                printf("[HPU][BCONV][FAIL] phase=%s basis=%u coefficient=%u line=%u "
-                       "actual=%u expected=%u q=%u\n", phase, output_basis, word,
-                       line + word / WORDS_PER_LINE, actual, golden[word], moduli[basis]);
-                return 1;
-            }
-        }
-        printf("[HPU][BCONV][BASIS-PASS] phase=%s basis=%u compared=%u q=%u\n",
-               phase, output_basis, BCONV_N, moduli[basis]);
+        printf("[HPU][BCONV][BASIS] phase=%s basis=%u words=%u q=%u line=%u\n",
+               phase, output_basis, BCONV_N, moduli[basis], line);
+        /* 任一分量失败也继续导出后续分量，但最终仍失败。 */
+        failed |= result_compare(phase, actual_words, golden, BCONV_N, moduli[basis]);
     }
-    return 0;
+    return failed;
 }

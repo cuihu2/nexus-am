@@ -225,16 +225,29 @@ manifest_core=$(manifest_value core_count)
 manifest_transform=$(manifest_value transform_count)
 manifest_fhe=$(manifest_value fhe_count)
 manifest_not_qualified=$(manifest_value not_qualified_count)
+manifest_uart=$(manifest_value uart_results)
+manifest_dump=$(manifest_value hpu_dump_results)
+if [[ $manifest_uart:$manifest_dump != brief:0 && $manifest_uart:$manifest_dump != full:1 ]]; then
+  printf 'ERROR: inconsistent UART result mode in MANIFEST\n' >&2
+  exit 2
+fi
+if [[ $manifest_selection == diagnostic && $manifest_uart != full ]]; then
+  printf 'ERROR: diagnostic selection requires full UART results\n' >&2
+  exit 2
+fi
 
 declare -A selected_ids=()
 declare -A selected_group_counts=([core]=0 [transform]=0 [fhe]=0)
 selected_case_ids=()
 selected_not_qualified=0
 case "$manifest_selection" in
-  all|core|transform|fhe)
+  all|core|transform|fhe|diagnostic)
     for case_id in "${roster_ids[@]}"; do
       group=${roster_group[$case_id]}
-      if [[ $manifest_selection != all && $group != "$manifest_selection" ]]; then
+      if [[ $manifest_selection == diagnostic ]]; then
+        [[ ${roster_source[$case_id]} == src/03_compute_instructions/* || \
+           $case_id =~ ^HPU_IT_DIR_CMB_00[123]$ ]] || continue
+      elif [[ $manifest_selection != all && $group != "$manifest_selection" ]]; then
         continue
       fi
       selected_case_ids+=("$case_id")

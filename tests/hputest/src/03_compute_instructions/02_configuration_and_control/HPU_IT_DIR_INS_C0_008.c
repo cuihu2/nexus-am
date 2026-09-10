@@ -1,6 +1,8 @@
 #include <hpu/irq.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
+#include <hpu/progress.h>
 
 /*
  * 测试点：IT-INS-C0-008
@@ -13,9 +15,15 @@ int main(void) {
     static uint32_t golden[POLY_WORDS];
     const char *const names[3] = {"idle", "dma", "compute"};
     case_start(__FILE__);
+    if (progress_begin(__FILE__, 3U) != 0)
+        return case_fail(__FILE__, __LINE__);
 
     for (unsigned scenario = 0U; scenario < 3U; ++scenario) {
+        /* 一个子项保留两轮中断，以免丢失 irq_rearm 覆盖。 */
+        if (!subcase_selected(scenario)) continue;
         for (unsigned round = 0U; round < 2U; ++round) {
+            (void)result_context(__FILE__, scenario * 2U + round);
+            phase_mark("prepare");
             const uint32_t *a;
             const uint32_t *b;
             uint32_t status = 0U;
@@ -29,6 +37,7 @@ int main(void) {
                    names[scenario], round, round, POLY_WORDS);
             if (v2_prepare(round, MOD_Q0, MOD_Q1) != 0)
                 return case_fail(__FILE__, __LINE__);
+            phase_mark("software-golden");
             a = v2_expected(LINE_A);
             b = v2_expected(LINE_B);
             if (scenario != 0U) {
@@ -40,6 +49,7 @@ int main(void) {
                 }
             }
             /* 配置窗口逐寄存器写入、读回；COMMIT 才使这一组 BASE/SIZE 生效。 */
+            phase_mark("configure");
             csr_write(CSR_FAULT, FAULT_VALID);
             csr_write(CSR_IRQ, IRQ_LEVEL);
             csr_write(CSR_IRQ, 0U);
@@ -72,6 +82,7 @@ int main(void) {
             printf("[HPU][PSYNC][ISSUE] scenario=%s round=%u "
                    "terminal-PSYNC-count=1; no polling/printing inside command burst\n",
                    names[scenario], round);
+            phase_mark("issue");
             if (scenario == 1U) {
                 /* DMA 前序：数据回环后，PSYNC 等待包含 DSTORE 在内的前序命令。 */
                 if (dload(P0, LINE_A, POLY_LINES) != 0 ||
@@ -94,6 +105,7 @@ int main(void) {
                 }
             }
             psync();
+            phase_mark("wait-completion");
             rc = irq_wait();
             if (rc != 0) {
                 irq_close();
@@ -129,16 +141,18 @@ int main(void) {
                        level);
                 return case_fail(__FILE__, __LINE__);
             }
-            rc = v2_check_memory("PSYNC-readonly-and-guard");
-            if (rc == 0 && scenario != 0U)
-                rc = v2_check_words(names[scenario], LINE_OUT, golden,
-                                    POLY_WORDS, MOD_Q0);
+            phase_mark("compare-results");
+            rc = scenario == 0U ? 0 : v2_check_words(names[scenario], LINE_OUT,
+                                                     golden, POLY_WORDS, MOD_Q0);
+            phase_mark("check-guard");
+            rc |= v2_check_memory("PSYNC-readonly-and-guard");
             if (rc != 0) {
                 irq_close();
                 printf("[HPU][PSYNC][FAIL] phase=data-check scenario=%s round=%u rc=%d\n",
                        names[scenario], round, rc);
                 return case_fail(__FILE__, __LINE__);
             }
+            phase_mark("round-done");
             printf("[HPU][PSYNC][ROUND-PASS] scenario=%s round=%u "
                    "irq-cleared=1 status=0x%x readonly-and-guard=pass\n",
                    names[scenario], round, status);

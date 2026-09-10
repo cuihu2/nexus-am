@@ -1,4 +1,5 @@
 #include <hpu/result.h>
+#include <hpu/report.h>
 #include <hpu/it_v2.h>
 #include <hpu/completion.h>
 
@@ -41,6 +42,7 @@ int main(void) {
     };
     const char *phase = "start";
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
 
     /* 每个范围是一段独立完整程序；末尾一次 PSYNC，再比较数据和非输出区域。 */
     for (unsigned round = 0U; round < sizeof(ranges) / sizeof(ranges[0]); ++round) {

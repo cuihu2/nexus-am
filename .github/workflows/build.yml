@@ -166,3 +166,20 @@ jobs:
           path: tests/hputest/build/release
           if-no-files-found: error
           retention-days: 7
+      - name: Build full UART diagnostics with the same producer data
+        env:
+          AM_HOME: ${{ github.workspace }}
+        run: |
+          make -C tests/hputest diagnostic \
+            ARCH=riscv64-xs \
+            CROSS_COMPILE=riscv64-linux-gnu- \
+            JOBS=4
+      - name: Package full UART correctness diagnostics
+        run: python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/diagnostic/artifact --diagnostic
+      - name: Upload separate full UART diagnostic package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexus-am-hpu-uart-results
+          path: tests/hputest/build/diagnostic/release
+          if-no-files-found: error
+          retention-days: 7

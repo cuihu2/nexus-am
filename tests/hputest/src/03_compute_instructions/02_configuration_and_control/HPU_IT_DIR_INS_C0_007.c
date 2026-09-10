@@ -1,6 +1,8 @@
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
+#include <hpu/progress.h>
 
 /*
  * 测试点：IT-INS-C0-007
@@ -14,8 +16,13 @@ int main(void) {
     const unsigned contexts[3] = {0U, 6U, 0U};
     const uint32_t moduli[3] = {MOD_Q0, MOD_Q1, MOD_Q0};
     case_start(__FILE__);
+    if (progress_begin(__FILE__, 2U) != 0)
+        return case_fail(__FILE__, __LINE__);
 
     for (unsigned profile = 0U; profile < 2U; ++profile) {
+        if (!subcase_selected(profile)) continue;
+        (void)result_context(__FILE__, profile);
+        phase_mark("prepare");
         const uint32_t *a;
         const uint32_t *b;
         unsigned distinguishing = 0U;
@@ -26,6 +33,7 @@ int main(void) {
                profile, MOD_Q0, MOD_Q1, MOD_Q0, POLY_WORDS);
         if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
             return case_fail(__FILE__, __LINE__);
+        phase_mark("software-golden");
         a = v2_expected(LINE_A);
         b = v2_expected(LINE_B);
         for (unsigned word = 0U; word < POLY_WORDS; ++word) {
@@ -44,6 +52,7 @@ int main(void) {
                 return case_fail(__FILE__, __LINE__);
         }
         /* 配置窗口逐寄存器写入、读回；COMMIT 才使这一组 BASE/SIZE 生效。 */
+        phase_mark("configure");
         csr_write(CSR_FAULT, FAULT_VALID);
         csr_write(CSR_IRQ, IRQ_LEVEL);
         csr_write(CSR_IRQ, 0U);
@@ -66,6 +75,7 @@ int main(void) {
 
         printf("[HPU][PMODLD][ISSUE] mod/A/B DLOAD -> "
                "(PMODLD -> PMUL -> DSTORE) x3 -> PFREE inputs -> PSYNC\n");
+        phase_mark("issue");
         if (dload_mod(LINE_MOD, 1U) != 0 ||
             dload(P0, LINE_A, POLY_LINES) != 0 ||
             dload(P1, LINE_B, POLY_LINES) != 0)
@@ -84,6 +94,7 @@ int main(void) {
             return case_fail(__FILE__, __LINE__);
         /* 整段程序只在末尾 PSYNC；等待完成且空闲，然后消费本轮完成电平。 */
         psync();
+        phase_mark("wait-completion");
         rc = wait_irq();
         if (rc != 0) {
             printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
@@ -94,9 +105,11 @@ int main(void) {
             printf("[HPU][FAIL] phase=clear-completion rc=%d\n", rc);
             return case_fail(__FILE__, __LINE__);
         }
-        if (check_status() != 0 || v2_check_memory("readonly-and-guard") != 0)
+        if (check_status() != 0)
             return case_fail(__FILE__, __LINE__);
 
+        int failed = 0;
+        phase_mark("compare-results");
         for (unsigned step = 0U; step < 3U; ++step) {
             for (unsigned word = 0U; word < POLY_WORDS; ++word)
                 golden[word] = (uint32_t)(((uint64_t)a[word] * b[word]) %
@@ -104,10 +117,13 @@ int main(void) {
             printf("[HPU][PMODLD][CHECK] step=%u context=%u q=%u "
                    "output-line=%u\n",
                    step, contexts[step], moduli[step], outputs[step]);
-            if (v2_check_words("PMODLD-result", outputs[step], golden,
-                               POLY_WORDS, moduli[step]) != 0)
-                return case_fail(__FILE__, __LINE__);
+            failed |= v2_check_words("PMODLD-result", outputs[step], golden,
+                               POLY_WORDS, moduli[step]);
         }
+        phase_mark("check-guard");
+        failed |= v2_check_memory("readonly-and-guard");
+        if (failed != 0) return case_fail(__FILE__, __LINE__);
+        phase_mark("round-done");
         printf("[HPU][PMODLD][ROUND-PASS] profile=%u transitions=0-6-0 "
                "readonly-and-guard=pass\n", profile);
     }

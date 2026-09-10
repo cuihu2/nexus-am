@@ -14,6 +14,12 @@ endif
 TEST_ROOT := $(CURDIR)
 INLINE_ASM_ROOT ?= $(TEST_ROOT)/third_party/inline-asm
 HPU_GENERATED_ROOT ?= $(TEST_ROOT)/build/generated
+HPU_DUMP_RESULTS ?= 0
+ifneq ($(HPU_DUMP_RESULTS),0)
+ifneq ($(HPU_DUMP_RESULTS),1)
+$(error HPU_DUMP_RESULTS must be 0 or 1)
+endif
+endif
 INLINE_ASM_MM_ROOT := $(HPU_GENERATED_ROOT)/inline-asm/mm
 # .incbin 只从本次已校验的交付目录取数据，不读取 submodule 遗留输出。
 ASFLAGS += -Wa,-I$(INLINE_ASM_MM_ROOT)/test_data/hardware
@@ -87,6 +93,7 @@ DST_DIR := $(HPU_DST_DIR)
 INC_DIR += $(HPU_GENERATED_ROOT)/include $(TEST_ROOT)/include
 CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -DLINKNAN_HPU_IT=1 \
+          -DHPU_DUMP_RESULTS=$(HPU_DUMP_RESULTS) \
           -ffile-prefix-map=$(TEST_ROOT)=tests/hputest \
           -fmacro-prefix-map=$(TEST_ROOT)=tests/hputest \
           -ffile-prefix-map=$(INLINE_ASM_ROOT)=inline-asm \
@@ -95,6 +102,15 @@ CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -fmacro-prefix-map=$(AM_HOME)=nexus-am
 
 include $(AM_HOME)/Makefile.app
+
+# 即使手工复用 HPU_DST_DIR，切换 UART 模式也必须重编译所有用例对象。
+HPU_UART_FLAGS := $(HPU_DST_DIR)/.uart-mode
+.PHONY: hpu-uart-flags-force
+$(HPU_UART_FLAGS): hpu-uart-flags-force
+	@mkdir -p "$(dir $@)"
+	@printf 'HPU_DUMP_RESULTS=%s\n' '$(HPU_DUMP_RESULTS)' > "$@.new"
+	@if cmp -s "$@.new" "$@"; then rm -f "$@.new"; else mv -f "$@.new" "$@"; fi
+$(OBJS): $(HPU_UART_FLAGS)
 
 # .incbin 的二进制依赖不会出现在预处理器生成的 .d 中。
 $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/hpu_rns_fixture.o: \

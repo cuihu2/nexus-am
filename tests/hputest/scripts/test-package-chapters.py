@@ -30,7 +30,7 @@ class ChapterPackageTests(unittest.TestCase):
         return {"group": group, "qualifier": qualifier, "case_id": case_id,
                 "source": f"src/{chapter}/01_basic/{case_id}.c"}
 
-    def fixture(self, rows, selection="case:test"):
+    def fixture(self, rows, selection="case:test", uart_results="brief", dump_results="0"):
         with (self.artifact / "CASE_MANIFEST.tsv").open("w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=("group", "qualifier", "case_id", "source"), delimiter="\t")
             writer.writeheader()
@@ -44,6 +44,7 @@ class ChapterPackageTests(unittest.TestCase):
                                  "reason": "缺少已验证的 golden；不得发布占位程序"})
         (self.artifact / "MANIFEST.txt").write_text(
             f"selection={selection}\ncase_count={len(rows)}\n"
+            f"uart_results={uart_results}\nhpu_dump_results={dump_results}\n"
             f"not_qualified_count={len(blocked)}\n", encoding="utf-8")
         for row in rows:
             relative = Path(row["source"]).relative_to("src")
@@ -146,6 +147,92 @@ class ChapterPackageTests(unittest.TestCase):
                       for i in range(1, 10)], selection="all")
         release = PACKAGER.package(self.artifact, require_all=True)
         self.assertEqual(len(list((release / "03_compute_instructions").rglob("*.elf"))), 9)
+
+    def diagnostic_rows(self):
+        return [self.row(f"HPU_IT_DIR_INS_C0_{i:03d}",
+                         "transform" if i in (5, 6) else "core")
+                for i in range(1, 10)] + [
+            self.row(f"HPU_IT_DIR_CMB_{i:03d}", "transform",
+                     chapter="04_composite_instruction_sequences")
+            for i in range(1, 4)]
+
+    def test_diagnostic_publishes_twelve_full_uart_cases(self):
+        self.fixture(self.diagnostic_rows(), selection="diagnostic",
+                     uart_results="full", dump_results="1")
+        release = PACKAGER.package(self.artifact, require_diagnostic=True)
+        self.assertEqual(len(list(release.rglob("*.elf"))), 12)
+        self.assertEqual({row["case_id"] for row in self.index(release)},
+                         PACKAGER.DIAGNOSTIC_IDS)
+        self.assertTrue(all("全量 UART" in row["notes"] for row in self.index(release)))
+        readme = (release / "README.md").read_text(encoding="utf-8")
+        self.assertIn("不是加速包", readme)
+        self.assertIn("4096", readme)
+        self.assertIn("nexus-am-hpu-uart-results", readme)
+
+    def test_diagnostic_rejects_brief_artifacts(self):
+        self.fixture(self.diagnostic_rows(), selection="diagnostic")
+        with self.assertRaisesRegex(ValueError, "requires full UART"):
+            PACKAGER.package(self.artifact, require_diagnostic=True)
+
+    def test_diagnostic_requires_explicit_selection_and_flag(self):
+        self.fixture(self.diagnostic_rows(), selection="diagnostic",
+                     uart_results="full", dump_results="1")
+        with self.assertRaisesRegex(ValueError, "must be used together"):
+            PACKAGER.package(self.artifact)
+        self.fixture(self.diagnostic_rows(), selection="all",
+                     uart_results="full", dump_results="1")
+        with self.assertRaisesRegex(ValueError, "must be used together"):
+            PACKAGER.package(self.artifact, require_diagnostic=True)
+
+    def test_diagnostic_rejects_missing_case(self):
+        self.fixture(self.diagnostic_rows()[:-1], selection="diagnostic",
+                     uart_results="full", dump_results="1")
+        with self.assertRaisesRegex(ValueError, "exactly the twelve"):
+            PACKAGER.package(self.artifact, require_diagnostic=True)
+
+    def test_diagnostic_rejects_blocked_placeholder(self):
+        rows = self.diagnostic_rows()
+        rows[-1]["qualifier"] = "blocked-not-issued"
+        self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
+        with self.assertRaisesRegex(ValueError, "exactly the twelve"):
+            PACKAGER.package(self.artifact, require_diagnostic=True)
+
+    def test_diagnostic_rejects_wrong_chapter(self):
+        rows = self.diagnostic_rows()
+        rows[-1] = self.row("HPU_IT_DIR_CMB_003", "transform",
+                            chapter="00_bringup")
+        self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
+        with self.assertRaisesRegex(ValueError, "exactly the twelve"):
+            PACKAGER.package(self.artifact, require_diagnostic=True)
+
+    def test_uart_macro_and_metadata_must_agree(self):
+        self.fixture([self.row()], uart_results="full", dump_results="0")
+        with self.assertRaisesRegex(ValueError, "inconsistent UART"):
+            PACKAGER.package(self.artifact)
+
+    def test_default_all_rejects_full_uart(self):
+        self.fixture(self.diagnostic_rows(), selection="all", uart_results="full", dump_results="1")
+        with self.assertRaisesRegex(ValueError, "requires brief UART"):
+            PACKAGER.package(self.artifact, require_all=True)
+
+    def test_regular_package_identifies_brief_default(self):
+        self.fixture([self.row()])
+        release = PACKAGER.package(self.artifact)
+        readme = (release / "README.md").read_text(encoding="utf-8")
+        self.assertIn("默认 UART 摘要版", readme)
+        self.assertIn("HPU_DUMP_RESULTS=0", readme)
+
+    def test_uart_export_tool_is_included_without_following_symlinks(self):
+        self.fixture([self.row()])
+        tools = self.artifact / "tools"
+        tools.mkdir()
+        parser = tools / "parse-uart-results.py"
+        parser.write_text("# test parser\n", encoding="utf-8")
+        release = PACKAGER.package(self.artifact)
+        self.assertEqual((release / "tools" / parser.name).read_text(), "# test parser\n")
+        (tools / "alias.py").symlink_to(parser)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            PACKAGER.package(self.artifact)
 
     def test_existing_unmarked_directory_is_preserved(self):
         self.fixture([self.row()])

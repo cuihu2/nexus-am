@@ -1,6 +1,7 @@
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
 
 /*
  * 测试点：IT-STR-006
@@ -27,6 +28,7 @@ int main(void) {
     uint32_t actual_cpu;
     int rc;
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
 
     printf("[HPU][STR006][PREPARE] seed=0x%x commands=8 cpu-steps-per-command=128 "
            "expected-final=0x%x mod-line=%u\n", seed, expected_cpu, LINE_MOD);

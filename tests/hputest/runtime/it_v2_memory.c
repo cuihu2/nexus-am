@@ -1,4 +1,5 @@
 #include <hpu/it_v2.h>
+#include <hpu/report.h>
 #include <klib.h>
 
 enum { WINDOW_WORDS = WINDOW_LINES * WORDS_PER_LINE };
@@ -60,6 +61,13 @@ static void modulus_record(uint32_t *record, uint32_t q) {
 int v2_prepare(unsigned profile, uint32_t q0, uint32_t q1) {
     volatile uint32_t *memory;
     unsigned word;
+    /* 同一轮只构造一次；放在系数循环内会反复产生栈写入。 */
+    const uint32_t edge_a[] = {
+        0U, 1U, q0 - 1U, q0 - 2U, 0U, 1U, q0 - 1U, q0 - 2U
+    };
+    const uint32_t edge_b[] = {
+        0U, 1U, 1U, q0 - 1U, q0 - 1U, q0 - 2U, q0 - 1U, q0 - 2U
+    };
 
     prepared = 0;
     /* q>=65537 保证 Barrett mu 可用 48 bit 表示；先验证再写 DDR。 */
@@ -78,16 +86,13 @@ int v2_prepare(unsigned profile, uint32_t q0, uint32_t q1) {
         uint32_t b;
 
         if (profile == 0U) {
-            a = RNS_A[word] % q0;
-            b = RNS_B[word] % q0;
+            /* producer 的规范输入无需再走硬件除法；较小 q 仍正确取模。 */
+            a = RNS_A[word];
+            b = RNS_B[word];
+            if (a >= q0) a %= q0;
+            if (b >= q0) b %= q0;
         } else {
             /* AM 边界变体：零/一/模数前沿、等值、借位与回绕交错出现。 */
-            const uint32_t edge_a[] = {
-                0U, 1U, q0 - 1U, q0 - 2U, 0U, 1U, q0 - 1U, q0 - 2U
-            };
-            const uint32_t edge_b[] = {
-                0U, 1U, 1U, q0 - 1U, q0 - 1U, q0 - 2U, q0 - 1U, q0 - 2U
-            };
             a = edge_a[word % 8U];
             b = edge_b[word % 8U];
         }
@@ -159,7 +164,6 @@ int v2_allow_output(unsigned line, unsigned lines) {
 
 int v2_check_memory(const char *phase) {
     volatile const uint32_t *memory;
-    unsigned word;
 
     if (!prepared || phase == NULL) {
         printf("[HPU][FAIL][memory] prepared=%d phase_present=%u\n",
@@ -167,20 +171,27 @@ int v2_check_memory(const char *phase) {
         return 1;
     }
     /* guard 只能证明本窗口未改写；窗口外/读事务副作用仍由 AXI monitor 验证。 */
-    invalidate_lines(0U, WINDOW_LINES);
+    /* 只失效将被读取的连续只读段；输出由 result 检查失效，避免重复 CBO。 */
+    for (unsigned line = 0U; line < WINDOW_LINES;) {
+        if (output_allowed[line]) { ++line; continue; }
+        const unsigned first = line;
+        while (line < WINDOW_LINES && !output_allowed[line]) ++line;
+        invalidate_lines(first, line - first);
+    }
     memory = ddr_line(0U);
-    for (word = 0U; word < WINDOW_WORDS; ++word) {
-        const unsigned line = word / WORDS_PER_LINE;
-        uint32_t actual;
-
+    /* permission 每 line 只查一次；每个非输出 word 仍逐项比较，不缩小 guard。 */
+    for (unsigned line = 0U; line < WINDOW_LINES; ++line) {
         if (output_allowed[line] != 0U) continue;
-        actual = memory[word];
-        if (actual != shadow[word]) {
-            printf("[HPU][FAIL][%s][readonly-or-guard] addr=0x%lx "
-                   "line=%u index=%u actual=0x%x expected=0x%x\n",
-                   phase, (unsigned long)(MEM_BASE + (uintptr_t)word * 4U),
-                   line, word % WORDS_PER_LINE, actual, shadow[word]);
-            return 1;
+        for (unsigned index = 0U; index < WORDS_PER_LINE; ++index) {
+            const unsigned word = line * WORDS_PER_LINE + index;
+            const uint32_t actual = memory[word];
+            if (actual != shadow[word]) {
+                printf("[HPU][FAIL][%s][readonly-or-guard] addr=0x%lx "
+                       "line=%u index=%u actual=0x%x expected=0x%x\n",
+                       phase, (unsigned long)(MEM_BASE + (uintptr_t)word * 4U),
+                       line, index, actual, shadow[word]);
+                return 1;
+            }
         }
     }
     return 0;
@@ -189,7 +200,6 @@ int v2_check_memory(const char *phase) {
 int v2_check_words(const char *phase, unsigned line,
                    const uint32_t *golden, unsigned words, uint32_t q) {
     volatile const uint32_t *memory;
-    unsigned word;
 
     if (word_range("check-words", line, words) != 0) return 1;
     if (source_range("check-words", golden, words) != 0) return 1;
@@ -201,19 +211,5 @@ int v2_check_words(const char *phase, unsigned line,
     }
     invalidate_lines(line, line_count(words));
     memory = ddr_line(line);
-    for (word = 0U; word < words; ++word) {
-        const uint32_t actual = memory[word];
-        const uint32_t expected = golden[word];
-
-        /* 不能先对 actual 取模再比较，否则会掩盖非规范输出或高位污染。 */
-        if (actual != expected || (q != 0U && actual >= q)) {
-            printf("[HPU][FAIL][%s][data] addr=0x%lx line=%u index=%u "
-                   "actual=0x%x expected=0x%x q=%u\n", phase,
-                   (unsigned long)(MEM_BASE + (uintptr_t)line * LINE_BYTES +
-                                   (uintptr_t)word * sizeof(uint32_t)),
-                   line, word, actual, expected, q);
-            return 1;
-        }
-    }
-    return 0;
+    return result_compare(phase, memory, golden, words, q);
 }

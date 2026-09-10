@@ -6,6 +6,7 @@ test_root=$(cd "$script_dir/.." && pwd)
 output_root=${1:-"$test_root/build"}
 case_filter=${2:-}
 case_group=${HPU_CASE_GROUP:-all}
+dump_results=${HPU_DUMP_RESULTS:-0}
 jobs=${JOBS:-4}
 arch=${ARCH:-riscv64-xs}
 cross_compile=${CROSS_COMPILE:-riscv64-linux-gnu-}
@@ -22,11 +23,21 @@ if [[ ! $jobs =~ ^[1-9][0-9]*$ ]]; then
   printf 'ERROR: JOBS must be a positive integer: %s\n' "$jobs" >&2
   exit 2
 fi
-if [[ ! $case_group =~ ^(all|core|transform|fhe)$ ]]; then
-  printf 'ERROR: HPU_CASE_GROUP must be all, core, transform, or fhe: %s\n' \
+if [[ ! $case_group =~ ^(all|core|transform|fhe|diagnostic)$ ]]; then
+  printf 'ERROR: HPU_CASE_GROUP must be all, core, transform, fhe, or diagnostic: %s\n' \
     "$case_group" >&2
   exit 2
 fi
+if [[ ! $dump_results =~ ^[01]$ ]]; then
+  printf 'ERROR: HPU_DUMP_RESULTS must be 0 or 1: %s\n' "$dump_results" >&2
+  exit 2
+fi
+if [[ $case_group == diagnostic && $dump_results != 1 ]]; then
+  printf 'ERROR: diagnostic selection requires HPU_DUMP_RESULTS=1\n' >&2
+  exit 2
+fi
+uart_results=brief
+[[ $dump_results == 0 ]] || uart_results=full
 if [[ -n $case_filter && $case_group != all ]]; then
   printf 'ERROR: CASE filter and HPU_CASE_GROUP cannot be used together\n' >&2
   exit 2
@@ -135,7 +146,18 @@ else
   case_sources=()
   for source_case_id in "${roster_ids[@]}"; do
     source_group=${roster_group[$source_case_id]}
-    if [[ $case_group == all || $source_group == "$case_group" ]]; then
+    if [[ $case_group == diagnostic ]]; then
+      # 只发布已接入结果比较的 03 九项和 04 BConv/NTT/INTT 三项。
+      # 不纳入没有真实接口/golden 的占位项，也不重新发布 00 冒烟。
+      if [[ $source_case_id =~ ^HPU_IT_DIR_INS_C0_00[1-9]$ || \
+            $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-3]$ ]]; then
+        if [[ ${roster_qualifier[$source_case_id]} != software-self-check ]]; then
+          printf 'ERROR: diagnostic testcase is not qualified: %s\n' "$source_case_id" >&2
+          exit 2
+        fi
+        case_sources+=("$test_root/${roster_source[$source_case_id]}")
+      fi
+    elif [[ $case_group == all || $source_group == "$case_group" ]]; then
       case_sources+=("$test_root/${roster_source[$source_case_id]}")
     fi
   done
@@ -153,7 +175,7 @@ for source in "${case_sources[@]}"; do
 done
 
 artifact_root="$output_root/artifact"
-object_root="$output_root/obj"
+object_root="$output_root/obj/uart-$uart_results"
 mkdir -p "$artifact_root" "$object_root"
 # An artifact directory is one build invocation's publish set.  Keeping ELF
 # files from an earlier full/filtered build makes case_count validation lie.
@@ -205,6 +227,7 @@ for source in "${case_sources[@]}"; do
     CASE_SOURCE="$source" \
     CASE_ID="$case_id" \
     HPU_DST_DIR="$object_dir/" \
+    HPU_DUMP_RESULTS="$dump_results" \
     BINARY="$binary"
 
   "${cross_compile}strip" --strip-debug "$binary.elf"
@@ -246,6 +269,9 @@ test -s "$generated_root/bconv-data/producer_commit.txt"
 cp -a "$generated_root/bconv-data" "$artifact_root/provenance/bconv-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
+mkdir -p "$artifact_root/tools"
+cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
 cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$artifact_root/provenance/testplan/"
 if [[ -n $case_filter ]]; then
   selection="case:$case_filter"
@@ -257,6 +283,7 @@ else
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=13 ;;
+    diagnostic) expected_cases=12 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then
@@ -270,6 +297,9 @@ fi
   printf 'arch=%s\n' "$arch"
   printf 'toolchain=%s\n' "$("${cross_compile}gcc" --version | sed -n '1p')"
   printf 'selection=%s\n' "$selection"
+  printf 'mainargs=%s\n' "${mainargs:-all}"
+  printf 'uart_results=%s\n' "$uart_results"
+  printf 'hpu_dump_results=%s\n' "$dump_results"
   printf 'case_count=%u\n' "${#case_sources[@]}"
   printf 'core_count=%u\n' "${group_counts[core]}"
   printf 'transform_count=%u\n' "${group_counts[transform]}"

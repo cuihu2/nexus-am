@@ -6,6 +6,9 @@
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 已跑通的 `00_bringup` 源码、RTL、inline-asm gitlink 均未更改。
 
+耗时优化、可选单子项执行、阶段cycle与全量UART结果导出见
+[运行诊断说明](RUNTIME_UART_DIAGNOSTICS.md)。默认仍执行原有所有round和精确自检。
+
 ## 1. 统一读法与同步
 
 每个 `.c` 保留显式 `main()`：准备数据、按地址逐项配置/读回 CSR、COMMIT、发出各条命令、等待、比较。

@@ -21,6 +21,10 @@ CHAPTERS = {
     "03_compute_instructions", "04_composite_instruction_sequences",
     "05_cpu_hpu_structural_connectivity", "06_performance", "07_full_application",
 }
+DIAGNOSTIC_IDS = (
+    {f"HPU_IT_DIR_INS_C0_{index:03d}" for index in range(1, 10)} |
+    {f"HPU_IT_DIR_CMB_{index:03d}" for index in range(1, 4)}
+)
 EXTENSIONS = (".elf", ".bin", ".txt")
 MANIFESTS = ("MANIFEST.txt", "CASE_MANIFEST.tsv", "NOT_QUALIFIED.tsv")
 MARKER = ".hpu-chapter-package"
@@ -89,7 +93,7 @@ def write_index(path, rows):
         writer.writerows(rows)
 
 
-def package(artifact, require_all=False):
+def package(artifact, require_all=False, require_diagnostic=False):
     requested = Path(artifact).absolute()
     if requested.is_symlink() or requested.name != "artifact":
         raise ValueError("input must be a plain directory named artifact")
@@ -113,6 +117,17 @@ def package(artifact, require_all=False):
         raise ValueError("MANIFEST case_count does not match CASE_MANIFEST")
     if require_all and metadata.get("selection") != "all":
         raise ValueError("--all requires a full selection=all build")
+    if (metadata.get("uart_results"), metadata.get("hpu_dump_results")) not in {
+            ("brief", "0"), ("full", "1")}:
+        raise ValueError("missing/inconsistent UART build mode metadata")
+    if require_all and metadata["uart_results"] != "brief":
+        raise ValueError("default --all package requires brief UART output")
+    if require_diagnostic != (metadata.get("selection") == "diagnostic"):
+        raise ValueError("--diagnostic and selection=diagnostic must be used together")
+    if require_diagnostic and metadata["uart_results"] != "full":
+        raise ValueError("diagnostic package requires full UART output")
+    if metadata["uart_results"] == "full" and not require_diagnostic:
+        raise ValueError("full UART chapter packages require --diagnostic")
 
     blocked = {}
     for row in blocked_rows:
@@ -141,6 +156,8 @@ def package(artifact, require_all=False):
         else:
             entry["publish_status"] = "BUILD_READY_NOT_IT_PASS"
             entry["notes"] = "需要在匹配的 IT/simv 上运行；编译通过不等于功能通过"
+            if require_diagnostic:
+                entry["notes"] += "；全量 UART 诊断版本，打印 HPU/golden 每项数据，运行明显更慢"
             if qualifier == "waveform-hold":
                 entry["notes"] = "故意无限等待看波形；必须设置仿真 cycle-limit，不等待 PASS"
             elif qualifier == "termination-probe-fail":
@@ -158,6 +175,14 @@ def package(artifact, require_all=False):
         raise ValueError("NOT_QUALIFIED contains undeclared or non-blocked cases")
     if metadata.get("not_qualified_count") != str(len(declared_blocked)):
         raise ValueError("MANIFEST not_qualified_count does not match blocked cases")
+    if require_diagnostic:
+        if seen_ids != DIAGNOSTIC_IDS or any(
+                row["qualifier"] != "software-self-check" or
+                row["chapter"] != (
+                    "03_compute_instructions" if "_INS_" in row["case_id"]
+                    else "04_composite_instruction_sequences")
+                for row in indexes):
+            raise ValueError("diagnostic package must contain exactly the twelve ready 03/04 cases")
     if require_all:
         instruction_ids = {
             row["case_id"] for row in indexes
@@ -187,6 +212,9 @@ def package(artifact, require_all=False):
         for name in MANIFESTS:
             shutil.copy2(artifact / name, staging / name)
         shutil.copytree(provenance, staging / "provenance")
+        if (artifact / "tools").exists():
+            tree_files(artifact / "tools")
+            shutil.copytree(artifact / "tools", staging / "tools")
         for source, relative in copies:
             destination = staging / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -201,8 +229,26 @@ def package(artifact, require_all=False):
             write_index(staging / chapter / "INDEX.tsv", chapter_rows)
             count = sum(bool(row["elf"]) for row in chapter_rows)
             summary.append(f"| {chapter} | {len(chapter_rows)} | {count} | {len(chapter_rows) - count} |")
+        uart_note = (
+            "## 全量 UART 正确性诊断版（不是加速包）\n\n"
+            "本包只包含 03 的九个用例以及 04 的 BConv、整体 NTT、整体 INTT，共 12 个 ELF。"
+            "构建参数为 `HPU_DUMP_RESULTS=1`；每个已执行的结果比较都会保留完整的 "
+            "4096 项 HPU 实际结果及软件 golden，多 RNS 时逐分量打印，不以抽样代替正确性检查。\n\n"
+            "全量串口输出会明显增加仿真 cycle 和现实耗时；只对需要定位的用例使用本包，"
+            "并为 UART 输出单独预留仿真周期。它不是提速版本，也不改变比较标准。"
+            "默认下载并使用 `nexus-am-hpu-workloads` 常规摘要包；本包另名为 "
+            "`nexus-am-hpu-uart-results`，请勿混用两包的 ELF/BIN。\n\n"
+            if require_diagnostic else
+            "## 默认 UART 摘要版\n\n"
+            "构建参数为 `HPU_DUMP_RESULTS=0`，打印阶段、结果统计和错误项；完整正确性比较仍然执行。"
+            "03/04 如需保存每项 HPU/golden 数据，请单独下载 `nexus-am-hpu-uart-results`。"
+            "全量诊断版明显更慢，不作为日常回归默认包。\n\n"
+        )
         readme = (
-            "# HPU 按章节测试包\n\n"
+            "# HPU 按章节测试包\n\n" + uart_note +
+            f"本包 mainargs={metadata.get('mainargs', 'all')}；subcase=N只覆盖对应子项。\n\n" +
+            "阶段耗时/结果导出见 [运行诊断](provenance/testplan/docs/RUNTIME_UART_DIAGNOSTICS.md)，"
+            "导出工具为 tools/parse-uart-results.py。\n\n" +
             "此包按测试源码章节组织，03 的 PNTT/PINTT 不再分散到其它下载包。\n\n"
             "**BUILD_READY_NOT_IT_PASS 仅表示构建和产物校验通过，不表示 IT/VCS 已通过。**\n"
             "请使用与本包编码兼容的 simv，按 INDEX.tsv 的 qualifier 和 notes 选择用例。\n\n"
@@ -246,10 +292,13 @@ def package(artifact, require_all=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", type=Path)
-    parser.add_argument("--all", action="store_true", help="要求完整构建且 03 包含全部九条指令")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--all", action="store_true", help="要求完整摘要构建且 03 包含全部九条指令")
+    mode.add_argument("--diagnostic", action="store_true", help="要求 03/04 十二项全量 UART 诊断构建")
     args = parser.parse_args()
     try:
-        package(args.artifact, require_all=args.all)
+        package(args.artifact, require_all=args.all,
+                require_diagnostic=args.diagnostic)
     except (OSError, ValueError) as error:
         parser.exit(2, f"package-chapters: {error}\n")
 

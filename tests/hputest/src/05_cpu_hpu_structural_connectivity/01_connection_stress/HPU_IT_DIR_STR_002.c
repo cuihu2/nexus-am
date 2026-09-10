@@ -1,6 +1,7 @@
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
 
 /*
  * 测试点：IT-STR-002
@@ -24,6 +25,7 @@ int main(void) {
     const uint32_t *modulus;
     int rc;
     case_start(__FILE__);
+    (void)result_context(__FILE__, 0U);
 
     printf("[HPU][STR002][PREPARE] profile=0 commands=%u queue-target=8+1 "
            "mod-line=%u window-lines=%u\n", commands, LINE_MOD, WINDOW_LINES);

@@ -46,10 +46,12 @@ HARNESS = r"""
 #include <stdio.h>
 #include <string.h>
 #include <hpu/it_v2.h>
+#include <hpu/report.h>
 
 enum { Q0 = 50061313U, Q1 = 50077697U };
 uint32_t host_memory[WINDOW_LINES * WORDS_PER_LINE];
 static unsigned cleans, invalidates, fences, address_requests;
+static unsigned char invalidated[WINDOW_LINES];
 const uint32_t RNS_A[POLY_WORDS] = {0U, 1U, Q0 - 1U, 7U};
 const uint32_t RNS_B[POLY_WORDS] = {1U, 0U, 3U, Q0 - 1U};
 
@@ -65,6 +67,7 @@ void clean_lines(unsigned line, unsigned count) {
 void invalidate_lines(unsigned line, unsigned count) {
     assert(line < WINDOW_LINES && count != 0U && count <= WINDOW_LINES - line);
     ++invalidates;
+    for (unsigned i = line; i < line + count; ++i) invalidated[i]++;
 }
 void mem_fence(void) { ++fences; }
 void hpu_fence(void) { ++fences; }
@@ -179,6 +182,18 @@ static void permissions(void) {
     assert(v2_check_memory("permission-reset") == 1);
 }
 
+static void invalidate_partition(void) {
+    assert(v2_prepare(0U, Q0, Q1) == 0);
+    assert(v2_allow_output(LINE_OUT, POLY_LINES) == 0);
+    assert(v2_check_memory("partition") == 0);
+    for (unsigned i = 0U; i < WINDOW_LINES; ++i)
+        assert(invalidated[i] == (i >= LINE_OUT && i < LINE_OUT + POLY_LINES ? 0U : 1U));
+    /* 结果比较独立失效输出，最终所有line恰好一次，没有遗漏或重复CBO。 */
+    assert(v2_check_words("partition-output", LINE_OUT, v2_expected(LINE_OUT),
+                          POLY_WORDS, 0U) == 0);
+    for (unsigned i = 0U; i < WINDOW_LINES; ++i) assert(invalidated[i] == 1U);
+}
+
 static void copy_and_fill(void) {
     uint32_t data[70];
     assert(v2_prepare(0U, Q0, Q1) == 0);
@@ -226,12 +241,14 @@ static void power_of_two_modulus(void) {
 
 int main(int argc, char **argv) {
     assert(argc == 2);
+    assert(result_context("memory-unit", 0U) == 0);
     if (!strcmp(argv[1], "profiles")) profiles();
     else if (!strcmp(argv[1], "invalid_prepare")) invalid_prepare();
     else if (!strcmp(argv[1], "invalid_ranges")) invalid_ranges();
     else if (!strcmp(argv[1], "shadow")) shadow_and_guard(0);
     else if (!strcmp(argv[1], "guard")) shadow_and_guard(1);
     else if (!strcmp(argv[1], "permissions")) permissions();
+    else if (!strcmp(argv[1], "invalidate_partition")) invalidate_partition();
     else if (!strcmp(argv[1], "copy_fill")) copy_and_fill();
     else if (!strcmp(argv[1], "compare")) compare_words();
     else if (!strcmp(argv[1], "noncanonical")) noncanonical();
@@ -262,6 +279,7 @@ class V2MemoryTests(unittest.TestCase):
             "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-O2",
             f"-I{root}", f"-I{TEST_ROOT / 'include'}",
             str(harness), str(TEST_ROOT / "runtime" / "it_v2_memory.c"),
+            str(TEST_ROOT / "runtime" / "it_report.c"),
             "-o", str(cls.executable),
         ]
         compiled = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -310,13 +328,18 @@ class V2MemoryTests(unittest.TestCase):
     def test_copy_overlap_fill_and_shadow_remain_consistent(self):
         self.assertNotIn("[FAIL]", self.run_scenario("copy_fill"))
 
-    def test_golden_comparison_prints_only_first_bad_word(self):
+    def test_readonly_and_output_invalidate_exactly_once(self):
+        self.assertNotIn("[FAIL]", self.run_scenario("invalidate_partition"))
+
+    def test_golden_comparison_reports_all_mismatch_statistics(self):
         output = self.run_scenario("compare")
-        self.assert_first_error(output, "first-mismatch", 128, 2)
-        self.assertIn("actual=0x17 expected=0x11 q=50061313", output)
+        self.assertIn("phase=first-mismatch round=0 words=4 mismatches=2 first_bad=2", output)
+        self.assertIn("DATA,2,0x17,0x11,50061313,6", output)
 
     def test_noncanonical_equal_words_do_not_pass_modular_comparison(self):
-        self.assert_first_error(self.run_scenario("noncanonical"), "noncanonical", 128, 0)
+        output = self.run_scenario("noncanonical")
+        self.assertIn("phase=noncanonical round=0 words=1 mismatches=1 first_bad=0", output)
+        self.assertIn("noncanonical=1 exact_integer=1", output)
 
     def test_power_of_two_modulus_uses_floor_two_to_64(self):
         self.assertNotIn("[FAIL]", self.run_scenario("power_of_two"))

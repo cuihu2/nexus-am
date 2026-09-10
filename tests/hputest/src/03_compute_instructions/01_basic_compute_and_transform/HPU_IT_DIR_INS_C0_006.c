@@ -1,6 +1,8 @@
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
+#include <hpu/report.h>
+#include <hpu/progress.h>
 #include <hpu/stage_vectors.h>
 
 /*
@@ -15,9 +17,14 @@ int main(void) {
     const unsigned stages[] = {0U, 1U, 11U};
     const uint32_t *const tables[] = {intt_twiddle_0, intt_twiddle_1, intt_twiddle_11};
     case_start(__FILE__);
+    if (progress_begin(__FILE__, 6U) != 0)
+        return case_fail(__FILE__, __LINE__);
 
     for (unsigned profile = 0U; profile < 2U; ++profile) {
         for (unsigned selected = 0U; selected < 3U; ++selected) {
+            if (!subcase_selected(profile * 3U + selected)) continue;
+            (void)result_context(__FILE__, profile * 3U + selected);
+            phase_mark("prepare");
             const unsigned stage = stages[selected];
             const unsigned data_obj = profile == 0U ? P0 : P2;
             const unsigned twiddle_obj = profile == 0U ? P1 : P3;
@@ -37,6 +44,7 @@ int main(void) {
                 return case_fail(__FILE__, __LINE__);
             if (v2_allow_output(LINE_OUT, POLY_LINES) != 0)
                 return case_fail(__FILE__, __LINE__);
+            phase_mark("software-golden");
             input = v2_expected(LINE_A);
             if (input == NULL || MOD_Q0 != STAGE_MODULUS)
                 return case_fail(__FILE__, __LINE__);
@@ -59,6 +67,7 @@ int main(void) {
             printf("[HPU][PINTT][CONFIG] base=0x%lx window_lines=%u "
                    "input_line=%u twiddle_line=%u output_line=%u\n",
                    (unsigned long)MEM_BASE, WINDOW_LINES, LINE_A, LINE_TWIDDLE, LINE_OUT);
+            phase_mark("configure");
             csr_write(CSR_FAULT, FAULT_VALID);
             csr_write(CSR_IRQ, IRQ_LEVEL);
             csr_write(CSR_IRQ, 0U);
@@ -80,6 +89,7 @@ int main(void) {
 
             printf("[HPU][PINTT][ISSUE] mod -> data -> inverse-twiddle -> stage=%u -> "
                    "DSTORE -> release twiddle/mod -> terminal PSYNC\n", stage);
+            phase_mark("issue");
             if (dload_mod(LINE_MOD, 1U) != 0)
                 return case_fail(__FILE__, __LINE__);
             if (pmodld(0U) != 0)
@@ -98,6 +108,7 @@ int main(void) {
             if (pfree(P4) != 0)
                 return case_fail(__FILE__, __LINE__);
             psync();
+            phase_mark("wait-completion");
             rc = wait_irq();
             if (rc != 0) {
                 printf("[HPU][PINTT][FAIL] phase=terminal-psync profile=%u stage=%u rc=%d\n",
@@ -109,11 +120,16 @@ int main(void) {
                 printf("[HPU][PINTT][FAIL] phase=clear-completion stage=%u rc=%d\n", stage, rc);
                 return case_fail(__FILE__, __LINE__);
             }
-            if (check_status() != 0 || v2_check_memory("PINTT-readonly-and-guard") != 0)
+            if (check_status() != 0)
                 return case_fail(__FILE__, __LINE__);
-            if (v2_check_words("PINTT-single-stage", LINE_OUT, golden,
-                               POLY_WORDS, STAGE_MODULUS) != 0)
+            phase_mark("compare-results");
+            const int data_rc = v2_check_words("PINTT-single-stage", LINE_OUT, golden,
+                               POLY_WORDS, STAGE_MODULUS);
+            phase_mark("check-guard");
+            const int guard_rc = v2_check_memory("readonly-and-guard");
+            if (data_rc != 0 || guard_rc != 0)
                 return case_fail(__FILE__, __LINE__);
+            phase_mark("round-done");
             printf("[HPU][PINTT][ROUND-PASS] profile=%u stage=%u compared=%u "
                    "readonly-and-guard=pass\n", profile, stage, POLY_WORDS);
         }

@@ -1,5 +1,6 @@
 #include <hpu/result.h>
 #include <hpu/transform.h>
+#include <hpu/report.h>
 
 int transform_prepare(const uint32_t *image) {
     volatile uint32_t *memory = ddr_line(0U);
@@ -18,7 +19,9 @@ int transform_check_memory(const uint32_t *image) {
     volatile const uint32_t *memory = ddr_line(0U);
     const unsigned first = TRANSFORM_OUTPUT * WORDS_PER_LINE;
     if (image == NULL) return 1;
-    invalidate_lines(0U, TRANSFORM_LINES);
+    invalidate_lines(0U, TRANSFORM_OUTPUT);
+    invalidate_lines(TRANSFORM_OUTPUT + TRANSFORM_N / WORDS_PER_LINE,
+                     TRANSFORM_LINES - TRANSFORM_OUTPUT - TRANSFORM_N / WORDS_PER_LINE);
     for (unsigned word = 0U; word < TRANSFORM_WORDS; ++word) {
         if (word >= first && word < first + TRANSFORM_N) continue;
         uint32_t actual = memory[word];
@@ -39,18 +42,7 @@ int transform_check_result(const uint32_t *golden) {
     volatile const uint32_t *output = ddr_line(TRANSFORM_OUTPUT);
     if (golden == NULL) return 1;
     invalidate_lines(TRANSFORM_OUTPUT, TRANSFORM_N / WORDS_PER_LINE);
-    for (unsigned word = 0U; word < TRANSFORM_N; ++word) {
-        uint32_t actual = output[word];
-        if (actual != golden[word] || actual >= TRANSFORM_Q) {
-            printf("[HPU][TRANSFORM][FAIL] phase=golden word=%u line=%u lane=%u "
-                   "actual=%u expected=%u q=%u\n", word,
-                   TRANSFORM_OUTPUT + word / WORDS_PER_LINE, word % WORDS_PER_LINE,
-                   actual, golden[word], TRANSFORM_Q);
-            return 1;
-        }
-    }
-    printf("[HPU][TRANSFORM][GOLDEN-PASS] compared=%u q=%u\n", TRANSFORM_N, TRANSFORM_Q);
-    return 0;
+    return result_compare("transform-golden", output, golden, TRANSFORM_N, TRANSFORM_Q);
 }
 
 void transform_print_bindings(const struct transform_binding *bindings, unsigned count) {
