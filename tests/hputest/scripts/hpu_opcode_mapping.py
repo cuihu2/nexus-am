@@ -1,9 +1,9 @@
-"""AM 接收层：仅将上游 HPU 控制/计算指令的主 opcode 映射到 custom-2。"""
+"""AM 接收层：校验新 producer 的原生 custom-2/custom-1，指令不再重写。"""
 
 import re
 
 
-SOURCE_OPCODE = 0x0B
+SOURCE_OPCODE = 0x5B
 TARGET_OPCODE = 0x5B
 DMA_OPCODE = 0x2B
 
@@ -15,23 +15,21 @@ _WORD_RE = re.compile(
 
 
 def map_word(word: int) -> int:
-    """保留 inst[31:7]；DMA 原样通过，未知或已映射的 opcode 拒绝通过。"""
+    """所有位原样保留；旧 custom-0 或未知 opcode 必须拒绝，不能混用旧交付。"""
     if not isinstance(word, int) or isinstance(word, bool) or not 0 <= word <= 0xFFFFFFFF:
         raise RuntimeError(f"HPU instruction must be a uint32 value: {word!r}")
 
     opcode = word & 0x7F
-    if opcode == SOURCE_OPCODE:
-        return (word & ~0x7F) | TARGET_OPCODE
-    if opcode == DMA_OPCODE:
+    if opcode in (SOURCE_OPCODE, DMA_OPCODE):
         return word
     raise RuntimeError(
         f"unexpected HPU source opcode 0x{opcode:02X} in 0x{word:08X}; "
-        "expected unmapped custom-0 (0x0B) or DMA (0x2B)"
+        "expected native custom-2 (0x5B) or DMA (0x2B)"
     )
 
 
 def map_c(source: str) -> str:
-    """映射生成 C 的 .word 字面量；所有其他 C 文本保持原样。"""
+    """检查生成 C 的 .word；保留原文本，包括大小写、数据和寄存器绑定。"""
     def replace(match: re.Match) -> str:
         word = int(match.group("word"), 16)
         mapped = map_word(word)

@@ -14,6 +14,7 @@ import struct
 import tempfile
 
 from hpu_opcode_mapping import DMA_OPCODE, TARGET_OPCODE, map_c, map_word
+from hpu_ntt_layout import forward_layout
 
 
 EXPECTED_IMAGES = {
@@ -32,15 +33,15 @@ EXPECTED_DMA = [
 
 EXPECTED_MM_WORDS = [
     0x06B540AB,
-    0x6000000B,
+    0x6000005B,
     0x02B5202B,
     0x04B5202B,
-    0x2040800B,
-    0x8040000B,
-    0x8080000B,
+    0x2040805B,
+    0x8040005B,
+    0x8080005B,
     0x00B5502B,
-    0x80C0000B,
-    0x7000000B,
+    0x80C0005B,
+    0x7000005B,
 ]
 
 BASE_SELECTED_FILES = [
@@ -51,6 +52,9 @@ BASE_SELECTED_FILES = [
     "mm.cmd26",
     "dma_relocation_manifest.csv",
     "test_data/params.json",
+    "test_data/input_a.bin",
+    "test_data/input_b.bin",
+    "test_data/expected.bin",
     "test_data/hardware/abi.json",
     "test_data/hardware/line_map.csv",
     "test_data/hardware/hardware_manifest.csv",
@@ -146,7 +150,7 @@ def validate_program(source: Path) -> None:
     if words != EXPECTED_MM_WORDS:
         fail("mm.inst32 does not match the reviewed executable MM program")
 
-    # main/b405f2a 使用标准 GPR 位段；custom1 仍直通 payload 并置 kind。
+    # 当前 main 使用标准 GPR 位段；custom1 仍直通 payload 并置 kind。
     # 必须保留 rs1/rs2 编号，不能接受旧版重排/丢弃操作数的 cmd26。
     commands = [int(line, 2) for line in
                 (source / "mm.cmd26").read_text().splitlines() if line.strip()]
@@ -177,6 +181,9 @@ def validate_data(source: Path) -> tuple[int, int, dict[str, dict[str, str]]]:
     params = json.loads((source / "test_data/params.json").read_text())
     if params.get("operation") != "mm" or params.get("N") != 4096:
         fail("MM delivery must be operation=mm and N=4096")
+    if (params.get("input_domain"), params.get("output_domain")) != ("NTT", "NTT") or \
+            "NTT domain P-network physical" not in params.get("hardware_layout", ""):
+        fail("MM delivery must declare the current P-network NTT layout")
     moduli = params.get("moduli")
     if not isinstance(moduli, list) or len(moduli) != 1 or moduli[0] != 50061313:
         fail("MM delivery must contain the reviewed q=50061313 modulus")
@@ -225,6 +232,18 @@ def validate_data(source: Path) -> tuple[int, int, dict[str, dict[str, str]]]:
     expected = read_u32(hardware_root / "images/expected.u32.bin")
     if len(input_a) != 4096 or len(input_b) != 4096 or len(expected) != 4096:
         fail("MM input/expected vector length mismatch")
+    # MM 属于NTT域：硬件数组使用forward_layout，不是系数域的bit_reverse。
+    layout = forward_layout(4096)
+    for name, hardware_values in (("input_a", input_a), ("input_b", input_b),
+                                  ("expected", expected)):
+        raw = (source / "test_data" / f"{name}.bin").read_bytes()
+        if len(raw) != 4096 * 8:
+            fail(f"MM {name}: expected 4096 natural-order uint64 values")
+        logical = struct.unpack("<4096Q", raw)
+        for physical, value in enumerate(hardware_values):
+            logical_index = layout[physical]
+            if value != logical[logical_index]:
+                fail(f"MM {name}: physical/logical mapping mismatch at {physical}")
     for index, (left, right, golden) in enumerate(zip(input_a, input_b, expected)):
         if left >= modulus or right >= modulus or golden != (left * right) % modulus:
             fail(f"MM software golden mismatch at coefficient {index}")
@@ -282,7 +301,7 @@ def opcode_map_rows() -> list[dict[str, str]]:
 
 
 def validate_mapped_delivery(root: Path) -> None:
-    """保留完整上游证据，仅允许计算/控制指令的低 7 位发生指定转换。"""
+    """保留完整上游证据，新主线的计算/控制及DMA指令必须原样接收。"""
     upstream = root / "upstream"
     validate_program(upstream)
     expected_source = map_c((upstream / "mm.c").read_text(encoding="utf-8"))
@@ -317,7 +336,7 @@ def render_header(commit: str, coefficient_count: int, modulus: int,
         "",
         "#include <stdint.h>",
         "",
-        "/* Generated from inline-asm; AM maps only control/compute opcode 0x0B to 0x5B. */",
+        "/* Native inline-asm custom-2/custom-1 words; AM validates without rewriting. */",
         f'#define HPU_INLINE_ASM_SOURCE_COMMIT "{commit}"',
         f"#define HPU_INLINE_ASM_ARITH_OPCODE UINT32_C(0x{TARGET_OPCODE:02X})",
         f"#define HPU_MM_COEFFICIENTS {coefficient_count}U",
@@ -407,12 +426,14 @@ def main() -> int:
             f"- producer commit: `{arguments.producer_commit}`\n"
             f"- operation: pointwise MM, N={coefficient_count}, q={modulus}\n"
             "- ABI: little-endian uint32, 64 words / 256-byte line\n"
+            "- NTT physical order: memory[p] = logical_ntt[forward_layout(p)]; "
+            "original natural-order uint64 vectors are retained in test_data/.\n"
             "- DMA spans: MOD=(192,1), A=(0,64), B=(64,64), OUT=(128,64)\n"
             "- `images/expected.u32.bin` is immutable golden data; Nexus-AM "
             "poisons line 128 before DSTORE and never preloads this golden.\n"
             "- `upstream/` preserves original inline-asm program/encoder files. "
-            "AM maps only low 7 opcode bits 0x0B -> 0x5B in target mm.c/inst32 "
-            "and encoder words; opcode_map.csv records the MM mapping. DMA 0x2B, "
+            "Upstream natively emits 0x5B; AM preserves mm.c/inst32 and encoder "
+            "words byte-for-byte. opcode_map.csv records identity mapping. DMA 0x2B, "
             "inst[31:7], cmd26, x10/x11 and DSTORE OBJ.len guards are unchanged.\n"
             "- The program retains one terminal PSYNC (0x7000005B), no internal barrier. "
             "CPU frontend must route custom-2 (0x5B) to HPU cmd_kind=0.\n",

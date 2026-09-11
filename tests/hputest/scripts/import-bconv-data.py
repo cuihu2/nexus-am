@@ -37,6 +37,14 @@ def rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(stream))
 
 
+def physical_coefficients(logical: list[int]) -> list[int]:
+    """独立实现交付 ABI：每个 RNS 分量各自位反转，不能反转跨分量的大数组。"""
+    require(len(logical) % N == 0, "incomplete coefficient polynomial")
+    bits = N.bit_length() - 1
+    positions = [int(f"{index:0{bits}b}"[::-1], 2) for index in range(N)]
+    return [logical[base + index] for base in range(0, len(logical), N) for index in positions]
+
+
 def expected_program() -> list[str]:
     result = ["dload x10, x11, p4, 2, 1"]
     for source in range(4):
@@ -62,7 +70,8 @@ def validate(source: Path, encodings: Path) -> dict[str, object]:
     require(params.get("operation") == "bconv" and params.get("N") == N and
             params.get("moduli") == MODULI and params.get("input_domain") == "coefficient/Q" and
             params.get("output_domain") == "coefficient/P", "expected producer Q4 to P3 N4096 package")
-    require("natural polynomial order" in params.get("hardware_layout", ""), "obsolete memory layout")
+    require("coefficient domain bit-reversed" in params.get("hardware_layout", ""),
+            "expected bit-reversed coefficient-domain hardware layout")
     require(abi.get("line_bytes") == LINE_BYTES and abi.get("coefficient_bits") == 32 and
             abi.get("byte_order") == "little-endian", "unsupported coefficient ABI")
     line_map = rows(hardware / "line_map.csv")
@@ -84,14 +93,16 @@ def validate(source: Path, encodings: Path) -> dict[str, object]:
 
     inputs = images["images/input_q.u32.bin"]
     math_inputs = (data / "input_q.bin").read_bytes()
-    require(len(math_inputs) == 4 * N * 8 and list(struct.unpack(f"<{4 * N}Q", math_inputs)) == inputs,
-            "hardware Q input differs from natural-order mathematical input")
+    require(len(math_inputs) == 4 * N * 8, "input_q must contain 4x4096 uint64 canonical values")
+    logical_inputs = list(struct.unpack(f"<{4 * N}Q", math_inputs))
+    require(physical_coefficients(logical_inputs) == inputs,
+            "hardware Q input differs from per-basis bit-reversed mathematical input")
     inverses = images["images/constants/qhat_inv_q.u32.bin"]
     target_constants = images["images/constants/qhat_mod_p.u32.bin"]
     normalized = []
     hats = []
     for source_index, modulus in enumerate(MODULI[:4]):
-        values = inputs[source_index * N:(source_index + 1) * N]
+        values = logical_inputs[source_index * N:(source_index + 1) * N]
         require(all(value < modulus for value in values), "noncanonical Q source limb")
         hat = math.prod(q for index, q in enumerate(MODULI[:4]) if index != source_index)
         hats.append(hat)
@@ -173,9 +184,10 @@ def validate(source: Path, encodings: Path) -> dict[str, object]:
     window.extend(((0xA5830000 ^ (i * 0x45D9F3B)) & 0xffffffff)
                   for i in range(len(window), WINDOW_LINES * 64))
     window[1280 * 64:1728 * 64] = [0xDEADBEEF] * ((1728 - 1280) * 64)
+    # 数学 golden 始终在自然序验证。只有写入 AM 比对表时才转换成与 DSTORE 相同的物理序。
     return dict(window=struct.pack(f"<{len(window)}I", *window),
-                golden=struct.pack(f"<{len(golden)}I", *golden),
-                normalized=struct.pack(f"<{len(normalized)}I", *normalized),
+                golden=struct.pack(f"<{len(golden)}I", *physical_coefficients(golden)),
+                normalized=struct.pack(f"<{len(normalized)}I", *physical_coefficients(normalized)),
                 plan=plan, c_source=map_c(c_source), words=[map_word(word) for word in words])
 
 
@@ -227,7 +239,8 @@ def main() -> None:
     prepared = validate(source, args.encodings)
     publish(source, destination, prepared, args.producer_commit)
     shutil.copyfile(args.encodings, destination / "encoder_words.tsv")
-    print("BConv Q4->P3 N4096: 40 resolved DMA, source constants and FastBConv golden verified")
+    print("BConv Q4->P3 N4096: bit-reversed coefficient layout, 40 resolved DMA, "
+          "source constants and natural-order FastBConv golden verified")
 
 
 if __name__ == "__main__":

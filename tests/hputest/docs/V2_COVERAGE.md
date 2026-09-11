@@ -4,7 +4,8 @@
 **本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，29 个具备真实软件自检；
 20 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
-已跑通的 `00_bringup` 源码、RTL、inline-asm gitlink 均未更改。
+`00_bringup` 源码及RTL未更改；inline-asm已同步main `6903096`，嵌入数据按新物理ABI重新生成。
+本版同步说明见 [inline-main更新](INLINE_MAIN_6903096.md)。
 
 耗时优化、可选单子项执行、阶段cycle与全量UART结果导出见
 [运行诊断说明](RUNTIME_UART_DIAGNOSTICS.md)。默认仍执行原有所有round和精确自检。
@@ -39,8 +40,8 @@
 | 002 | PSUB | 4轮：独立目的、覆盖源0/源1、连续依赖；借位/回绕 |
 | 003 | PMUL | 6轮：对象模式、立即数7、目的覆盖、立即数0/1/255 |
 | 004 | PMAC | 4轮：初值0、初值q-1连续累加、立即数255、目的/源同为p0 |
-| 005 | PNTT | 2种数据 × stage0/1/11，pdata/ptwid为p0/p1或p2/p3 |
-| 006 | PINTT | 同上，使用真实逆twiddle和独立单stage C蝶形 |
+| 005 | PNTT | 2种数据 × stage0/1/11，dst/src/twiddle为p2/p0/p1或p0/p2/p3 |
+| 006 | PINTT | 同上，逆向stage和lazy-scale twiddle，独立物理单stage C模型 |
 | 007 | PMODLD | 2种数据，各自q0→q1→q0；三个PMUL输出验证上下文切换 |
 | 008 | PSYNC | 空闲、DMA、计算三种程序，各两轮；真PLIC中断、rearm、清除后检查空闲 |
 | 009 | PFREE | p0/p7合法释放后复用，同一对象从A换为B，再写回检查 |
@@ -60,8 +61,8 @@
 | 用例后缀 | 本轮实现 | 未覆盖/尚缺 |
 | --- | --- | --- |
 | CMB_001 | Q4→P3 FastBConv，N4096；93指令/40DMA；4个normalized Q及3个P分量逐项检查 | P→Q、边界数据、其它代表性规模 |
-| CMB_002 | 整体NTT，Q0/N4096；pre-twist+12stage+写回；45指令/16DMA | 其它模数基、边界数据、其它规模 |
-| CMB_003 | 整体INTT，Q0/N4096；12stage+归一化/逆twist+写回；45指令/16DMA | 同上 |
+| CMB_002 | 整体NTT，Q0/N4096；pre-twist+12stage+写回；57指令/16DMA | 其它模数基、边界数据、其它规模 |
+| CMB_003 | 整体INTT，Q0/N4096；12stage+归一化/逆twist+写回；57指令/16DMA | 同上 |
 | CMB_004 | 未接入KeySwitch | 独立密钥/常量/scratch及DMA绑定未完成 |
 | CMB_005 | 未接入NTT+Auto | producer已有Auto专用交付，AM接收校验/绑定尚未实现 |
 | CMB_009..015 | 未接入真实算法库API | 需库仓库、固定commit、接口、参数、密钥、数据、精度和golden |

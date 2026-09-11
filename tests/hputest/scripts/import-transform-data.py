@@ -13,6 +13,8 @@ import struct
 
 from hpu_opcode_mapping import map_c, map_word
 from program_encoding import check_program
+from hpu_ntt_layout import (CONVENTION, HARDWARE_LAYOUT, bit_reverse,
+                            expected_twiddles, physical_words, stage_reference)
 
 N, Q, LINE_BYTES, WINDOW_LINES = 4096, 50061313, 256, 640
 INPUT, OUTPUT, MOD, FACTOR, STAGES = 1, 65, 129, 130, 194
@@ -71,7 +73,9 @@ def expected_program(direction: str) -> tuple[list[str], list[str]]:
         program += ["dload x10, x11, p1, 1, 0", "pmul p0, p0, p1", "pfree p1"]
         assets.append("constants/twiddle/ntt/basis_00/pre_twist.u32.bin")
     for stage in range(12):
-        program += ["dload x10, x11, p1, 1, 0", f"p{direction} p0, p1, {stage}, 0, 0", "pfree p1"]
+        src, dst = (0, 3) if stage % 2 == 0 else (3, 0)
+        program += ["dload x10, x11, p1, 1, 0", f"p{direction} p{dst}, p{src}, p1, {stage}, 0, 0",
+                    f"pfree p{src}", "pfree p1"]
         assets.append(f"constants/twiddle/{direction}/basis_00/stage_{stage:02d}.u32.bin")
     if direction == "intt":
         program += ["dload x10, x11, p1, 1, 0", "pmul p0, p0, p1", "pfree p1"]
@@ -89,12 +93,11 @@ def validate_package(source: Path, direction: str, encodings: Path) -> dict[str,
     abi = json.loads((hardware / "abi.json").read_text(encoding="utf-8"))
     require(params.get("N") == N and params.get("moduli") == [Q] and
             params.get("operation") == direction, f"{direction}: expected N4096/Q0 producer package")
-    require("natural polynomial order" in params.get("hardware_layout", ""),
+    require(HARDWARE_LAYOUT in params.get("hardware_layout", ""),
             f"{direction}: obsolete coefficient/NTT physical layout")
     require(abi.get("coefficient_bits") == 32 and abi.get("line_bytes") == LINE_BYTES and
             abi.get("byte_order") == "little-endian", f"{direction}: incompatible hardware ABI")
-    require(abi.get("twiddle", {}).get("convention") ==
-            "group-major radix-2 DIT with one N/2-word image per stage", "unsupported twiddle convention")
+    require(abi.get("twiddle", {}).get("convention") == CONVENTION, "unsupported twiddle convention")
     line_map = read_rows(hardware / "line_map.csv")
     twiddles = read_rows(hardware / "twiddle_map.csv")
     full_image = (hardware / "hpu_mem_image.u32.bin").read_bytes()
@@ -113,15 +116,23 @@ def validate_package(source: Path, direction: str, encodings: Path) -> dict[str,
     inputs = list(struct.unpack("<4096I", input_blob))
     golden = list(struct.unpack("<4096I", golden_blob))
     require(all(value < Q for value in inputs + golden), "noncanonical input/golden")
+    logical = {}
     for name, values in (("input", inputs), ("expected", golden)):
         math_blob = (data / f"{name}.bin").read_bytes()
-        require(len(math_blob) == N * 8 and list(struct.unpack("<4096Q", math_blob)) == values,
-                f"{direction}/{name}: hardware image is not natural-order mathematical data")
+        require(len(math_blob) == N * 8, f"{direction}/{name}: wrong mathematical data size")
+        logical[name] = list(struct.unpack("<4096Q", math_blob))
+        ntt_domain = (direction == "intt") == (name == "input")
+        require(physical_words(logical[name], ntt_domain) == values,
+                f"{direction}/{name}: hardware image differs from specified physical permutation")
     pre = one(twiddles, direction="ntt", basis_index="0", phase="pre_twist", stage="-1")
-    psi = int(pre["recurrence_step"], 0)
+    pre_words = list(struct.unpack("<4096I", load(pre["path"], 64)))
+    psi = pre_words[N // 2]
     require(pow(psi, N, Q) == Q - 1 and pow(psi, 2 * N, Q) == 1, "invalid primitive root")
-    require(mathematical_transform(inputs, psi, direction == "intt") == golden,
+    require(pre_words == [pow(psi, bit_reverse(i, N), Q) for i in range(N)],
+            "pre_twist differs from bit-reversed coefficient powers")
+    require(mathematical_transform(logical["input"], psi, direction == "intt") == logical["expected"],
             f"{direction}: mathematical reference differs from producer golden")
+    tables = expected_twiddles(N, Q, psi)
 
     program, paths = expected_program(direction)
     c_source = (package / f"{direction}.c").read_text(encoding="utf-8")
@@ -144,10 +155,9 @@ def validate_package(source: Path, direction: str, encodings: Path) -> dict[str,
     for i in range(OUTPUT * 64, OUTPUT * 64 + N):
         image[i] = 0xDEADBEEF
     bindings = []
-    selected_files = []
-    omega = psi * psi % Q
-    if direction == "intt":
-        omega = pow(omega, Q - 2, Q)
+    # INTT 也使用前向 pre-twist 表提取 primitive root，必须保留这一验证依赖。
+    selected_files = [pre["path"]] if direction == "intt" else []
+    physical_result = list(inputs)
     for index, (relocation, path, instruction) in enumerate(zip(relocations, paths, dma_instructions)):
         asm = program[instruction]
         require(int(relocation["dma_index"]) == index and
@@ -173,24 +183,28 @@ def validate_package(source: Path, direction: str, encodings: Path) -> dict[str,
                 require(values[:4] == [Q, mu & 0xffffffff, mu >> 32, 0] and not any(values[4:]),
                         "mod context differs from q32/mu48 reference")
             elif line == FACTOR:
-                expected = ([pow(psi, i, Q) for i in range(N)] if direction == "ntt" else
-                            [pow(N, Q - 2, Q) * pow(pow(psi, Q - 2, Q), i, Q) % Q for i in range(N)])
+                expected = ([pow(psi, bit_reverse(i, N), Q) for i in range(N)] if direction == "ntt" else
+                            [pow(N, Q - 2, Q) * pow(pow(psi, Q - 2, Q), bit_reverse(i, N), Q) % Q
+                             for i in range(N)])
                 require(values == expected, f"{direction}: pre/post factor mismatch")
+                physical_result = [a * b % Q for a, b in zip(physical_result, values)]
             elif line >= STAGES:
                 stage = (line - STAGES) // 32
-                half = 1 << stage
-                groups = N // (2 * half)
-                step = pow(omega, groups, Q)
+                forward_stage = stage if direction == "ntt" else 11 - stage
                 table_row = one(twiddles, direction=direction, basis_index="0", phase="butterfly", stage=str(stage))
-                require(table_row["path"] == path and int(table_row["recurrence_step"], 0) == step and
+                require(table_row["path"] == path and int(table_row["forward_stage"]) == forward_stage and
+                        int(table_row["batch_count"]) == 32 and int(table_row["lanes_per_batch"]) == 64 and
+                        table_row["loader_mode"] == ("sequential_128" if forward_stage < 7 else "interleaved_64x2") and
                         int(table_row["value_count"]) == N // 2 and int(table_row["line_count"]) == 32,
                         f"{direction}: stage {stage} metadata mismatch")
-                require(values == [pow(step, j, Q) for _ in range(groups) for j in range(half)],
-                        f"{direction}: stage {stage} twiddle differs from group-major formula")
+                require(values == tables[direction][stage],
+                        f"{direction}: stage {stage} twiddle differs from physical lane/scale formula")
+                physical_result = stage_reference(physical_result, values, Q, stage, direction == "intt")
             image[line * 64:(line + count) * 64] = values
             selected_files.append(path)
         bindings.append(dict(dma=index, instruction=instruction, operation=asm,
                              artifact=path, line=line, lines=count))
+    require(physical_result == golden, f"{direction}: physical stage model differs from mathematical golden")
     return dict(image=struct.pack(f"<{len(image)}I", *image), golden=golden_blob,
                 bindings=bindings, selected_files=selected_files, c_source=map_c(c_source),
                 mapped_words=[map_word(word) for word in words])
@@ -249,7 +263,7 @@ def main() -> None:
         write_package(source, destination, direction, package)
     (destination / "producer_commit.txt").write_text(args.producer_commit + "\n", encoding="ascii")
     shutil.copyfile(args.encodings, destination / "encoder_words.tsv")
-    print("transform import: NTT/INTT N4096 Q0, 2 x 16 DMA bindings, natural-order golden verified")
+    print("transform import: NTT/INTT N4096 Q0, 2 x 16 DMA bindings, physical layout and mathematical golden verified")
 
 
 if __name__ == "__main__":

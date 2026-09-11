@@ -66,6 +66,11 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-v2-memory.py
 	@python3 scripts/test-result-report.py
 	@python3 scripts/test-progress.py
+	@python3 scripts/test-stage-reference.py
+	@python3 scripts/test-stage-data.py \
+	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs"
+	@python3 scripts/test-mm-layout.py \
+	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs/mm"
 	@python3 scripts/test-package-chapters.py
 	@python3 scripts/test-transform-delivery.py \
 	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs" \

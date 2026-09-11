@@ -8,8 +8,8 @@
 /*
  * 测试点：IT-CMB-003
  * 目的：完整 negacyclic INTT，N=4096、Q0 基础数据。
- * 输入是 producer 自然顺序 NTT 域数据，不依赖002先运行。
- * 12级逆 twiddle、最后 N^-1*psi^-i 和独立系数域 golden 来自同批交付。
+ * 输入是 producer P-network 物理顺序 NTT 域数据，不依赖002先运行。
+ * 12级 lazy-scale 逆表、最后 N^-1*psi^-bit_reverse(p) 和系数域 golden 来自同批交付。
  * 本例不声称已经覆盖不同模数基、全规模和边界数据。
  */
 int main(void) {
@@ -19,8 +19,8 @@ int main(void) {
     if (progress_begin(__FILE__, 1U) != 0)
         return case_fail(__FILE__, __LINE__);
     phase_mark("prepare");
-    printf("[HPU][INTT][CONFIG] N=%u q=%u stages=12 data=p0 twiddle=p1 mod=p2 "
-           "input=natural-NTT output=natural-coefficient\n", TRANSFORM_N, TRANSFORM_Q);
+    printf("[HPU][INTT][CONFIG] N=%u q=%u stages=12 data=p0 scratch=p3 twiddle=p1 mod=p2 "
+           "input=P-network-NTT output=bit-reversed-coefficient\n", TRANSFORM_N, TRANSFORM_Q);
     if (transform_prepare(transform_intt_image) != 0)
         return case_fail(__FILE__, __LINE__);
     transform_print_bindings(transform_intt_bindings, HPU_PROGRAM_INTT_DMA_COUNT);
@@ -46,7 +46,7 @@ int main(void) {
     if (wait_window(1) != 0 || check_status() != 0)
         return case_fail(__FILE__, __LINE__);
 
-    printf("[HPU][INTT][ISSUE] mod/input -> PINTT stage0..11(each DLOAD/PFREE twiddle) "
+    printf("[HPU][INTT][ISSUE] mod/input -> PINTT stage0..11(p0/p3 ping-pong, PFREE src/twiddle) "
            "-> PMUL post-untwist-scale -> DSTORE -> PFREE mod -> PSYNC\n");
     /* 16次DMA和全部指令保持上游顺序，只有producer末尾的一条PSYNC。 */
     phase_mark("issue");

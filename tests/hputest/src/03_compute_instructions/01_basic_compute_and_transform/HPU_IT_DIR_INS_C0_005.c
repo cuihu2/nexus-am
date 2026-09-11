@@ -8,9 +8,9 @@
 /*
  * 测试点：IT-INS-C0-005
  * 目的：PNTT 单 stage 的前向蝶形，不是整体 NTT。
- * stage=0/1/11 分别覆盖首级、非平凡 twiddle 和末级配对。
- * 基础输入来自 producer MM；边界输入由 AM 显式派生，使用不同对象 p2/p3。
- * 不添加 pre-twist、bit-reversal 或全变换 golden；只核对本条指令的蝶形。
+ * stage=0/1/11 分别覆盖连续窗口和双64字交织 loader，以及蝶形后的 P 网络。
+ * 基础输入是 producer MM 物理数据，边界输入由 AM 显式派生；源/目的/twiddle 三槽不同。
+ * 不添加 pre-twist 或全变换 golden；逐物理字核对本条指令，不混淆逻辑系数顺序。
  */
 int main(void) {
     static uint32_t golden[POLY_WORDS];
@@ -28,16 +28,17 @@ int main(void) {
             const unsigned stage = stages[selected];
             const unsigned data_obj = profile == 0U ? P0 : P2;
             const unsigned twiddle_obj = profile == 0U ? P1 : P3;
+            const unsigned output_obj = profile == 0U ? P2 : P0;
             const uint32_t *twiddle = tables[selected];
-            const unsigned half = 1U << stage;
             const uint32_t *input;
-            unsigned twiddle_index = 0U;
             int rc;
 
-            printf("[HPU][PNTT][ROUND] profile=%u stage=%u q=%u data=p%u "
-                   "twiddle=p%u data_words=%u twiddle_words=%u\n",
-                   profile, stage, STAGE_MODULUS, data_obj, twiddle_obj,
+            printf("[HPU][PNTT][ROUND] profile=%u stage=%u q=%u src=p%u "
+                   "twiddle=p%u dst=p%u data_words=%u twiddle_words=%u\n",
+                   profile, stage, STAGE_MODULUS, data_obj, twiddle_obj, output_obj,
                    POLY_WORDS, STAGE_WORDS);
+            printf("[HPU][PNTT][LAYOUT] index=physical-word loader_forward_stage=%u "
+                   "twiddle=batch-lane order=butterfly-then-P\n", stage);
             if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
                 return case_fail(__FILE__, __LINE__);
             if (v2_copy(LINE_TWIDDLE, twiddle, STAGE_WORDS) != 0)
@@ -49,19 +50,9 @@ int main(void) {
             if (input == NULL || MOD_Q0 != STAGE_MODULUS)
                 return case_fail(__FILE__, __LINE__);
 
-            /* 独立 C 蝶形：从只读影子取输入，按 group-major 顺序消费真实 twiddle。 */
-            for (unsigned begin = 0U; begin < POLY_WORDS; begin += 2U * half) {
-                for (unsigned j = 0U; j < half; ++j) {
-                    const unsigned even = begin + j;
-                    const unsigned odd = even + half;
-                    const uint32_t a = input[even];
-                    const uint32_t b = (uint32_t)(
-                        (uint64_t)input[odd] * twiddle[twiddle_index++] % STAGE_MODULUS);
-                    golden[even] = (uint32_t)(((uint64_t)a + b) % STAGE_MODULUS);
-                    golden[odd] = a >= b ? a - b : STAGE_MODULUS - (b - a);
-                }
-            }
-            if (twiddle_index != STAGE_WORDS)
+            /* 独立 C：按物理 loader 取相邻蝶形，之后 P 网络把偶/奇 lane 分开。 */
+            if (stage_golden(input, twiddle, golden, POLY_WORDS,
+                             STAGE_MODULUS, stage, 0U) != 0)
                 return case_fail(__FILE__, __LINE__);
 
             printf("[HPU][PNTT][CONFIG] base=0x%lx window_lines=%u "
@@ -98,11 +89,13 @@ int main(void) {
                 return case_fail(__FILE__, __LINE__);
             if (dload(twiddle_obj, LINE_TWIDDLE, STAGE_LINES) != 0)
                 return case_fail(__FILE__, __LINE__);
-            if (op_ntt(data_obj, twiddle_obj, stage) != 0)
+            if (op_ntt(output_obj, data_obj, twiddle_obj, stage) != 0)
                 return case_fail(__FILE__, __LINE__);
-            if (dstore_release(data_obj, LINE_OUT, POLY_LINES) != 0)
+            if (pfree(data_obj) != 0)
                 return case_fail(__FILE__, __LINE__);
-            /* DSTORE 释放数据对象；twiddle 与模表仍需显式释放。 */
+            if (dstore_release(output_obj, LINE_OUT, POLY_LINES) != 0)
+                return case_fail(__FILE__, __LINE__);
+            /* 新版 STG 要求空闲目的槽；释放源对象，DSTORE 只释放目的对象。 */
             if (pfree(twiddle_obj) != 0)
                 return case_fail(__FILE__, __LINE__);
             if (pfree(P4) != 0)

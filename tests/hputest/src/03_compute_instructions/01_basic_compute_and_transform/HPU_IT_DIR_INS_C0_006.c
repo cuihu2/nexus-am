@@ -7,10 +7,10 @@
 
 /*
  * 测试点：IT-INS-C0-006
- * 目的：PINTT 单 stage 的逆根蝶形，不是整体 INTT。
- * stage=0/1/11 分别覆盖首级、非平凡逆 twiddle 和末级配对。
- * 基础输入来自 producer MM；边界输入由 AM 显式派生，使用不同对象 p2/p3。
- * 单 stage 不执行 N^-1 归一化、inverse-twist 或 bit-reversal。
+ * 目的：PINTT 单 stage 的 P^-1、物理 loader 和 lazy-scale 蝶形，不是整体 INTT。
+ * stage=0/1/11 对应正向 stage=11/10/0；逆表不是简单 omega^-1 等比表。
+ * 基础输入来自 producer MM，边界输入由 AM 显式派生；三对象必须不同。
+ * 单 stage 不执行 N^-1 归一化或 inverse-twist，逐物理字自检。
  */
 int main(void) {
     static uint32_t golden[POLY_WORDS];
@@ -28,16 +28,17 @@ int main(void) {
             const unsigned stage = stages[selected];
             const unsigned data_obj = profile == 0U ? P0 : P2;
             const unsigned twiddle_obj = profile == 0U ? P1 : P3;
+            const unsigned output_obj = profile == 0U ? P2 : P0;
             const uint32_t *twiddle = tables[selected];
-            const unsigned half = 1U << stage;
             const uint32_t *input;
-            unsigned twiddle_index = 0U;
             int rc;
 
-            printf("[HPU][PINTT][ROUND] profile=%u stage=%u q=%u data=p%u "
-                   "twiddle=p%u data_words=%u twiddle_words=%u\n",
-                   profile, stage, STAGE_MODULUS, data_obj, twiddle_obj,
+            printf("[HPU][PINTT][ROUND] profile=%u stage=%u q=%u src=p%u "
+                   "twiddle=p%u dst=p%u data_words=%u twiddle_words=%u\n",
+                   profile, stage, STAGE_MODULUS, data_obj, twiddle_obj, output_obj,
                    POLY_WORDS, STAGE_WORDS);
+            printf("[HPU][PINTT][LAYOUT] index=physical-word loader_forward_stage=%u "
+                   "twiddle=lazy-scale-batch-lane order=P-inverse-then-butterfly\n", 11U - stage);
             if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
                 return case_fail(__FILE__, __LINE__);
             if (v2_copy(LINE_TWIDDLE, twiddle, STAGE_WORDS) != 0)
@@ -49,19 +50,9 @@ int main(void) {
             if (input == NULL || MOD_Q0 != STAGE_MODULUS)
                 return case_fail(__FILE__, __LINE__);
 
-            /* 与正向相同的蝶形配对，唯一数学区别是使用 omega^-1 的真实表。 */
-            for (unsigned begin = 0U; begin < POLY_WORDS; begin += 2U * half) {
-                for (unsigned j = 0U; j < half; ++j) {
-                    const unsigned even = begin + j;
-                    const unsigned odd = even + half;
-                    const uint32_t a = input[even];
-                    const uint32_t b = (uint32_t)(
-                        (uint64_t)input[odd] * twiddle[twiddle_index++] % STAGE_MODULUS);
-                    golden[even] = (uint32_t)(((uint64_t)a + b) % STAGE_MODULUS);
-                    golden[odd] = a >= b ? a - b : STAGE_MODULUS - (b - a);
-                }
-            }
-            if (twiddle_index != STAGE_WORDS)
+            /* 独立 C：先 P^-1，再用生产者 alpha/beta 比例表执行蝶形。 */
+            if (stage_golden(input, twiddle, golden, POLY_WORDS,
+                             STAGE_MODULUS, stage, 1U) != 0)
                 return case_fail(__FILE__, __LINE__);
 
             printf("[HPU][PINTT][CONFIG] base=0x%lx window_lines=%u "
@@ -98,11 +89,13 @@ int main(void) {
                 return case_fail(__FILE__, __LINE__);
             if (dload(twiddle_obj, LINE_TWIDDLE, STAGE_LINES) != 0)
                 return case_fail(__FILE__, __LINE__);
-            if (op_intt(data_obj, twiddle_obj, stage) != 0)
+            if (op_intt(output_obj, data_obj, twiddle_obj, stage) != 0)
                 return case_fail(__FILE__, __LINE__);
-            if (dstore_release(data_obj, LINE_OUT, POLY_LINES) != 0)
+            if (pfree(data_obj) != 0)
                 return case_fail(__FILE__, __LINE__);
-            /* DSTORE 释放数据对象；twiddle 与模表仍需显式释放。 */
+            if (dstore_release(output_obj, LINE_OUT, POLY_LINES) != 0)
+                return case_fail(__FILE__, __LINE__);
+            /* 新版 STG 要求空闲目的槽；释放源对象，DSTORE 只释放目的对象。 */
             if (pfree(twiddle_obj) != 0)
                 return case_fail(__FILE__, __LINE__);
             if (pfree(P4) != 0)

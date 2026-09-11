@@ -47,8 +47,12 @@ int op_mac(unsigned dst, unsigned a, unsigned b);
 int op_mul_imm(unsigned dst, unsigned a, unsigned imm);
 int op_mac_imm(unsigned dst, unsigned a, unsigned imm);
 
-/* 单 stage：data/twiddle 为 p0/p1 或 p2/p3，stage 为 0..11。 */
-int op_ntt(unsigned data, unsigned twiddle, unsigned stage);
-int op_intt(unsigned data, unsigned twiddle, unsigned stage);
+/*
+ * 单 stage 为显式三对象 out-of-place 操作：dst/src/twiddle 支持
+ * p2/p0/p1 或 p0/p2/p3，stage 为 0..11。调用方保证 dst 空闲、两个源 live；
+ * 本接口不隐含释放，源对象由调用方 PFREE，目标在 DSTORE 后释放。
+ */
+int op_ntt(unsigned dst, unsigned src, unsigned twiddle, unsigned stage);
+int op_intt(unsigned dst, unsigned src, unsigned twiddle, unsigned stage);
 
 #endif

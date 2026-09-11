@@ -11,6 +11,8 @@ import re
 import shutil
 import struct
 
+from hpu_ntt_layout import CONVENTION, HARDWARE_LAYOUT, bit_reverse, expected_twiddles
+
 N = 4096
 Q = 50061313
 LINE_BYTES = 256
@@ -42,43 +44,52 @@ def validate(source: Path) -> tuple[list[dict[str, object]], list[tuple[str, byt
     for name, metadata in (("ntt", params), ("mm", mm)):
         require(metadata.get("N") == N and metadata.get("moduli") == [Q],
                 f"{name}: expected N={N}, single q={Q}")
-        require("natural polynomial order" in metadata.get("hardware_layout", ""),
+        require(HARDWARE_LAYOUT in metadata.get("hardware_layout", ""),
                 f"{name}: obsolete/unknown memory layout")
     require(params.get("operation") == "ntt" and mm.get("operation") == "mm",
             "producer operation metadata mismatch")
     require(abi.get("N") == N and abi.get("coefficient_bits") == 32 and
             abi.get("byte_order") == "little-endian" and abi.get("line_bytes") == LINE_BYTES,
             "unsupported hardware ABI geometry")
-    require(abi.get("twiddle", {}).get("convention") ==
-            "group-major radix-2 DIT with one N/2-word image per stage",
+    require(abi.get("twiddle", {}).get("convention") == CONVENTION,
             "unsupported stage twiddle convention")
     table = rows(hw / "twiddle_map.csv")
     line_map = rows(hw / "line_map.csv")
     pre = unique_row(table, direction="ntt", basis_index="0", phase="pre_twist", stage="-1")
-    psi = int(pre["recurrence_step"], 0)
+    require(pre["path"] == "constants/twiddle/ntt/basis_00/pre_twist.u32.bin" and
+            int(pre["value_count"]) == N and int(pre["line_count"]) == 64 and
+            pre["loader_mode"] == "pointwise", "pre_twist manifest geometry mismatch")
+    pre_raw = (hw / pre["path"]).read_bytes()
+    require(len(pre_raw) == N * 4, "pre_twist must contain N words")
+    pre_words = struct.unpack(f"<{N}I", pre_raw)
+    # 新清单不再使用错误的等比数列字段；physical[N/2] 对应 logical[1]。
+    psi = pre_words[N // 2]
     require(int(pre["modulus"]) == Q and pow(psi, N, Q) == Q - 1 and
             pow(psi, 2 * N, Q) == 1, "invalid primitive 2N-th root in pre_twist metadata")
-    omega = psi * psi % Q
-    inverse_omega = pow(omega, Q - 2, Q)
-    require(omega * inverse_omega % Q == 1, "forward/inverse root mismatch")
+    require(list(pre_words) == [pow(psi, bit_reverse(i, N), Q) for i in range(N)],
+            "pre_twist does not use bit-reversed coefficient layout")
+    expected_tables = expected_twiddles(N, Q, psi)
     full_image = (hw / "hpu_mem_image.u32.bin").read_bytes()
+    pre_offset = int(pre["line_offset"]) * LINE_BYTES
+    require(full_image[pre_offset:pre_offset + len(pre_raw)] == pre_raw,
+            "pre_twist differs from unified producer image")
     selection: list[dict[str, object]] = []
     files: list[tuple[str, bytes]] = []
-    for direction, root in (("ntt", omega), ("intt", inverse_omega)):
+    for direction in ("ntt", "intt"):
         for stage in STAGES:
             entry = unique_row(table, direction=direction, basis_index="0",
                                phase="butterfly", stage=str(stage))
             path = f"constants/twiddle/{direction}/basis_00/stage_{stage:02d}.u32.bin"
             require(entry["path"] == path, f"unexpected source path: {entry['path']}")
-            half = 1 << stage
-            group_count = N // (2 * half)
-            step = pow(root, group_count, Q)
+            forward_stage = stage if direction == "ntt" else 11 - stage
             expected_fields = {"modulus": Q, "value_count": N // 2,
-                               "group_count": group_count, "twiddles_per_group": half,
-                               "first_value": 1, "recurrence_step": step, "line_count": 32}
+                               "forward_stage": forward_stage, "batch_count": N // 128,
+                               "lanes_per_batch": 64, "line_count": 32}
             for key, value in expected_fields.items():
                 require(int(entry[key], 0) == value,
                         f"{direction}/stage{stage}: wrong {key}, expected {value}")
+            require(entry["loader_mode"] == ("sequential_128" if forward_stage < 7 else "interleaved_64x2"),
+                    f"{direction}/stage{stage}: wrong loader mode")
             geometry = unique_row(line_map, path=path)
             for key, value in (("line_count", 32), ("payload_words", N // 2),
                                ("payload_bytes", 8192), ("padded_words", N // 2),
@@ -90,17 +101,14 @@ def validate(source: Path) -> tuple[list[dict[str, object]], list[tuple[str, byt
             require(full_image[offset:offset + len(raw)] == raw,
                     f"{path}: table differs from unified producer image")
             actual = struct.unpack("<2048I", raw)
-            for group in range(group_count):
-                value = 1
-                for j in range(half):
-                    index = group * half + j
-                    require(actual[index] == value,
-                            f"{direction}/stage{stage}: word={index} actual={actual[index]} expected={value}")
-                    value = value * step % Q
+            for index, value in enumerate(expected_tables[direction][stage]):
+                require(actual[index] == value,
+                        f"{direction}/stage{stage}: word={index} actual={actual[index]} expected={value}")
             destination = f"{direction}_stage_{stage:02d}.u32.bin"
             files.append((destination, raw))
             selection.append(dict(direction=direction, stage=stage, modulus=Q,
-                                  words=N // 2, lines=32, root=root, recurrence_step=step,
+                                  words=N // 2, lines=32, forward_stage=forward_stage,
+                                  loader_mode=entry["loader_mode"],
                                   source=f"ntt/test_data/hardware/{path}", destination=destination))
     return selection, files
 
@@ -128,6 +136,9 @@ def main() -> None:
         shutil.copyfile(source / "ntt" / "test_data" / filename,
                         provenance / Path(filename).name)
     shutil.copyfile(source / "mm" / "test_data" / "params.json", provenance / "mm_params.json")
+    # 新清单不单列 psi，保留用于独立求根/校验的原始 pre-twist 表。
+    shutil.copyfile(source / "ntt/test_data/hardware/constants/twiddle/ntt/basis_00/pre_twist.u32.bin",
+                    provenance / "pre_twist.u32.bin")
     (provenance / "producer_commit.txt").write_text(args.producer_commit + "\n", encoding="utf-8")
     with (destination / "selection.tsv").open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(selection[0]), delimiter="\t")

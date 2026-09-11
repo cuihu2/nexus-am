@@ -12,7 +12,7 @@ def check_program(program, words, encodings):
         for row in reader:
             mnemonic = row["normalized_asm"]
             word = int(row["word_hex"], 0)
-            if mnemonic in expected or word & 0x7f not in (0x0b, 0x2b):
+            if mnemonic in expected or word & 0x7f not in (0x5b, 0x2b):
                 raise ValueError("duplicate or non-source word in producer encoder table")
             expected[mnemonic] = word
     if len(program) != len(words):

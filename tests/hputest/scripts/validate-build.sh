@@ -448,8 +448,9 @@ def require(condition, message):
 
 def mapped(word):
     opcode = word & 0x7f
-    require(opcode in (0x0b, 0x2b), "unexpected upstream HPU opcode")
-    return (word & ~0x7f) | 0x5b if opcode == 0x0b else word
+    require(opcode in (0x5b, 0x2b),
+            "current producer must use native custom2/custom1")
+    return word
 
 
 def binary_words(path, width):
@@ -462,7 +463,7 @@ def binary_words(path, width):
 source = binary_words(raw / "mm.inst32", 32)
 target = binary_words(root / "mm.inst32", 32)
 commands = binary_words(root / "mm.cmd26", 26)
-require(len(source) == 10 and source[-1] == 0x7000000b,
+require(len(source) == 10 and source[-1] == 0x7000005b,
         "raw MM stream must retain ten instructions ending in PSYNC")
 require(target == [mapped(word) for word in source], "mm.inst32 mapping")
 require(commands == binary_words(raw / "mm.cmd26", 26), "cmd26 changed")
@@ -504,6 +505,27 @@ for before, after in zip(*tables):
     require(before[0] == after[0] and before[2] == after[2]
             and mapped(int(before[1], 16)) == int(after[1], 16),
             "primitive mapping for " + before[0])
+# 独立检查 STG 参数位置；不能把新的宏名配上旧版 pdata 复制编码。
+stage_macros = set()
+for name, word_text, assembly in tables[0]:
+    if not assembly.startswith(("pntt ", "pintt ")):
+        continue
+    match = re.fullmatch(r"(pntt|pintt) p([0-7]), p([0-7]), p([0-7]), "
+                         r"(\d+), 0, 0", assembly)
+    require(match is not None, "explicit three-object STG syntax: " + name)
+    operation, dst, src, twiddle, stage = match.groups()
+    dst, src, twiddle, stage = map(int, (dst, src, twiddle, stage))
+    require((dst, src, twiddle) in ((2, 0, 1), (0, 2, 3), (3, 0, 1), (0, 3, 1))
+            and stage < 12,
+            "STG object mapping/stage: " + name)
+    expected_name = f"HPU_INSN_{operation.upper()}_P{dst}_P{src}_P{twiddle}_STAGE{stage}"
+    require(name == expected_name and name not in stage_macros,
+            "STG macro identity/duplicate: " + name)
+    expected_word = ((4 if operation == "pntt" else 5) << 28
+                     | dst << 25 | src << 22 | twiddle << 14 | stage << 10 | 0x5b)
+    require(int(word_text, 16) == expected_word, "STG manual bitfields: " + name)
+    stage_macros.add(name)
+require(len(stage_macros) == 96, "STG must cover four object maps and 12 stages/direction")
 for name in ("mm.h", "mm.asm", "mm.cmd26", "dma_relocation_manifest.csv"):
     require((raw / name).read_bytes() == (root / name).read_bytes(),
             "non-opcode input changed: " + name)
@@ -791,8 +813,8 @@ require_stage_fixture() {
       print tolower($2)
     }
   ' "$txt")
-  for prefix in "HPU_INSN_P${direction^^}_STAGE" \
-                "HPU_INSN_P${direction^^}_P2_P3_STAGE"; do
+  for prefix in "HPU_INSN_P${direction^^}_P2_P0_P1_STAGE" \
+                "HPU_INSN_P${direction^^}_P0_P2_P3_STAGE"; do
     for stage in 0 1 11; do
       macro_name="${prefix}${stage}"
       word=${producer_word_by_macro[$macro_name]:-}

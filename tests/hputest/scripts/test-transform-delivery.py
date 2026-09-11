@@ -112,7 +112,9 @@ class TransformDeliveryTests(unittest.TestCase):
                 binary, changed = self.change_asset(direction, "images/expected.u32.bin")
                 math_path = self.source / direction / "test_data/expected.bin"
                 math_blob = bytearray(math_path.read_bytes())
-                struct.pack_into("<Q", math_blob, 17 * 8, changed)
+                logical_index = (IMPORTER.physical_words(list(range(IMPORTER.N)),
+                                  direction == "ntt"))[17]
+                struct.pack_into("<Q", math_blob, logical_index * 8, changed)
                 binary[math_path] = bytes(math_blob)
                 with self.assertRaisesRegex(ValueError, "mathematical reference differs"):
                     self.validate(direction, binary=binary)
@@ -180,12 +182,29 @@ class TransformDeliveryTests(unittest.TestCase):
         for direction in ("ntt", "intt"):
             with self.subTest(direction=direction):
                 program, _ = IMPORTER.expected_program(direction)
-                instruction = program.index(f"p{direction} p0, p1, 1, 0, 0")
+                instruction = program.index(f"p{direction} p0, p3, p1, 1, 0, 0")
                 # 旧版把 twiddle p1 放在 [24:22]，不能用相互一致的 C/inst32/cmd26 放行。
                 word = 0x4040040B if direction == "ntt" else 0x5040040B
                 text, rows = self.change_instruction(direction, instruction, word)
                 with self.assertRaises((ValueError, RuntimeError)):
                     self.validate(direction, text=text, rows=rows)
+
+    def test_legacy_in_place_stage_is_rejected(self):
+        for direction in ("ntt", "intt"):
+            with self.subTest(direction=direction):
+                source = self.source / direction / f"{direction}.c"
+                changed = source.read_text().replace(
+                    f"p{direction} p3, p0, p1, 0, 0, 0", f"p{direction} p0, p0, p1, 0, 0, 0")
+                with self.assertRaisesRegex(ValueError, "producer program changed"):
+                    self.validate(direction, text={source: changed})
+
+    def test_inverse_loader_stage_direction_is_checked(self):
+        manifest = self.source / "intt/test_data/hardware/twiddle_map.csv"
+        rows = IMPORTER.read_rows(manifest)
+        target = IMPORTER.one(rows, direction="intt", phase="butterfly", stage="0", basis_index="0")
+        target["forward_stage"] = "0"
+        with self.assertRaisesRegex(ValueError, "stage 0 metadata mismatch"):
+            self.validate("intt", rows={manifest: rows})
 
 
 if __name__ == "__main__":

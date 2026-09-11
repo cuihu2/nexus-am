@@ -5,6 +5,7 @@ import argparse
 from contextlib import ExitStack
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import re
 import struct
@@ -96,6 +97,54 @@ class BconvDeliveryTests(unittest.TestCase):
         struct.pack_into("<Q", blob, coefficient * 8, (value + 1) % IMPORTER.MODULI[6])
         with self.assertRaisesRegex(ValueError, "FastBConv producer golden mismatch: target=2 coefficient=17"):
             self.validate(binary={path: bytes(blob)})
+
+    def test_each_output_basis_is_mapped_to_physical_coefficient_order(self):
+        prepared = self.validate()
+        golden = struct.unpack(f"<{3 * IMPORTER.N}I", prepared["golden"])
+        normalized = struct.unpack(f"<{4 * IMPORTER.N}I", prepared["normalized"])
+        data = self.source / "bconv/test_data"
+        logical_golden = struct.unpack(f"<{3 * IMPORTER.N}Q", (data / "expected_p.bin").read_bytes())
+        logical_inputs = struct.unpack(f"<{4 * IMPORTER.N}Q", (data / "input_q.bin").read_bytes())
+        # 独立迭代更新 reverse index，不调用被测 importer 的映射函数。
+        for basis in range(4):
+            modulus = IMPORTER.MODULI[basis]
+            hat = 1
+            for other in range(4):
+                if other != basis:
+                    hat *= IMPORTER.MODULI[other]
+            inverse = pow(hat % modulus, -1, modulus)
+            reverse = 0
+            for physical in range(IMPORTER.N):
+                self.assertEqual(normalized[basis * IMPORTER.N + physical],
+                                 logical_inputs[basis * IMPORTER.N + reverse] * inverse % modulus)
+                if basis < 3:
+                    self.assertEqual(golden[basis * IMPORTER.N + physical],
+                                     logical_golden[basis * IMPORTER.N + reverse])
+                bit = IMPORTER.N >> 1
+                while bit != 0 and reverse & bit:
+                    reverse ^= bit
+                    bit >>= 1
+                reverse ^= bit
+
+    def test_coherent_natural_order_input_and_image_are_rejected(self):
+        data = self.source / "bconv/test_data"
+        hardware = data / "hardware"
+        logical = struct.unpack(f"<{4 * IMPORTER.N}Q", (data / "input_q.bin").read_bytes())
+        natural = struct.pack(f"<{len(logical)}I", *logical)
+        input_path = hardware / "images/input_q.u32.bin"
+        self.assertNotEqual(natural, input_path.read_bytes(), "fixture must distinguish physical order")
+        image_path = hardware / "hpu_mem_image.u32.bin"
+        image = bytearray(image_path.read_bytes())
+        image[:len(natural)] = natural
+        with self.assertRaisesRegex(ValueError, "per-basis bit-reversed mathematical input"):
+            self.validate(binary={input_path: natural, image_path: bytes(image)})
+
+    def test_obsolete_natural_order_metadata_is_rejected(self):
+        path = self.source / "bconv/test_data/params.json"
+        params = json.loads(path.read_text(encoding="utf-8"))
+        params["hardware_layout"] = "hardware/: little-endian uint32 in natural polynomial order"
+        with self.assertRaisesRegex(ValueError, "expected bit-reversed coefficient-domain hardware layout"):
+            self.validate(text={path: json.dumps(params)})
 
     def test_changed_normalization_constant_in_file_and_unified_image_is_rejected(self):
         hardware = self.source / "bconv/test_data/hardware"

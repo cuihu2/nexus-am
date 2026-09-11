@@ -91,27 +91,27 @@ int op_mac_imm(unsigned dst, unsigned a, unsigned imm) {
     STAGE_CASE(prefix_, 6); STAGE_CASE(prefix_, 7); STAGE_CASE(prefix_, 8); \
     STAGE_CASE(prefix_, 9); STAGE_CASE(prefix_, 10); STAGE_CASE(prefix_, 11)
 
-static int stage_error(const char *op, unsigned data,
+static int stage_error(const char *op, unsigned dst, unsigned src,
                        unsigned twiddle, unsigned stage) {
-    printf("[HPU][FAIL][%s] unsupported data=p%u twiddle=p%u stage=%u; "
-           "no instruction issued\n", op, data, twiddle, stage);
+    printf("[HPU][FAIL][%s] unsupported dst=p%u src=p%u twiddle=p%u stage=%u; "
+           "no instruction issued\n", op, dst, src, twiddle, stage);
     return 1;
 }
 
-int op_ntt(unsigned data, unsigned twiddle, unsigned stage) {
-    if (data == P0 && twiddle == P1) {
-        switch (stage) { STAGE_CASES(HPU_INSN_PNTT_STAGE); }
-    } else if (data == P2 && twiddle == P3) {
-        switch (stage) { STAGE_CASES(HPU_INSN_PNTT_P2_P3_STAGE); }
+int op_ntt(unsigned dst, unsigned src, unsigned twiddle, unsigned stage) {
+    if (dst == P2 && src == P0 && twiddle == P1) {
+        switch (stage) { STAGE_CASES(HPU_INSN_PNTT_P2_P0_P1_STAGE); }
+    } else if (dst == P0 && src == P2 && twiddle == P3) {
+        switch (stage) { STAGE_CASES(HPU_INSN_PNTT_P0_P2_P3_STAGE); }
     }
-    return stage_error("pntt", data, twiddle, stage);
+    return stage_error("pntt", dst, src, twiddle, stage);
 }
 
-int op_intt(unsigned data, unsigned twiddle, unsigned stage) {
-    if (data == P0 && twiddle == P1) {
-        switch (stage) { STAGE_CASES(HPU_INSN_PINTT_STAGE); }
-    } else if (data == P2 && twiddle == P3) {
-        switch (stage) { STAGE_CASES(HPU_INSN_PINTT_P2_P3_STAGE); }
+int op_intt(unsigned dst, unsigned src, unsigned twiddle, unsigned stage) {
+    if (dst == P2 && src == P0 && twiddle == P1) {
+        switch (stage) { STAGE_CASES(HPU_INSN_PINTT_P2_P0_P1_STAGE); }
+    } else if (dst == P0 && src == P2 && twiddle == P3) {
+        switch (stage) { STAGE_CASES(HPU_INSN_PINTT_P0_P2_P3_STAGE); }
     }
-    return stage_error("pintt", data, twiddle, stage);
+    return stage_error("pintt", dst, src, twiddle, stage);
 }

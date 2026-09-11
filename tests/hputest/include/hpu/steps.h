@@ -55,8 +55,9 @@ int psub(void);
 int pmul(void);
 int pmac(void);
 int pmac_imm(unsigned immediate);
-int pntt_stage(unsigned stage);
-int pintt_stage(unsigned stage);
+/* STG 为 out-of-place；此入口支持 dst/src/twiddle=p2/p0/p1，stage=0..11。 */
+int pntt_stage(unsigned dst, unsigned src, unsigned twiddle, unsigned stage);
+int pintt_stage(unsigned dst, unsigned src, unsigned twiddle, unsigned stage);
 int pfree(unsigned object);
 void psync(void);
 

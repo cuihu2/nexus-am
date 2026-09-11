@@ -83,9 +83,10 @@ cmake -S "$inline_asm_root" -B "$cmake_build" \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$cmake_build" --parallel "$jobs" --target \
   inline_asm_codegen inline_asm_encode_outputs hpu_reference_vectors \
-  hpu_encode_self_test
+  hpu_encode_self_test hpu_ntt_hardware_model_test
 # 先验证生产者的 STG/DMA 固定向量与生成 C 的机器码，再接收交付。
 "$cmake_build/test/encode/hpu_encode_self_test"
+"$cmake_build/test/reference/hpu_ntt_hardware_model_test"
 (
   cd "$producer_work"
   "$cmake_build/inline_asm_codegen" both \

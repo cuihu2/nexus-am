@@ -399,11 +399,14 @@ int pmac_imm(unsigned immediate) {
 #define STAGE_CASE(number_)                                                \
     case number_: CUSTOM0(STAGE_WORD(number_)); return 0
 
-static int issue_transform(int inverse, unsigned stage) {
-    if (stage > 11U) return STEP_ERR_ARGUMENT;
+static int issue_transform(int inverse, unsigned dst, unsigned src,
+                           unsigned twiddle, unsigned stage) {
+    /* 此旧入口仅暴露一组明确的三对象分配；不再隐含对 p0 原地覆盖。 */
+    if (stage > 11U || dst != P2 || src != P0 || twiddle != P1)
+        return STEP_ERR_ARGUMENT;
     if (inverse) {
-#if defined(HPU_INSN_PINTT_STAGE0)
-#define STAGE_WORD(number_) HPU_INSN_PINTT_STAGE##number_
+#if defined(HPU_INSN_PINTT_P2_P0_P1_STAGE0)
+#define STAGE_WORD(number_) HPU_INSN_PINTT_P2_P0_P1_STAGE##number_
         switch (stage) {
         STAGE_CASE(0); STAGE_CASE(1); STAGE_CASE(2);
         STAGE_CASE(3); STAGE_CASE(4); STAGE_CASE(5);
@@ -414,8 +417,8 @@ static int issue_transform(int inverse, unsigned stage) {
 #undef STAGE_WORD
 #endif
     } else {
-#if defined(HPU_INSN_PNTT_STAGE0)
-#define STAGE_WORD(number_) HPU_INSN_PNTT_STAGE##number_
+#if defined(HPU_INSN_PNTT_P2_P0_P1_STAGE0)
+#define STAGE_WORD(number_) HPU_INSN_PNTT_P2_P0_P1_STAGE##number_
         switch (stage) {
         STAGE_CASE(0); STAGE_CASE(1); STAGE_CASE(2);
         STAGE_CASE(3); STAGE_CASE(4); STAGE_CASE(5);
@@ -429,12 +432,12 @@ static int issue_transform(int inverse, unsigned stage) {
     return STEP_ERR_ENCODING_UNAVAILABLE;
 }
 
-int pntt_stage(unsigned stage) {
-    return issue_transform(0, stage);
+int pntt_stage(unsigned dst, unsigned src, unsigned twiddle, unsigned stage) {
+    return issue_transform(0, dst, src, twiddle, stage);
 }
 
-int pintt_stage(unsigned stage) {
-    return issue_transform(1, stage);
+int pintt_stage(unsigned dst, unsigned src, unsigned twiddle, unsigned stage) {
+    return issue_transform(1, dst, src, twiddle, stage);
 }
 
 int pfree(unsigned object) {

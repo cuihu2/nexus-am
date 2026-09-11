@@ -13,4 +13,9 @@ extern const uint32_t intt_twiddle_0[STAGE_WORDS];
 extern const uint32_t intt_twiddle_1[STAGE_WORDS];
 extern const uint32_t intt_twiddle_11[STAGE_WORDS];
 
+/* 单 stage 物理 loader/P 网络软件 golden；不发指令，不执行完整变换的前后因子。 */
+int stage_golden(const uint32_t *input, const uint32_t *twiddle,
+                 uint32_t *output, unsigned words, uint32_t q,
+                 unsigned stage, unsigned inverse);
+
 #endif

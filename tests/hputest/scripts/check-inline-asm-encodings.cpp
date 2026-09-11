@@ -1,18 +1,13 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 
 #include "assembler.hpp"
+#include "encoder.hpp"
 #include <hpu/encoding.h>
 
 namespace {
-
-// 只迁移 HPU 计算/控制指令的物理主 opcode；payload 和内部 cmd_kind 均不变。
-// 此处独立实现映射，避免仅用导入器同源结果自证正确；DMA custom1 保持原样。
-constexpr std::uint32_t target_word(std::uint32_t source_word) {
-    return (source_word & 0x7FU) == 0x0BU
-        ? (source_word & 0xFFFFFF80U) | 0x5BU : source_word;
-}
 
 struct EncodingCheck {
     const char *assembly;
@@ -66,20 +61,21 @@ struct StgCheck {
     const char *assembly;
     std::uint32_t word;
     std::uint32_t command26;
-    unsigned opcode, pdata, ptwid, stage, mode, flag;
+    unsigned opcode, pdst, psrc1, ptwid, stage, mode, flag;
 };
 
-// 独立固定向量按 2026-09-05 手册 §3.2 定义，不能仅比较同源生成的头文件。
-// 非零 pdata 可抓住源1未复制、twiddle 错放到 [24:22] 的旧版编码。
+// 独立固定向量按本次锁定的 main 编程手册 §3.2：三个对象显式编码。
+// 非对称 dst/src 可抓住旧版强制复制 pdata 的错误；mode/flag 极值只测编码，
+// 不代表这些保留模式已获准在 IT 中执行。不能仅比较同源生成的头文件。
 constexpr std::array<StgCheck, 8> kStgChecks{{
-    {"pntt p0, p3, 15, 0, 0", 0x4000FC5BU, 0x08001F8U, 4, 0, 3, 15, 0, 0},
-    {"pintt p0, p3, 15, 0, 0", 0x5000FC5BU, 0x0A001F8U, 5, 0, 3, 15, 0, 0},
-    {"pntt p2, p3, 15, 0, 0", 0x4480FC5BU, 0x08901F8U, 4, 2, 3, 15, 0, 0},
-    {"pintt p5, p1, 7, 2, 1", 0x5B405EDBU, 0x0B680BDU, 5, 5, 1, 7, 2, 1},
-    {"pntt p7, p7, 15, 3, 1", 0x4FC1FFDBU, 0x09F83FFU, 4, 7, 7, 15, 3, 1},
-    {"pintt p7, p0, 0, 0, 0", 0x5FC0005BU, 0x0BF8000U, 5, 7, 0, 0, 0, 0},
-    {"pntt p0, p0, 0, 0, 0", 0x4000005BU, 0x0800000U, 4, 0, 0, 0, 0, 0},
-    {"pintt p0, p7, 0, 3, 1", 0x5001C3DBU, 0x0A00387U, 5, 0, 7, 0, 3, 1},
+    {"pntt p2, p0, p3, 15, 0, 0", 0x4400FC5BU, 0x08801F8U, 4, 2, 0, 3, 15, 0, 0},
+    {"pintt p0, p2, p3, 15, 0, 0", 0x5080FC5BU, 0x0A101F8U, 5, 0, 2, 3, 15, 0, 0},
+    {"pntt p2, p5, p3, 15, 0, 0", 0x4540FC5BU, 0x08A81F8U, 4, 2, 5, 3, 15, 0, 0},
+    {"pintt p5, p2, p1, 7, 2, 1", 0x5A805EDBU, 0x0B500BDU, 5, 5, 2, 1, 7, 2, 1},
+    {"pntt p7, p6, p5, 15, 3, 1", 0x4F817FDBU, 0x09F02FFU, 4, 7, 6, 5, 15, 3, 1},
+    {"pintt p7, p0, p1, 0, 0, 0", 0x5E00405BU, 0x0BC0080U, 5, 7, 0, 1, 0, 0, 0},
+    {"pntt p0, p7, p1, 0, 0, 0", 0x41C0405BU, 0x0838080U, 4, 0, 7, 1, 0, 0, 0},
+    {"pintt p0, p1, p7, 0, 3, 1", 0x5041C3DBU, 0x0A08387U, 5, 0, 1, 7, 0, 3, 1},
 }};
 
 }  // namespace
@@ -87,16 +83,15 @@ constexpr std::array<StgCheck, 8> kStgChecks{{
 int main() {
     for (const auto &check : kChecks) {
         const auto encoded = hpu::assemble_line(check.assembly);
-        if (target_word(encoded.word) != check.expected_word) {
+        if (encoded.word != check.expected_word) {
             std::cerr << "encoding mismatch: " << check.assembly << '\n';
             return 1;
         }
     }
     for (const auto &check : kControlChecks) {
         const auto encoded = hpu::assemble_line(check.assembly);
-        const auto word = target_word(encoded.word);
+        const auto word = encoded.word;
         if (word != check.expected_word || (word & 0x7FU) != 0x5BU
-            || (word >> 7U) != (encoded.word >> 7U)
             || encoded.command26 != (word >> 7U)
             || (encoded.command26 >> 25U) != 0U) {
             std::cerr << "custom2 control encoding/precode mismatch: "
@@ -109,7 +104,7 @@ int main() {
         const auto word = encoded.word;
         const auto operation = check.direction != 0U
             ? check.type_or_release << 1U : check.type_or_release;
-        if (target_word(word) != word || word != check.word
+        if (word != check.word
             || encoded.command26 != check.command26
             || (word >> 28U) != 0U
             || ((word >> 25U) & 7U) != check.object
@@ -132,22 +127,37 @@ int main() {
     }
     for (const auto &check : kStgChecks) {
         const auto encoded = hpu::assemble_line(check.assembly);
-        const auto word = target_word(encoded.word);
+        const auto word = encoded.word;
         if (word != check.word || encoded.command26 != check.command26
             || (word >> 28U) != check.opcode
-            || ((word >> 25U) & 7U) != check.pdata
-            || ((word >> 22U) & 7U) != check.pdata
+            || ((word >> 25U) & 7U) != check.pdst
+            || ((word >> 22U) & 7U) != check.psrc1
             || ((word >> 17U) & 31U) != 0U
             || ((word >> 14U) & 7U) != check.ptwid
             || ((word >> 10U) & 15U) != check.stage
             || ((word >> 8U) & 3U) != check.mode
             || ((word >> 7U) & 1U) != check.flag
             || (word & 127U) != 0x5BU
-            || (word >> 7U) != (encoded.word >> 7U)
             || encoded.command26 != (word >> 7U)
             || (encoded.command26 >> 25U) != 0U) {
-            std::cerr << "manual 2026-09-05 STG mismatch: " << check.assembly << '\n';
+            std::cerr << "explicit three-object STG mismatch: " << check.assembly << '\n';
             return 1;
+        }
+    }
+    // 当前 producer 必须原生生成 custom2，不能由接收端偷偷补救旧编码。
+    try {
+        (void)hpu::precode_command26(0x7000000BU);
+        std::cerr << "obsolete HPU custom0 word accepted\n";
+        return 1;
+    } catch (const std::runtime_error &) {
+    }
+    for (const char *legacy : {"pntt p0, p1, 0, 0, 0",
+                               "pintt p2, p3, 11, 0, 0"}) {
+        try {
+            (void)hpu::assemble_line(legacy);
+            std::cerr << "obsolete two-object STG syntax accepted\n";
+            return 1;
+        } catch (const std::runtime_error &) {
         }
     }
     return 0;

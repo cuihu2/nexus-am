@@ -5,7 +5,8 @@
 int bconv_prepare(void) {
     volatile uint32_t *memory = ddr_line(0U);
     printf("[HPU][BCONV][PREPARE] N=%u Q=%u P=%u window_lines=%u "
-           "normalized_line=%u output_line=%u mod_line=%u\n", BCONV_N,
+           "normalized_line=%u output_line=%u mod_line=%u "
+           "layout=coefficient-bit-reversed\n", BCONV_N,
            BCONV_Q_COUNT, BCONV_P_COUNT, BCONV_LINES, BCONV_NORMALIZED, BCONV_OUTPUT, BCONV_MOD);
     for (unsigned word = 0U; word < BCONV_WORDS; ++word)
         memory[word] = bconv_window[word];
@@ -38,7 +39,7 @@ int bconv_check_memory(void) {
 int bconv_check_results(const uint32_t *moduli) {
     int failed = 0;
     if (moduli == NULL) return 1;
-    /* 中间 normalized Q 用构建时独立 Python 数学式派生，最终 P 用 producer golden。 */
+    /* 中间 normalized Q 独立推导，最终 P 采用已验证的 producer golden；两者逐分量映射为物理序。 */
     for (unsigned basis = 0U; basis < BCONV_Q_COUNT + BCONV_P_COUNT; ++basis) {
         const unsigned output_basis = basis < BCONV_Q_COUNT ? basis : basis - BCONV_Q_COUNT;
         const unsigned line = (basis < BCONV_Q_COUNT ? BCONV_NORMALIZED : BCONV_OUTPUT) + output_basis * 64U;
@@ -46,7 +47,9 @@ int bconv_check_results(const uint32_t *moduli) {
         const char *phase = basis < BCONV_Q_COUNT ? "normalized-Q" : "producer-golden-P";
         volatile const uint32_t *actual_words = ddr_line(line);
         invalidate_lines(line, 64U);
-        printf("[HPU][BCONV][BASIS] phase=%s basis=%u words=%u q=%u line=%u\n",
+        /* UART 的 index 是当前分量的物理下标 p，对应自然多项式下标 bit_reverse_12(p)。 */
+        printf("[HPU][BCONV][BASIS] phase=%s basis=%u words=%u q=%u line=%u "
+               "index=physical logical_index=bit_reverse_12(index)\n",
                phase, output_basis, BCONV_N, moduli[basis], line);
         /* 任一分量失败也继续导出后续分量，但最终仍失败。 */
         failed |= result_compare(phase, actual_words, golden, BCONV_N, moduli[basis]);

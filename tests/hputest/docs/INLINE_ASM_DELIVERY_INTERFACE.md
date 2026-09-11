@@ -11,7 +11,7 @@
 ```text
 tests/hputest/third_party/inline-asm
 branch main
-commit b405f2ad7b0901930d81edb79a5167ab028c4dbd
+commit 69030963e71dbcf32897e8ae08695cfa2e65d79a
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
@@ -23,9 +23,9 @@ commit b405f2ad7b0901930d81edb79a5167ab028c4dbd
 AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
 `HPU_SEAL` 保留为历史来源，本次不修改它们。
 
-上述上游仍使用 HPU 主 opcode `0x0B`。按 IT 新接口要求，AM 在导入时将其
-低 7 位统一映射为 `0x5B`，不修改上游 `main` 或固定 gitlink。指令 payload、
-cmd26、DMA 编码和全部数据仍取该固定提交，具体映射见第 5 节。
+上述上游原生使用HPU主opcode `0x5B`，AM验证后原样接收，旧`0x0B`指令拒绝。
+本次更新固定gitlink，不修改上游源码。STG变为三对象，数据变为物理域布局，见
+[本次同步说明](INLINE_MAIN_6903096.md)。MM输入/输出为NTT域forward_layout，不是系数域bit_reverse。
 
 源码仓库只提交 submodule gitlink、接收脚本和测试源码。以下内容均由构建生成并
 被 `.gitignore` 排除：
@@ -55,7 +55,7 @@ make -C tests/hputest prepare-inline-asm-mm JOBS=4
 
 该 target 调用 `scripts/prepare-inline-asm-mm.sh`，构建生产者的
 `inline_asm_codegen`、`inline_asm_encode_outputs` 和 `hpu_reference_vectors`。
-生成前还会运行生产者的 `hpu_encode_self_test`，覆盖固定 STG/DMA 等机器码、
+生成前运行生产者的 `hpu_encode_self_test` 和 `hpu_ntt_hardware_model_test`，分别检查固定STG/DMA与冻结RTL数据/NTT数学模型；前者覆盖
 26-bit precode 及可执行 C 中的 `.word`。当前上游自测不是此前试验分支的
 16,384 组 STG 全字段穷举，不能继续把那个测试数量当作本版本的验证结果。
 三个可执行文件在 `OUTPUT_ROOT/inline-asm-producer/<producer_commit>/` 中运行，
@@ -211,44 +211,25 @@ DLOAD mod -> PMODLD 0 -> DLOAD A -> DLOAD B -> PMUL
 
 完整 MM 用例只有一次 PSYNC，不调用 `irq_rearm()`。十条指令的顺序和
 `inst[31:7]`、四笔 x10/x11 绑定、`hpu_obj_len` 软件生命周期检查均保持原样；
-只有原 custom0 指令的低 7 位发生变化。接收端必须
+新主线已直接生成原生custom2，所有指令字均原样保留。接收端必须
 校验 DSTORE 的 `span.line_count` 等于已建立对象的长度，不能删掉该检查来
 迎合新的生成文件格式。
 
-### 主 opcode 映射与追溯
+### 原生 opcode 校验与追溯
 
-物理 RISC-V opcode 从 custom0 `0x0B` 改到 custom2 `0x5B`，HPU 内部仍为
-`cmd_kind=0`。源文件名和历史测试点中的 custom0/C0 只保留内部类别含义。
-接收层仅对 `(old_inst & 0x7F) == 0x0B` 的 HPU 指令执行：
+生产者与AM都使用计算/控制custom2 `0x5B`、DMA custom1 `0x2B`，内部cmd_kind仍为0/1。
+AM不增删、重排或重写指令，不再将旧0x0B修补成新指令；必须以本次固定生产者重新生成。
+bit7仍为flag，所以flag=1的计算/控制低字节为0xDB。
 
-```text
-new_inst = (old_inst & 0xFFFFFF80) | 0x5B
-```
+`provenance/inline-asm-mm/`保留目标和 `upstream/` 的C/ASM/inst32/cmd26/encoder表；
+本版目标与上游程序字节相同。`opcode_map.csv`保留兼容名称但每行source_word等于target_word。
+PSYNC、PMODLD0、PADD p2/p0/p1、PFREE p0分别为
+`7000005B`、`6000005B`、`0400405B`、`8000005B`。
 
-不改变 funct/对象/stage/mode/flag 等 payload 位，不改 custom1 `0x2B` 的
-DLOAD/DSTORE，不增加、删除或重排任何指令。bit 7 不属于 opcode，必须保留，
-所以 flag=1 的目标低字节为 `0xDB`，不是 `0x5B`。
-
-| 指令字示例 | 上游 word | AM 目标 word |
-| --- | --- | --- |
-| PSYNC | `0x7000000B` | `0x7000005B` |
-| PMODLD 0 | `0x6000000B` | `0x6000005B` |
-| PADD 示例 | `0x0400400B` | `0x0400405B` |
-| PFREE p0 | `0x8000000B` | `0x8000005B` |
-
-`HPU_GENERATED_ROOT/inline-asm/mm/` 及产物中的
-`provenance/inline-asm-mm/` 使用相同的追溯结构：
-
-```text
-mm.c / mm.inst32 / mm.cmd26 / encoder_words.tsv       # AM 目标交付
-opcode_map.csv                                      # MM 逐条 word 映射
-upstream/{mm.c,mm.inst32,mm.cmd26,encoder_words.tsv}   # 原始上游交付
-```
-
-目标 `mm.c` 的 `.word`、`mm.inst32` 及单指令头文件必须采用同一映射；
-cmd26 因只依赖 `inst[31:7]` 而不变。`mm.asm` 的助记符、MM 数据、原始
-relocation manifest 和四笔 DMA word 同样不变。保留原始文件是为了区分
-生产者输出与 AM 物理 opcode 适配，不能将目标 C 称为“与上游逐字节相同”。
+数据仍由producer生成，但新MM使用NTT域物理顺序：
+`hardware[p]=logical_ntt[forward_layout[p]]`。
+导入器同时保存自然序uint64数学文件，逐项检查域映射及PMUL结果；
+不能仅因为三组数据彼此满足乘法关系就接受错误的自然序镜像。
 
 ## 6. x10/x11 到底怎么传
 
@@ -320,8 +301,8 @@ tests/hputest/build/generated/include/hpu/inline_asm_mm_delivery.h
 
 tracked `include/hpu/encoding.h` 只 include 这个生成头文件。这样每个 `main.c`
 保持“一条 HPU 操作对应一个可见调用”的可读结构，同时编码仍来自同一个
-producer。生成的 named word 在写入头文件前同样把 HPU opcode `0x0B` 映射
-到 `0x5B`；不能只改完整 MM 程序而漏掉 PSYNC、PMODLD、PFREE 等单指令适配。
+producer。named word必须已是原生0x5B/0x2B；旧HPU opcode或两对象STG语法会被拒绝。
+三对象STG也由同一生成表验证，不在AM手写payload来替代编码器。
 
 ## 8. 构建和 GitHub Actions
 
@@ -339,19 +320,17 @@ make -C tests/hputest \
 ```text
 producer instruction/data generation stages
 -> validate/import selected MM files
--> map HPU opcode 0x0B to 0x5B and preserve upstream provenance
--> generate opcode-mapped encoder header
--> compile testcase + opcode-mapped mm.c + selected producer data
+-> validate native 0x5B/0x2B and preserve upstream provenance
+-> generate verified encoder header
+-> compile testcase + unchanged producer mm.c + validated physical-domain data
 -> validate ELF symbols/instruction words/bin/disassembly
 -> package artifact
 ```
 
-push 到 `master` 或手动触发时，GitHub Actions 分别发布
-`nexus-am-hpu-core-workloads`、`nexus-am-hpu-transform-workloads` 和
-`nexus-am-hpu-fhe-workloads`；PR 只构建较快的 `core` 组。每个 artifact 保留
-7 天并包含该组的：
+GitHub Actions全量构建并发布章节合并的 `nexus-am-hpu-workloads`，另外提供03/04的
+`nexus-am-hpu-uart-results` 全量UART诊断包。生成数据只运行一批，由两种构建复用；artifact保留7天，包含：
 
-- 分组目录中的 ELF/BIN/TXT（完整三组共 60 个用例）；
+- 章节目录中的ELF/BIN/TXT：常规包40组非占位产物，诊断包12组；另20个未就绪项只列原因；
 - `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，

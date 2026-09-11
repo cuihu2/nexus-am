@@ -171,109 +171,51 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 
 ## HPU instruction source
 
-GNU as does not natively recognize HPU mnemonics.  The
-`third_party/inline-asm` git submodule therefore pins
-[`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm) commit
-`b405f2ad7b0901930d81edb79a5167ab028c4dbd` from its
-[`main` branch](https://github.com/cuihu2/inline-asm/tree/main).
-This upstream commit includes the STG and DMA encoding fixes. AM no longer
-uses the `HPU_SEAL_manual_0905` trial branch; this switch does not modify
-that historical branch or `HPU_SEAL`.
-The branch recorded in `.gitmodules` identifies the upstream source; normal
-builds and CI use the committed gitlink, not the latest remote branch head.
-Before
-any testcase is built,
-Nexus-AM runs the producer generation stages needed for its MM delivery and
-validates the selected MM parameters, data geometry, existing producer
-manifest values, four DMA relocations, ten instruction words, and all 4096
-PMUL golden coefficients.
+`third_party/inline-asm` 固定引用 [cuihu2/inline-asm main](https://github.com/cuihu2/inline-asm/tree/main)
+的提交 `69030963e71dbcf32897e8ae08695cfa2e65d79a`。正常构建使用固定gitlink，
+不是每次自动取远端HEAD；本次未修改上游源码或RTL。
+同步差异和新旧包的使用边界见 [main更新说明](docs/INLINE_MAIN_6903096.md)。
 
-The three producer tools run under
-`OUTPUT_ROOT/inline-asm-producer/<producer_commit>/`, leaving the submodule
-source tree unchanged. The selected `outputs/mm` delivery is then checked
-and copied into `HPU_GENERATED_ROOT/inline-asm/mm`; no testcase consumes
-unvalidated binaries left in the submodule's `outputs/` directory.
+上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
+AM只校验并原样接收，不再执行 `0x0B→0x5B` 转换。旧HPU `0x0B` 文件直接拒绝。
+`opcode_map.csv` 保留原名称作为追溯表，本版source/target相同，payload和cmd26不变。
+`include/hpu/encoding.h` 不含手写机器码；所有单指令适配由同一个真实producer编码器生成。
+bit7仍是flag，flag=1时低字节可能是 `0xDB`，不能只检查字符串是否以5B结尾。
 
-The build then consumes the producer output in two concrete ways:
-
-1. `.incbin` links `input_a`, `input_b`, `expected`, and `mod_ctx` directly
-   from the validated `HPU_GENERATED_ROOT/inline-asm/mm/test_data/hardware`
-   directory; Nexus-AM no longer synthesizes these arrays with `.rept`.
-2. Cases 08 and 09 link the validated, opcode-mapped `mm.c` and call
-   `hpu_program_mm()`. AM maps only the low seven opcode bits of the
-   producer's HPU custom0 words from `0x0B` to `0x5B`; all ten payloads,
-   four relocations, fixed `x10`/`x11` assignments, and software
-   object-length checks remain intact.
-   The producer emits exactly one PSYNC at the end of the complete program;
-   AM does not split it into phases or insert a modulus-load barrier.
-
-The programming manual at the pinned commit, sections 6.1 and 6.3, supersedes
-the earlier PDF's intermediate-barrier requirement. Hardware maintains the
-dependencies between modulus DLOAD, PMODLD, computation, and object reuse.
-Case 08 consumes the final notification through PLIC; case 09 polls and
-clears the final MMIO event. Other arithmetic and object-lifecycle cases
-also omit internal PSYNC barriers and retain their terminal completion wait.
-`completion_wait()` and `completion_clear()` only wait/acknowledge; they
-never issue an HPU instruction. See
-[manual update notes](docs/MANUAL_04_TESTCASE_UPDATE.md) for the selected
-STG/DMA encodings and current object-length/lifecycle constraints.
-
-This branch switch consumes the existing fixed MM path (`N=4096`, one RNS
-component, `q=50061313`). It does not enable a complete SEAL/CKKS
-application flow. STG words follow the pinned manual section 3.2:
-`pdata` occupies both bits [27:25] and [24:22], while `ptwid` occupies [16:14].
-The stale example words are superseded by that field formula. Independent
-word/precode checks prevent falling back to the old layout. DMA words now
-place the object in [27:25], `rs2` in [24:20], `rs1` in [19:15], operation
-in [14:13], direction in bit 12, and the small-bank flag in bit 7.
-DSTORE operation is `rel << 1`.
-For both custom opcodes, cmd26 retains the complete `inst32 >> 7`; custom1
-additionally sets bit 25. The runtime `x10=line offset`, `x11=line count`
-ABI is unchanged. DSTORE hardware uses `OBJ.len`, not `x11`, for its actual
-length; the producer still loads `x11` and checks that the supplied span
-count equals its software-tracked object length. Both DSTORE `rel` values
-release the source object, so a successful store must not be followed by
-another PFREE for that same allocation. The previously
-blocked operator/application cases stay blocked until their own complete
-program/data/golden contracts are validated; fixing encoding alone does not
-qualify a functional testcase.
-
-IT has reported failures in cases 06, 07, and 08. They need new ELF/BIN
-files built with this pinned producer and another IT run; switching the
-encoder does not establish the cause of those failures or make them PASS.
-
-The simpler cases still use one-operation C adapters, but their named words
-are generated at build time by the same real encoder and receive the same
-low-seven-bit opcode mapping. The tracked
-`include/hpu/encoding.h` contains no copied instruction values.
-
-### HPU 主 opcode：0x0B → 0x5B
-
-上游固定提交仍生成 `0x0B`。本次在 AM 构建接收层统一映射，**不修改
-inline-asm/main、gitlink 或 RTL**。物理 RISC-V 主 opcode 改用 custom2
-`0x5B`，HPU 内部仍为 `cmd_kind=0`；文档和用例 ID 中的旧称 custom0/C0
-指内部命令类别，不表示新 ELF 仍使用 `0x0B`。
+新STG显式使用三个对象：
 
 ```text
-new_inst = (old_inst & 0xFFFFFF80) | 0x5B
+pntt/pintt pdst, psrc, ptwiddle, stage, mode, flag
+word = (OPC << 28) | (pdst << 25) | (psrc << 22)
+     | (ptwiddle << 14) | (stage << 10) | (mode << 8) | (flag << 7) | 0x5B
 ```
 
-仅对生产者 opcode 为 `0x0B` 的 HPU 指令应用上式。`inst[31:7]`、cmd26、
-寄存器绑定、数据和指令顺序不变；DLOAD/DSTORE 的 custom1 `0x2B` 完全不变。
-例如 PSYNC 为 `0x7000005B`、PMODLD 0 为 `0x6000005B`、PFREE p0 为
-`0x8000005B`。flag 位仍在 bit 7，flag=1 的机器码低字节会是 `0xDB`，
-不能用“所有指令都以 5B 结尾”来检查。
+03单stage使用不同的目的/源/twiddle槽；04整体NTT/INTT由producer在p0/p3之间交替写入并释放旧源。
+不再使用旧两对象语法或隐式原地覆盖。DMA仍为标准GPR字段：
+`obj[27:25], rs2[24:20], rs1[19:15], op[14:13], dir[12], flag[7]`；
+DSTORE的op为`rel<<1`，实际传输长度为`OBJ.len`，运行时x10/x11仍传line offset/count。
+任何rel值的DSTORE完成后均释放对象，不能再次PFREE同一份分配。
 
-产物 `provenance/inline-asm-mm/` 同时保留目标 `mm.c`、`mm.inst32`、
-`mm.cmd26`、`encoder_words.tsv` 和 `upstream/` 下的原始同名文件，`opcode_map.csv` 按 MM
-指令记录映射前后的 word，便于排查 ELF 与 simv 版本是否配套。
-**运行新 ELF 的 CPU 前端必须已将 `0x5B` 识别为 HPU 并映射到
-`cmd_kind=0`**；仅更新测试文件不能让旧 simv 自动兼容。
-当前可执行范围以 v2 覆盖说明为准，不代表已通过 VCS。
+数据域也必须区分：
 
-The complete producer/consumer contract and the exact current MM file mapping
-are documented in
-[docs/INLINE_ASM_DELIVERY_INTERFACE.md](docs/INLINE_ASM_DELIVERY_INTERFACE.md).
+- host uint64数学数据保持自然序。
+- 系数域硬件数组（包括BConv）使用 `physical[p]=logical[bit_reverse(p)]`。
+- NTT域硬件数组（包括MM）使用 `physical[p]=logical_ntt[forward_layout[p]]`。
+- PNTT按照loader batch/lane执行蝶形后P；PINTT按逆向stage执行P⁻¹后蝶形，消费lazy-scale twiddle。
+- pre/post因子也按物理序接收，不能混用旧natural-order/group-major表。
+
+producer生成在 `OUTPUT_ROOT/inline-asm-producer/<commit>/`，不会读写submodule内的旧outputs。
+MM、单stage、完整NTT/INTT和BConv分别导入本次generated目录。
+构建前运行producer编码器和NTT硬件模型回归，再独立检查布局、实际程序、DMA绑定与数学golden。
+上游冻结RTL dump回归不是当前IT/VCS执行结果。
+
+冒烟08/09直接调用原生 `hpu_program_mm()`，仍为10条指令、4次DMA和末尾一次PSYNC。
+其余算子也只在完整程序末尾PSYNC；06仍是无PSYNC的纯MMIO DMA测试。
+UART摘要/全量诊断、stage cycle、单子项选取与所有精确比较条件保留。
+生成C、ASM、inst32、cmd26、原始数学数据和DMA/物理布局表随artifact的provenance保留；
+生成数据重新排序后，旧ELF/BIN不能作为本版交付替用。
+
+完整接收接口见 [INLINE_ASM_DELIVERY_INTERFACE.md](docs/INLINE_ASM_DELIVERY_INTERFACE.md)。
 
 ## What the MMIO register checks prove
 

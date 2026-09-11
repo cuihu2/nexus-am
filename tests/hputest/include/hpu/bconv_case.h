@@ -3,7 +3,7 @@
 
 #include <hpu/steps.h>
 
-/* 固定本批 producer 的 Q4→P3/N4096 布局，不冒充 P→Q 或其他规模。 */
+/* 固定本批 producer 的 Q4→P3/N4096；每个分量采用位反转系数物理序，不冒充其他规模/方向。 */
 enum {
     BCONV_N = 4096,
     BCONV_Q_COUNT = 4,
