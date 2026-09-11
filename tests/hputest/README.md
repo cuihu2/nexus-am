@@ -12,6 +12,9 @@ committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 03/04运行过久或结果失败时，先看 [运行时间与UART诊断](docs/RUNTIME_UART_DIAGNOSTICS.md)：
 默认摘要包、单子项选择及独立全量结果包均已支持；不会以误差容限放宽模整数自检。
 
+03还提供 [独立subtest目录](subtests/README.md)：9个父用例拆成37个可直接加载的ELF/BIN，
+单独下载`nexus-am-hpu-subtests`，可在用例外并行或可选绑核；原整例包保留。
+
 ## Source layout
 
 The bring-up suites are deliberately flat at the testcase level:

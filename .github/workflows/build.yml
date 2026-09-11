@@ -183,3 +183,12 @@ jobs:
           path: tests/hputest/build/diagnostic/release
           if-no-files-found: error
           retention-days: 7
+      - name: Build independent HPU subtests using prepared data
+        run: make -C tests/hputest subtests JOBS=4
+      - name: Upload independent HPU subtests
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexus-am-hpu-subtests
+          path: tests/hputest/build/subtests/release
+          if-no-files-found: error
+          retention-days: 7

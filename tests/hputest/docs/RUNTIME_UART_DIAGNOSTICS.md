@@ -50,6 +50,9 @@ current=round-done
 
 ## 单独定位一轮，默认仍完整覆盖
 
+无需自己构建时，可下载新增的`nexus-am-hpu-subtests`：03的37个独立选择项已经分别固化到ELF/BIN，
+并提供用例外并行工具。详细文件映射和运行方式见 [subtest目录](https://github.com/cuihu2/nexus-am/tree/master/tests/hputest/subtests)。
+
 AM已有mainargs入口。03可通过`subcase=N`只运行一组，源码不需要删循环；空参数或`all`运行全部。
 选择子集会打印 `coverage=selected-subset-not-full`，不能计作整例全覆盖。
 

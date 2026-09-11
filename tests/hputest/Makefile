@@ -8,8 +8,9 @@ HPU_GENERATED_ROOT ?= $(OUTPUT_ROOT)/generated
 export mainargs
 HPU_DUMP_RESULTS ?= 0
 DIAGNOSTIC_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/diagnostic
+SUBTEST_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/subtests
 
-.PHONY: all group one diagnostic prepare-inline-asm-mm verify-inline-asm validate clean
+.PHONY: all group one diagnostic subtests prepare-inline-asm-mm verify-inline-asm validate clean
 
 all: verify-inline-asm
 	@AM_HOME="$(AM_HOME)" ARCH="$(ARCH)" \
@@ -50,6 +51,14 @@ diagnostic:
 	  HPU_DUMP_RESULTS=1 HPU_CASE_GROUP=diagnostic \
 	  scripts/build.sh "$(DIAGNOSTIC_OUTPUT_ROOT)"
 
+# 不重复生成producer；每个ELF固化一个subcase，编译链接串行以保护共享AM库。
+subtests:
+	@python3 scripts/build-subtests.py \
+	  --output-root "$(SUBTEST_OUTPUT_ROOT)" \
+	  --generated-root "$(HPU_GENERATED_ROOT)" \
+	  --arch "$(ARCH)" --cross-compile "$(CROSS_COMPILE)" \
+	  --jobs "$(JOBS)" --dump-results "$(HPU_DUMP_RESULTS)"
+
 prepare-inline-asm-mm:
 	@scripts/prepare-inline-asm-mm.sh \
 	  "$(INLINE_ASM_ROOT)" "$(OUTPUT_ROOT)" "$(JOBS)"
@@ -66,6 +75,8 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-v2-memory.py
 	@python3 scripts/test-result-report.py
 	@python3 scripts/test-progress.py
+	@python3 scripts/test-subtest-support.py
+	@python3 scripts/test-run-subtests.py
 	@python3 scripts/test-stage-reference.py
 	@python3 scripts/test-stage-data.py \
 	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs"
