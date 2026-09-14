@@ -291,6 +291,7 @@ class DmaPollTests(unittest.TestCase):
         cls.addClassCleanup(cls.tmp.cleanup)
         root = Path(cls.tmp.name)
         (root / "hpu").mkdir()
+        (root / "klib.h").write_text('#include <stdio.h>\n', encoding="utf-8")
         (root / "mock_dma_poll_api.h").write_text(MOCK_API, encoding="utf-8")
         for header in ("result", "csr", "dma", "fixture", "layout"):
             (root / "hpu" / f"{header}.h").write_text(
@@ -306,6 +307,7 @@ class DmaPollTests(unittest.TestCase):
             shlex.split(os.environ.get("HOST_CC", "cc"))
             + ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
                f'-DSMOKE_SOURCE="{SMOKE_SOURCE}"', "-I", str(root),
+               "-I", str(TEST_ROOT / "include"),
                str(source), "-o", str(cls.binary)],
             check=True,
         )

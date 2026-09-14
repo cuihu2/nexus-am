@@ -369,6 +369,7 @@ class CompletionTests(unittest.TestCase):
         cls.addClassCleanup(cls.tmp.cleanup)
         root = Path(cls.tmp.name)
         (root / "hpu").mkdir()
+        (root / "klib.h").write_text('#include <stdio.h>\n', encoding="utf-8")
         (root / "hpu" / "csr.h").write_text(MOCK_CSR, encoding="utf-8")
         source = root / "test.c"
         source.write_text(HARNESS, encoding="utf-8")
