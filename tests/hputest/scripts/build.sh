@@ -7,6 +7,7 @@ output_root=${1:-"$test_root/build"}
 case_filter=${2:-}
 case_group=${HPU_CASE_GROUP:-all}
 dump_results=${HPU_DUMP_RESULTS:-0}
+log_level=${HPU_LOG_LEVEL:-1}
 jobs=${JOBS:-4}
 arch=${ARCH:-riscv64-xs}
 cross_compile=${CROSS_COMPILE:-riscv64-linux-gnu-}
@@ -32,12 +33,26 @@ if [[ ! $dump_results =~ ^[01]$ ]]; then
   printf 'ERROR: HPU_DUMP_RESULTS must be 0 or 1: %s\n' "$dump_results" >&2
   exit 2
 fi
+if [[ ! $log_level =~ ^[012]$ ]]; then
+  printf 'ERROR: HPU_LOG_LEVEL must be 0, 1, or 2: %s\n' "$log_level" >&2
+  exit 2
+fi
+if [[ $dump_results == 1 && $log_level != 2 ]]; then
+  printf 'ERROR: HPU_DUMP_RESULTS=1 requires HPU_LOG_LEVEL=2\n' >&2
+  exit 2
+fi
+case "$log_level" in
+  0) log_mode=silent ;;
+  1) log_mode=minimal ;;
+  2) log_mode=verbose ;;
+esac
 if [[ $case_group == diagnostic && $dump_results != 1 ]]; then
   printf 'ERROR: diagnostic selection requires HPU_DUMP_RESULTS=1\n' >&2
   exit 2
 fi
 uart_results=brief
 [[ $dump_results == 0 ]] || uart_results=full
+[[ $log_level != 0 ]] || uart_results=none
 if [[ -n $case_filter && $case_group != all ]]; then
   printf 'ERROR: CASE filter and HPU_CASE_GROUP cannot be used together\n' >&2
   exit 2
@@ -175,7 +190,7 @@ for source in "${case_sources[@]}"; do
 done
 
 artifact_root="$output_root/artifact"
-object_root="$output_root/obj/uart-$uart_results"
+object_root="$output_root/obj/log-$log_level-dump-$dump_results"
 mkdir -p "$artifact_root" "$object_root"
 # An artifact directory is one build invocation's publish set.  Keeping ELF
 # files from an earlier full/filtered build makes case_count validation lie.
@@ -228,6 +243,7 @@ for source in "${case_sources[@]}"; do
     CASE_ID="$case_id" \
     HPU_DST_DIR="$object_dir/" \
     HPU_DUMP_RESULTS="$dump_results" \
+    HPU_LOG_LEVEL="$log_level" \
     BINARY="$binary"
 
   "${cross_compile}strip" --strip-debug "$binary.elf"
@@ -270,6 +286,7 @@ cp -a "$generated_root/bconv-data" "$artifact_root/provenance/bconv-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/LOG_MODES.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/INLINE_MAIN_6903096.md" "$artifact_root/provenance/testplan/docs/"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
@@ -301,6 +318,8 @@ fi
   printf 'mainargs=%s\n' "${mainargs:-all}"
   printf 'uart_results=%s\n' "$uart_results"
   printf 'hpu_dump_results=%s\n' "$dump_results"
+  printf 'log_level=%s\n' "$log_level"
+  printf 'log_mode=%s\n' "$log_mode"
   printf 'case_count=%u\n' "${#case_sources[@]}"
   printf 'core_count=%u\n' "${group_counts[core]}"
   printf 'transform_count=%u\n' "${group_counts[transform]}"

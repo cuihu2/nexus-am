@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/it_v2.h>
 #include <hpu/report.h>
 #include <klib.h>
@@ -15,7 +16,7 @@ static int prepared;
 static int word_range(const char *operation, unsigned line, unsigned words) {
     if (!prepared || line >= WINDOW_LINES || words == 0U ||
         words > (WINDOW_LINES - line) * WORDS_PER_LINE) {
-        printf("[HPU][FAIL][%s] line=%u words=%u window_lines=%u prepared=%d\n",
+        LOG_ERROR("[HPU][FAIL][%s] line=%u words=%u window_lines=%u prepared=%d\n",
                operation, line, words, WINDOW_LINES, prepared);
         return 1;
     }
@@ -41,7 +42,7 @@ static int source_range(const char *operation,
         (address >= start && address <= end &&
          ((address - start) % sizeof(uint32_t) != 0U ||
           words > (end - address) / sizeof(uint32_t)))) {
-        printf("[HPU][FAIL][%s] source=0x%lx words=%u invalid_source_range\n",
+        LOG_ERROR("[HPU][FAIL][%s] source=0x%lx words=%u invalid_source_range\n",
                operation, (unsigned long)address, words);
         return 1;
     }
@@ -72,7 +73,7 @@ int v2_prepare(unsigned profile, uint32_t q0, uint32_t q1) {
     prepared = 0;
     /* q>=65537 保证 Barrett mu 可用 48 bit 表示；先验证再写 DDR。 */
     if (profile > 1U || q0 < UINT32_C(65537) || q1 < UINT32_C(65537)) {
-        printf("[HPU][FAIL][prepare] profile=%u q0=%u q1=%u "
+        LOG_ERROR("[HPU][FAIL][prepare] profile=%u q0=%u q1=%u "
                "expected_profile=0/1 expected_q>=65537\n", profile, q0, q1);
         return 1;
     }
@@ -153,7 +154,7 @@ int v2_allow_output(unsigned line, unsigned lines) {
 
     if (!prepared || line >= WINDOW_LINES || lines == 0U ||
         lines > WINDOW_LINES - line) {
-        printf("[HPU][FAIL][allow-output] line=%u lines=%u "
+        LOG_ERROR("[HPU][FAIL][allow-output] line=%u lines=%u "
                "window_lines=%u prepared=%d\n", line, lines, WINDOW_LINES, prepared);
         return 1;
     }
@@ -166,7 +167,7 @@ int v2_check_memory(const char *phase) {
     volatile const uint32_t *memory;
 
     if (!prepared || phase == NULL) {
-        printf("[HPU][FAIL][memory] prepared=%d phase_present=%u\n",
+        LOG_ERROR("[HPU][FAIL][memory] prepared=%d phase_present=%u\n",
                prepared, phase != NULL ? 1U : 0U);
         return 1;
     }
@@ -186,7 +187,7 @@ int v2_check_memory(const char *phase) {
             const unsigned word = line * WORDS_PER_LINE + index;
             const uint32_t actual = memory[word];
             if (actual != shadow[word]) {
-                printf("[HPU][FAIL][%s][readonly-or-guard] addr=0x%lx "
+                LOG_ERROR("[HPU][FAIL][%s][readonly-or-guard] addr=0x%lx "
                        "line=%u index=%u actual=0x%x expected=0x%x\n",
                        phase, (unsigned long)(MEM_BASE + (uintptr_t)word * 4U),
                        line, index, actual, shadow[word]);
@@ -204,7 +205,7 @@ int v2_check_words(const char *phase, unsigned line,
     if (word_range("check-words", line, words) != 0) return 1;
     if (source_range("check-words", golden, words) != 0) return 1;
     if (phase == NULL) {
-        printf("[HPU][FAIL][check-words] line=%u words=%u "
+        LOG_ERROR("[HPU][FAIL][check-words] line=%u words=%u "
                "phase_present=%u golden_present=%u\n", line, words,
                phase != NULL ? 1U : 0U, golden != NULL ? 1U : 0U);
         return 1;

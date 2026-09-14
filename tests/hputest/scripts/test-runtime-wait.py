@@ -20,6 +20,7 @@ MOCK_DECLARATIONS = r"""
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#define LOG_ERROR(...) ((void)printf(__VA_ARGS__))
 
 #define HPU_CSR_STATUS_ADDR 0x08000014U
 #define HPU_CSR_FAULT_ADDR  0x08000018U

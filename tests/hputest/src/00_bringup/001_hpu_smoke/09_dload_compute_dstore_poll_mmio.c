@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 #include <hpu/csr.h>
 #include <hpu/fixture.h>
@@ -57,7 +58,7 @@ int main(void) {
      * 原样执行库生成的完整程序，不拆分模表加载与计算阶段。
      * 硬件维护 DMA 依赖；程序末尾唯一的 PSYNC 产生完成电平，不配置 PLIC。
      */
-    printf("[HPU][09][PHASE] issue MM program; poll final PSYNC completion by MMIO\n");
+    LOG_DEBUG("[HPU][09][PHASE] issue MM program; poll final PSYNC completion by MMIO\n");
     if (hpu_program_mm(spans, HPU_PROGRAM_MM_DMA_COUNT) != 0)
         return case_fail(__FILE__, __LINE__);
 

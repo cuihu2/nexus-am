@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -15,7 +16,7 @@ static int failure(unsigned line, const char *phase) {
     const uint32_t fault = csr_read(CSR_FAULT);
     const uint32_t irq = csr_read(CSR_IRQ);
 
-    printf("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
+    LOG_ERROR("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
            phase, status, fault, irq);
     return case_fail(__FILE__, line);
 }
@@ -27,9 +28,9 @@ int main(void) {
     case_start(__FILE__);
     (void)result_context(__FILE__, 0U);
 
-    printf("[HPU][STR002][PREPARE] profile=0 commands=%u queue-target=8+1 "
+    LOG_DEBUG("[HPU][STR002][PREPARE] profile=0 commands=%u queue-target=8+1 "
            "mod-line=%u window-lines=%u\n", commands, LINE_MOD, WINDOW_LINES);
-    printf("[HPU][STR002][SCOPE] IT must hold/release ready and observe "
+    LOG_DEBUG("[HPU][STR002][SCOPE] IT must hold/release ready and observe "
            "queue-full, ninth-request-wait, stable-payload and ordered-recovery\n");
     if (v2_prepare(0U, MOD_Q0, MOD_Q1) != 0)
         return failure(__LINE__, "prepare");
@@ -58,14 +59,14 @@ int main(void) {
     if (check_status() != 0)
         return failure(__LINE__, "configured-status");
 
-    printf("[HPU][STR002][ISSUE] DLOAD mod -> PMODLD(0) x9 -> "
+    LOG_DEBUG("[HPU][STR002][ISSUE] DLOAD mod -> PMODLD(0) x9 -> "
            "PFREE mod -> PSYNC; no printf inside the nine-command burst\n");
     if (dload_mod(LINE_MOD, 1U) != 0)
         return failure(__LINE__, "dload-mod");
     /* 只在发令前打印，避免串口开销在九条命令之间人为排空队列。 */
     for (unsigned command = 0U; command < commands; ++command) {
         if (pmodld(0U) != 0) {
-            printf("[HPU][STR002][FAIL] phase=pmodld command-index=%u\n", command);
+            LOG_ERROR("[HPU][STR002][FAIL] phase=pmodld command-index=%u\n", command);
             return failure(__LINE__, "pmodld-burst");
         }
     }
@@ -75,7 +76,7 @@ int main(void) {
     psync();
     rc = wait_irq();
     if (rc != 0) {
-        printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+        LOG_ERROR("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
         return failure(__LINE__, "terminal-psync");
     }
     if (completion_clear() != 0)
@@ -83,11 +84,11 @@ int main(void) {
     if (check_status() != 0)
         return failure(__LINE__, "final-status");
 
-    printf("[HPU][STR002][CHECK] no permitted DDR outputs; compare mod and full-window guard\n");
+    LOG_DEBUG("[HPU][STR002][CHECK] no permitted DDR outputs; compare mod and full-window guard\n");
     if (v2_check_words("STR002-modulus", LINE_MOD, modulus, WORDS_PER_LINE, 0U) != 0 ||
         v2_check_memory("STR002-readonly-guard") != 0)
         return failure(__LINE__, "data-or-guard");
-    printf("[HPU][STR002][SOFTWARE-PASS] completion/memory checks passed; "
+    LOG_DEBUG("[HPU][STR002][SOFTWARE-PASS] completion/memory checks passed; "
            "8-full/9-wait is NOT established without queue/ready monitor evidence\n");
     return case_pass(__FILE__);
 }

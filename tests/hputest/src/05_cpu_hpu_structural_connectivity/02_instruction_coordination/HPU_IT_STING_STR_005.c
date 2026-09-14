@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_STING_STR_005\n");
-    printf("缺 STING 入口、参考执行模型和错误路径/异常注入契约。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_STING_STR_005\n");
+    LOG_ERROR("缺 STING 入口、参考执行模型和错误路径/异常注入契约。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

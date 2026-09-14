@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -15,7 +16,7 @@ static int failure(unsigned line, const char *phase) {
     const uint32_t fault = csr_read(CSR_FAULT);
     const uint32_t irq = csr_read(CSR_IRQ);
 
-    printf("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
+    LOG_ERROR("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
            phase, status, fault, irq);
     return case_fail(__FILE__, line);
 }
@@ -23,7 +24,7 @@ static int failure(unsigned line, const char *phase) {
 int main(void) {
     case_start(__FILE__);
     (void)result_context(__FILE__, 0U);
-    printf("[HPU][STR001][SCOPE] software checks loopback/guard only; "
+    LOG_DEBUG("[HPU][STR001][SCOPE] software checks loopback/guard only; "
            "ready/backpressure/CDC coverage requires IT monitor\n");
 
     for (unsigned profile = 0U; profile < 2U; ++profile) {
@@ -31,7 +32,7 @@ int main(void) {
         const uint32_t *b;
         int rc;
 
-        printf("[HPU][STR001][PREPARE] profile=%u words=%u "
+        LOG_DEBUG("[HPU][STR001][PREPARE] profile=%u words=%u "
                "p0:line%u->%u p1:line%u->%u count=%u window-lines=%u\n",
                profile, POLY_WORDS, LINE_A, LINE_OUT, LINE_B, LINE_OUT_B,
                POLY_LINES, WINDOW_LINES);
@@ -66,7 +67,7 @@ int main(void) {
         if (check_status() != 0)
             return failure(__LINE__, "configured-status");
 
-        printf("[HPU][STR001][ISSUE] DLOAD p0/A -> DLOAD p1/B -> "
+        LOG_DEBUG("[HPU][STR001][ISSUE] DLOAD p0/A -> DLOAD p1/B -> "
                "DSTORE p0/OUT -> DSTORE p1/OUT_B -> PSYNC; burst has no printf\n");
         if (dload(P0, LINE_A, POLY_LINES) != 0)
             return failure(__LINE__, "dload-p0");
@@ -81,7 +82,7 @@ int main(void) {
         psync();
         rc = wait_irq();
         if (rc != 0) {
-            printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+            LOG_ERROR("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
             return failure(__LINE__, "terminal-psync");
         }
         if (completion_clear() != 0)
@@ -89,12 +90,12 @@ int main(void) {
         if (check_status() != 0)
             return failure(__LINE__, "final-status");
 
-        printf("[HPU][STR001][CHECK] profile=%u compare-A/B and all non-output DDR\n", profile);
+        LOG_DEBUG("[HPU][STR001][CHECK] profile=%u compare-A/B and all non-output DDR\n", profile);
         if (v2_check_words("STR001-p0-A", LINE_OUT, a, POLY_WORDS, MOD_Q0) != 0 ||
             v2_check_words("STR001-p1-B", LINE_OUT_B, b, POLY_WORDS, MOD_Q0) != 0 ||
             v2_check_memory("STR001-readonly-guard") != 0)
             return failure(__LINE__, "data-or-guard");
-        printf("[HPU][STR001][ROUND-PASS] profile=%u software-only; "
+        LOG_DEBUG("[HPU][STR001][ROUND-PASS] profile=%u software-only; "
                "monitor-evidence-still-required\n", profile);
     }
     return case_pass(__FILE__);

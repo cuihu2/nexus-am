@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_PERF_006\n");
-    printf("缺项目算法库密文乘法接口/基线与纯计算计数边界，不能用单系数 PMUL 计时替代。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_PERF_006\n");
+    LOG_ERROR("缺项目算法库密文乘法接口/基线与纯计算计数边界，不能用单系数 PMUL 计时替代。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

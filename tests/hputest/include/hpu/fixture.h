@@ -1,6 +1,7 @@
 #ifndef HPU_FIXTURE_H
 #define HPU_FIXTURE_H
 
+#include <hpu/log.h>
 #include <hpu/cache.h>
 #include <hpu/layout.h>
 #include <klib.h>
@@ -17,12 +18,12 @@ static inline int fixture_validate(void) {
     /* 分别检查生成库提供的 A/B；仅打印首个越界系数。 */
     for (i = 0U; i < HPU_RNS_COEFFICIENTS; ++i) {
         if (RNS_A[i] >= HPU_MODULUS) {
-            printf("[HPU][FAIL][fixture] input=A index=%u actual=0x%x "
+            LOG_ERROR("[HPU][FAIL][fixture] input=A index=%u actual=0x%x "
                    "expected=<q q=%u\n", i, RNS_A[i], HPU_MODULUS);
             return 1;
         }
         if (RNS_B[i] >= HPU_MODULUS) {
-            printf("[HPU][FAIL][fixture] input=B index=%u actual=0x%x "
+            LOG_ERROR("[HPU][FAIL][fixture] input=B index=%u actual=0x%x "
                    "expected=<q q=%u\n", i, RNS_B[i], HPU_MODULUS);
             return 1;
         }
@@ -41,7 +42,7 @@ static inline int fixture_validate_mm(void) {
     /* 逐字检查 MM basis 0 的 q32 + Barrett-mu48，保留原先的首错返回。 */
     for (i = 0U; i < 4U; ++i) {
         if (RNS_MOD_CTX[i] != expected_words[i]) {
-            printf("[HPU][FAIL][mod-context] word=%u actual=0x%x "
+            LOG_ERROR("[HPU][FAIL][mod-context] word=%u actual=0x%x "
                    "expected=0x%x q=%u\n",
                    i, RNS_MOD_CTX[i], expected_words[i], HPU_MODULUS);
             return 1;
@@ -49,7 +50,7 @@ static inline int fixture_validate_mm(void) {
     }
     for (i = 4U; i < HPU_WORDS_PER_LINE; ++i) {
         if (RNS_MOD_CTX[i] != 0U) {
-            printf("[HPU][FAIL][mod-context-padding] index=%u actual=0x%x "
+            LOG_ERROR("[HPU][FAIL][mod-context-padding] index=%u actual=0x%x "
                    "expected=0x0 q=%u\n", i, RNS_MOD_CTX[i], HPU_MODULUS);
             return 1;
         }
@@ -61,7 +62,7 @@ static inline int fixture_validate_mm(void) {
             (((uint64_t)RNS_A[i] * RNS_B[i]) % HPU_MODULUS);
 
         if (RNS_EXPECTED[i] != c_oracle) {
-            printf("[HPU][FAIL][fixture-golden-vs-C] index=%u A=0x%x B=0x%x "
+            LOG_ERROR("[HPU][FAIL][fixture-golden-vs-C] index=%u A=0x%x B=0x%x "
                    "golden=0x%x expected=0x%x q=%u\n",
                    i, RNS_A[i], RNS_B[i], RNS_EXPECTED[i], c_oracle,
                    HPU_MODULUS);
@@ -115,7 +116,7 @@ static inline int check_loopback(void) {
         const uint32_t actual = output[i];
 
         if (actual != RNS_A[i]) {
-            printf("[HPU][FAIL][loopback] input=A index=%u actual=0x%x "
+            LOG_ERROR("[HPU][FAIL][loopback] input=A index=%u actual=0x%x "
                    "expected=0x%x q=%u\n",
                    i, actual, RNS_A[i], HPU_MODULUS);
             return 1;
@@ -135,7 +136,7 @@ static inline int check_pmul(void) {
 
         /* 保留原来的短路：golden 错误时不读取 HPU 输出。 */
         if (RNS_EXPECTED[i] != c_oracle) {
-            printf("[HPU][FAIL][pmul-golden-vs-C] index=%u A=0x%x B=0x%x "
+            LOG_ERROR("[HPU][FAIL][pmul-golden-vs-C] index=%u A=0x%x B=0x%x "
                    "golden=0x%x expected=0x%x q=%u\n",
                    i, RNS_A[i], RNS_B[i], RNS_EXPECTED[i], c_oracle,
                    HPU_MODULUS);
@@ -146,7 +147,7 @@ static inline int check_pmul(void) {
         const uint32_t actual = output[i];
 
         if (actual != c_oracle) {
-            printf("[HPU][FAIL][pmul-HPU-vs-C] index=%u A=0x%x B=0x%x "
+            LOG_ERROR("[HPU][FAIL][pmul-HPU-vs-C] index=%u A=0x%x B=0x%x "
                    "actual=0x%x expected=0x%x q=%u\n",
                    i, RNS_A[i], RNS_B[i], actual, c_oracle, HPU_MODULUS);
             return 1;

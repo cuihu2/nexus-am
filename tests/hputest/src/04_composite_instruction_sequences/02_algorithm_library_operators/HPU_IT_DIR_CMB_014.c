@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_CMB_014\n");
-    printf("缺算法库 rotate 接口、旋转索引/密钥绑定和接口级 golden；裸 Auto 不等同库接口。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_014\n");
+    LOG_ERROR("缺算法库 rotate 接口、旋转索引/密钥绑定和接口级 golden；裸 Auto 不等同库接口。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

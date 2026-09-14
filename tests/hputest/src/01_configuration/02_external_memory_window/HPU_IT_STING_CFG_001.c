@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 #include <hpu/report.h>
 #include <hpu/it_v2.h>
@@ -24,9 +25,9 @@ static int failure(unsigned source_line, const char *phase) {
     const uint32_t size_lo = csr_read(CSR_SIZE_LO);
     const uint32_t size_hi = csr_read(CSR_SIZE_HI);
 
-    printf("[HPU][FAIL] phase=%s source_line=%u status=0x%x fault=0x%x irq=0x%x\n",
+    LOG_ERROR("[HPU][FAIL] phase=%s source_line=%u status=0x%x fault=0x%x irq=0x%x\n",
            phase, source_line, status, fault, irq);
-    printf("[HPU][FAIL][window-shadow] base_hi=0x%x base_lo=0x%x "
+    LOG_ERROR("[HPU][FAIL][window-shadow] base_hi=0x%x base_lo=0x%x "
            "size_hi=0x%x size_lo=0x%x\n", base_hi, base_lo, size_hi, size_lo);
     return case_fail(__FILE__, source_line);
 }
@@ -36,7 +37,7 @@ int main(void) {
     case_start(__FILE__);
     (void)result_context(__FILE__, 0U);
     const uint32_t seed = 0x04BEA183u;
-    printf("[HPU][DATA] profile=producer seed_tag=0x%x A_line=%u B_line=%u "
+    LOG_DEBUG("[HPU][DATA] profile=producer seed_tag=0x%x A_line=%u B_line=%u "
            "words=%u q=%u window_base=0x%lx window_lines=%u\n",
            seed, LINE_A, LINE_B, POLY_WORDS, MOD_Q0,
            (unsigned long)MEM_BASE, WINDOW_LINES);
@@ -47,7 +48,7 @@ int main(void) {
     if (v2_prepare(0U, MOD_Q0, MOD_Q1) != 0) return failure(__LINE__, phase);
 
     phase = "clear-old-events";
-    printf("[HPU][CLEAR] FAULT.W1C=0x%x IRQ.W1C=0x%x\n", FAULT_VALID, IRQ_LEVEL);
+    LOG_DEBUG("[HPU][CLEAR] FAULT.W1C=0x%x IRQ.W1C=0x%x\n", FAULT_VALID, IRQ_LEVEL);
     csr_write(CSR_FAULT, FAULT_VALID);
     csr_write(CSR_IRQ, IRQ_LEVEL);
     csr_write(CSR_IRQ, 0U);
@@ -64,7 +65,7 @@ int main(void) {
         uint32_t lines = WINDOW_LINES - offsets[index];
 
         phase = "ordered-shadow-writes";
-        printf("[HPU][CONFIG-ORDER] index=%u seed_tag=0x%x base=0x%lx lines=%u "
+        LOG_DEBUG("[HPU][CONFIG-ORDER] index=%u seed_tag=0x%x base=0x%lx lines=%u "
                "order=%s random_interval=needs-monitor\n", index, seed,
                (unsigned long)base, lines, (index & 1U) == 0U ? "BASE-SIZE" : "MIXED");
         if ((index & 1U) == 0U) {
@@ -85,7 +86,7 @@ int main(void) {
             return failure(__LINE__, phase);
 
         phase = "commit-window";
-        printf("[HPU][COMMIT] base_hi=0x%x base_lo=0x%x size_hi=0x%x size_lo=0x%x\n",
+        LOG_DEBUG("[HPU][COMMIT] base_hi=0x%x base_lo=0x%x size_hi=0x%x size_lo=0x%x\n",
                csr_read(CSR_BASE_HI), csr_read(CSR_BASE_LO),
                csr_read(CSR_SIZE_HI), csr_read(CSR_SIZE_LO));
         csr_write(CSR_COMMIT, COMMIT);
@@ -95,7 +96,7 @@ int main(void) {
 
     phase = "readonly-and-guard";
     if (v2_check_memory(phase) != 0) return failure(__LINE__, phase);
-    printf("[HPU][SW-CHECK-PASS] readonly-and-guard=pass window_lines=%u "
+    LOG_DEBUG("[HPU][SW-CHECK-PASS] readonly-and-guard=pass window_lines=%u "
            "monitor=needs-monitor; not AXI/handshake coverage\n", WINDOW_LINES);
     return case_pass(__FILE__);
 }

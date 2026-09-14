@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_STING_CMB_007\n");
-    printf("缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_STING_CMB_007\n");
+    LOG_ERROR("缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

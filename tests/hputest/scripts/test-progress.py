@@ -52,15 +52,18 @@ int main(int argc, char **argv) {
         assert(subcase_selected(0U) == 0);
         return 0;
     }
-    assert(rc == 0 && enabled == 1U && sampled == 1U);
+    assert(rc == 0 && enabled == (HPU_LOG_LEVEL == 2 ? 1U : 0U) &&
+           sampled == (HPU_LOG_LEVEL == 2 ? 1U : 0U));
     if (strcmp(mode, "again") == 0) {
         assert(progress_begin("CASE", count) == 1);
-        assert(enabled == 1U && sampled == 1U);
+        assert(enabled == (HPU_LOG_LEVEL == 2 ? 1U : 0U) &&
+               sampled == (HPU_LOG_LEVEL == 2 ? 1U : 0U));
         return 0;
     }
     if (strcmp(mode, "badphase") == 0) {
         phase_mark(NULL);
-        assert(enabled == 1U && sampled == 1U);
+        assert(enabled == (HPU_LOG_LEVEL == 2 ? 1U : 0U) &&
+               sampled == (HPU_LOG_LEVEL == 2 ? 1U : 0U));
         return 0;
     }
     if (strcmp(mode, "all") == 0) {
@@ -74,7 +77,8 @@ int main(int argc, char **argv) {
     assert(subcase_selected(count) == 0 && subcase_selected(UINT_MAX) == 0);
     phase_mark("prepare");
     phase_mark("golden");
-    assert(sampled == 5U && enabled == 1U);
+    assert(sampled == (HPU_LOG_LEVEL == 2 ? 5U : 0U) &&
+           enabled == (HPU_LOG_LEVEL == 2 ? 1U : 0U));
     return 0;
 }
 '''
@@ -90,19 +94,22 @@ class ProgressTests(unittest.TestCase):
         folder = Path(cls.temporary.name)
         (folder / "klib.h").write_text("#include <stdio.h>\n#include <string.h>\n")
         (folder / "harness.c").write_text(HARNESS)
-        cls.executable = folder / "progress-test"
-        subprocess.run(
-            shlex.split(os.environ.get("CC", "cc")) + [
-                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
-                "-DHPU_PROGRESS_HOST_TEST", "-I", str(folder),
-                "-I", str(ROOT / "include"), str(ROOT / "runtime/it_progress.c"),
-                str(folder / "harness.c"), "-o", str(cls.executable),
-            ], check=True,
-        )
+        cls.executables = {}
+        for level in (0, 1, 2):
+            cls.executables[level] = folder / f"progress-test-{level}"
+            subprocess.run(
+                shlex.split(os.environ.get("CC", "cc")) + [
+                    "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+                    "-DHPU_PROGRESS_HOST_TEST", f"-DHPU_LOG_LEVEL={level}",
+                    "-I", str(folder), "-I", str(ROOT / "include"),
+                    str(ROOT / "runtime/it_progress.c"),
+                    str(folder / "harness.c"), "-o", str(cls.executables[level]),
+                ], check=True,
+            )
 
-    def run_case(self, argument="", count=4, mode="all"):
+    def run_case(self, argument="", count=4, mode="all", level=2):
         return subprocess.run(
-            [str(self.executable), argument, str(count), mode],
+            [str(self.executables[level]), argument, str(count), mode],
             check=True, capture_output=True, text=True,
         ).stdout
 
@@ -153,6 +160,29 @@ class ProgressTests(unittest.TestCase):
 
     def test_begin_only_enables_counter_once(self):
         self.assertIn("reason=already-started", self.run_case("", 4, "again"))
+
+    def test_quiet_modes_preserve_selection_without_touching_cycle(self):
+        for level in (0, 1):
+            for arguments, mode in (("", "all"), ("all", "all"),
+                                    ("subcase=0", "selected"),
+                                    ("subcase=2", "selected"),
+                                    ("subcase=3", "selected"),
+                                    ("", "wrap")):
+                with self.subTest(level=level, arguments=arguments, mode=mode):
+                    self.assertEqual(self.run_case(arguments, 4, mode, level), "")
+
+    def test_quiet_modes_still_reject_invalid_arguments_and_repeat_begin(self):
+        for level in (0, 1):
+            for arguments, mode in (("subcase=4", "invalid"),
+                                    ("subcase=4294967296", "invalid"),
+                                    ("", "again"), ("", "badid"),
+                                    ("", "before"), ("", "badphase")):
+                with self.subTest(level=level, mode=mode):
+                    output = self.run_case(arguments, 4, mode, level)
+                    if level == 0:
+                        self.assertEqual(output, "")
+                    else:
+                        self.assertIn("[FAIL]", output)
 
 
 if __name__ == "__main__":

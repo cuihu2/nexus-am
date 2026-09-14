@@ -55,7 +55,9 @@ int main(int argc, char **argv) {
         return 0;
     }
     assert(result_context("03/HPU_PMAC.c", 3U) == 0);
+#if HPU_LOG_LEVEL == 2
     puts("[unrelated] do not parse result-looking text: DATA,0,0x1,0x1,0,0");
+#endif
     if (strcmp(argv[1], "pass") == 0) {
         const uint32_t input[] = {0U, 1U, 2U, 3U, 4U, 96U};
         assert(result_compare("base", input, input, 6U, 97U) == 0);
@@ -77,6 +79,13 @@ int main(int argc, char **argv) {
         assert(result_compare("same-phase", input, input, 2U, 0U) == 0);
         assert(result_context("03/HPU_PMAC.c", 4U) == 0);
         assert(result_compare("same-phase", input, input, 2U, 0U) == 0);
+    } else if (strcmp(argv[1], "block-state") == 0) {
+        const uint32_t input[] = {1U};
+        const uint32_t expected[] = {0U};
+        assert(result_compare("first", input, input, 1U, 0U) == 0);
+        assert(result_compare("second", input, expected, 1U, 0U) == 1);
+        assert(result_context("03/HPU_PMAC.c", 4U) == 0);
+        assert(result_compare("reset", input, expected, 1U, 0U) == 1);
     } else {
         assert(0 && "unknown test scenario");
     }
@@ -98,11 +107,12 @@ class ReportTests(unittest.TestCase):
         (cls.work / "harness.c").write_text(HARNESS, encoding="utf-8")
         compiler = shlex.split(os.environ.get("HOST_CC", "cc"))
         cls.binaries = {}
-        for mode in (0, 1):
+        for mode, level, dump in ((0, 2, 0), (1, 2, 1),
+                                  ("minimal", 1, 0), ("silent", 0, 0)):
             binary = cls.work / f"report-{mode}"
             subprocess.run(compiler + [
                 "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
-                f"-DHPU_DUMP_RESULTS={mode}",
+                f"-DHPU_DUMP_RESULTS={dump}", f"-DHPU_LOG_LEVEL={level}",
                 f"-I{cls.work}", f"-I{ROOT / 'include'}",
                 f"-I{AM_ROOT / 'libs/klib/include'}",
                 str(cls.work / "harness.c"), str(ROOT / "runtime/it_report.c"),
@@ -141,6 +151,32 @@ class ReportTests(unittest.TestCase):
         self.assertIn("mismatches=20", text)
         with self.assertRaisesRegex(ValueError, "HPU_DUMP_RESULTS=1"):
             PARSER.parse_lines(text.splitlines())
+
+    def test_minimal_success_has_no_per_block_output(self):
+        for scenario in ("pass", "blocks"):
+            with self.subTest(scenario=scenario):
+                self.assertEqual(self.run_case("minimal", scenario), "")
+
+    def test_minimal_failure_is_one_line_with_first_error_and_total(self):
+        text = self.run_case("minimal", "bounded")
+        self.assertEqual(len(text.splitlines()), 1)
+        self.assertIn("mismatches=20 first_bad=4 actual=0x2 expected=0x1", text)
+        self.assertNotIn("[HPU][RESULT]", text)
+        self.assertIn("exact_integer=1", text)
+
+    def test_all_modes_keep_exact_validation_and_scan_late_errors(self):
+        for mode in (0, 1, "minimal", "silent"):
+            for scenario in ("pass", "mixed", "bounded", "blocks", "invalid", "block-state"):
+                with self.subTest(mode=mode, scenario=scenario):
+                    text = self.run_case(mode, scenario)
+                    if mode == "silent":
+                        self.assertEqual(text, "")
+
+    def test_minimal_preserves_block_state_without_begin_logging(self):
+        text = self.run_case("minimal", "block-state")
+        self.assertEqual(len(text.splitlines()), 2)
+        self.assertIn("phase=second round=3 block=1", text)
+        self.assertIn("phase=reset round=4 block=0", text)
 
     def test_repeated_phase_uses_explicit_round_and_unique_block(self):
         rows = PARSER.parse_lines(self.run_case(1, "blocks").splitlines())

@@ -16,7 +16,9 @@ int result_context(const char *case_id, unsigned round);
  * q=0 为普通 32 bit 数据；q!=0 时要求 actual 与 golden 精确相等且 <q。
  * 模 q 同余但非规范的结果仍失败，不能用“误差容限”掩盖整数计算错误。
  *
- * 默认输出摘要、前 4 项和最多 8 个错误；HPU_DUMP_RESULTS=1 输出每项。
+ * HPU_LOG_LEVEL=0 不输出；默认 level 1 每个失败块仅输出首错及错误总数，
+ * 成功不输出数据日志。level 2 输出协议摘要、前 4 项及最多 8 个错误；
+ * level 2 配合 HPU_DUMP_RESULTS=1 才输出全部数据。比较判据不随模式改变。
  * 全量日志可由 scripts/parse-uart-results.py 导出 CSV；不在 ISR/轮询中调用。
  */
 int result_compare(const char *phase, volatile const uint32_t *actual,

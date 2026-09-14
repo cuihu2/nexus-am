@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_CMB_010\n");
-    printf("缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_010\n");
+    LOG_ERROR("缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

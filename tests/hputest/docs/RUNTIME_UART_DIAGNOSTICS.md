@@ -1,5 +1,8 @@
 # 03/04 耗时与 UART 正确性诊断
 
+当前默认`HPU_LOG_LEVEL=1`只保留必要事件和错误。本文的PHASE、BEGIN/DATA/END属于
+`HPU_LOG_LEVEL=2`详细模式；关printf复测请先看 [日志模式说明](LOG_MODES.md)。
+
 ## 已确认的问题与尚不能确定的原因
 
 上一版不是只加注释：03 的 PMAC 由1轮增加为4轮，PNTT/PINTT由未发令占位变为各6轮。
@@ -73,14 +76,15 @@ make -C tests/hputest one \
   mainargs=subcase=0
 ```
 
-增加`HPU_DUMP_RESULTS=1`可单独导出该轮全部结果。`mainargs`记入产物清单；全量CI包使用all。
+同时设置`HPU_LOG_LEVEL=2 HPU_DUMP_RESULTS=1`可单独导出该轮全部结果。`mainargs`记入产物清单；全量CI包使用all。
 04每个完整算子目前只一段程序，支持all或subcase=0，不能从中间NTT stage开始执行。
 多用例并行和VCS FGP不是一回事；本次没有更改仿真调度器或开关，也不保证相同墙钟加速比。
 
 ## 两种下载包
 
-- `nexus-am-hpu-workloads`：常规包，摘要、前4项和最多8个错误，完整检查所有结果。
-- `nexus-am-hpu-uart-results`：仅03九项和04 BConv/NTT/INTT三项；每个结果逐项打印actual/golden/q/delta。
+- `nexus-am-hpu-workloads`：当前默认minimal，只打印必要事件和失败首错，不再打印前4项成功数据。
+- `nexus-am-hpu-uart-results`：仅手动勾选生成，包含03九项和04 BConv/NTT/INTT三项；每个结果逐项打印actual/golden/q/delta。
+- `nexus-am-hpu-silent-workloads` / `nexus-am-hpu-silent-subtests`：新增完整/子项静默包，关闭printf和UART初始化。
 
 全量包不是加速包。UART是阻塞输出，4096项、多RNS或多round可能产生大量日志，仿真会更慢。
 先用摘要确定哪一例/哪一轮有问题，再用全量或单子项构建定位。

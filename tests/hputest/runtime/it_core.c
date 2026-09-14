@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include "it_internal.h"
 #include <klib.h>
 
@@ -19,7 +20,7 @@
 int expect_csr(uintptr_t address, uint32_t expected, uint32_t mask) {
     uint32_t actual = hpu_csr_read32(address);
     if ((actual & mask) == (expected & mask)) return 0;
-    printf("[HPU][FAIL][csr-readback] addr=0x%lx actual=0x%x expected=0x%x mask=0x%x\n",
+    LOG_ERROR("[HPU][FAIL][csr-readback] addr=0x%lx actual=0x%x expected=0x%x mask=0x%x\n",
            (unsigned long)address, actual, expected, mask);
     return 1;
 }
@@ -125,7 +126,7 @@ int wait_window(int expected_valid) {
         int valid = (status & HPU_STATUS_WINDOW_VALID) != 0U;
         if (valid == (expected_valid != 0)) return STEP_OK;
     }
-    printf("[HPU][FAIL][wait-window] expected_valid=%d status=0x%x polls=%u\n",
+    LOG_ERROR("[HPU][FAIL][wait-window] expected_valid=%d status=0x%x polls=%u\n",
            expected_valid, status, timeout);
     return STEP_ERR_WINDOW;
 }
@@ -175,12 +176,12 @@ int check_status(void) {
 
     if ((fault & HPU_FAULT_VALID) != 0U ||
         (status & HPU_STATUS_FAULT_VALID) != 0U) {
-        printf("[HPU][FAIL][status] reason=fault status=0x%x fault=0x%x\n", status, fault);
+        LOG_ERROR("[HPU][FAIL][status] reason=fault status=0x%x fault=0x%x\n", status, fault);
         return STEP_ERR_FAULT;
     }
     if ((status & HPU_STATUS_WINDOW_VALID) == 0U ||
         (status & HPU_STATUS_BUSY) != 0U) {
-        printf("[HPU][FAIL][status] reason=invalid-or-busy status=0x%x fault=0x%x\n",
+        LOG_ERROR("[HPU][FAIL][status] reason=invalid-or-busy status=0x%x fault=0x%x\n",
                status, fault);
         return STEP_ERR_WINDOW;
     }
@@ -196,13 +197,13 @@ int wait_irq(void) {
         irq = hpu_csr_read32(HPU_CSR_IRQ_ADDR);
         status = hpu_csr_read32(HPU_CSR_STATUS_ADDR);
         if ((status & HPU_STATUS_FAULT_VALID) != 0U) {
-            printf("[HPU][FAIL][wait-mmio] reason=status-fault irq=0x%x status=0x%x polls=%u\n",
+            LOG_ERROR("[HPU][FAIL][wait-mmio] reason=status-fault irq=0x%x status=0x%x polls=%u\n",
                    irq, status, timeout + 1U);
             return STEP_ERR_FAULT;
         }
         fault = hpu_csr_read32(HPU_CSR_FAULT_ADDR);
         if ((fault & HPU_FAULT_VALID) != 0U) {
-            printf("[HPU][FAIL][wait-mmio] reason=detail-fault irq=0x%x status=0x%x fault=0x%x polls=%u\n",
+            LOG_ERROR("[HPU][FAIL][wait-mmio] reason=detail-fault irq=0x%x status=0x%x fault=0x%x polls=%u\n",
                    irq, status, fault, timeout + 1U);
             return STEP_ERR_FAULT;
         }
@@ -211,7 +212,7 @@ int wait_irq(void) {
                 HPU_STATUS_WINDOW_VALID)
             return STEP_OK;
     }
-    printf("[HPU][FAIL][wait-mmio] reason=timeout irq=0x%x status=0x%x fault=0x%x polls=%u\n",
+    LOG_ERROR("[HPU][FAIL][wait-mmio] reason=timeout irq=0x%x status=0x%x fault=0x%x polls=%u\n",
            irq, status, fault, timeout);
     return STEP_ERR_TIMEOUT;
 }

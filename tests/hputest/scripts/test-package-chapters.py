@@ -30,7 +30,12 @@ class ChapterPackageTests(unittest.TestCase):
         return {"group": group, "qualifier": qualifier, "case_id": case_id,
                 "source": f"src/{chapter}/01_basic/{case_id}.c"}
 
-    def fixture(self, rows, selection="case:test", uart_results="brief", dump_results="0"):
+    def fixture(self, rows, selection="case:test", uart_results="brief", dump_results="0",
+                log_level=None, log_mode=None):
+        if log_level is None:
+            log_level = "2" if dump_results == "1" else "1"
+        if log_mode is None:
+            log_mode = {"0": "silent", "1": "minimal", "2": "verbose"}.get(log_level, "invalid")
         with (self.artifact / "CASE_MANIFEST.tsv").open("w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=("group", "qualifier", "case_id", "source"), delimiter="\t")
             writer.writeheader()
@@ -45,6 +50,7 @@ class ChapterPackageTests(unittest.TestCase):
         (self.artifact / "MANIFEST.txt").write_text(
             f"selection={selection}\ncase_count={len(rows)}\n"
             f"uart_results={uart_results}\nhpu_dump_results={dump_results}\n"
+            f"log_level={log_level}\nlog_mode={log_mode}\n"
             f"not_qualified_count={len(blocked)}\n", encoding="utf-8")
         for row in rows:
             relative = Path(row["source"]).relative_to("src")
@@ -221,6 +227,56 @@ class ChapterPackageTests(unittest.TestCase):
         readme = (release / "README.md").read_text(encoding="utf-8")
         self.assertIn("默认 UART 摘要版", readme)
         self.assertIn("HPU_DUMP_RESULTS=0", readme)
+        self.assertIn("HPU_LOG_LEVEL=1", readme)
+
+    def test_silent_all_preserves_cases_and_identifies_no_uart(self):
+        rows = [self.row(f"HPU_IT_DIR_INS_C0_{i:03d}") for i in range(1, 10)]
+        self.fixture(rows, selection="all", uart_results="none", log_level="0")
+        release = PACKAGER.package(self.artifact, require_silent=True)
+        self.assertEqual(len(list(release.rglob("*.elf"))), 9)
+        readme = (release / "README.md").read_text(encoding="utf-8")
+        self.assertIn("静默版", readme)
+        self.assertIn("HPU_LOG_LEVEL=0", readme)
+        self.assertIn("超时不能当作通过", readme)
+        self.assertTrue(all("关闭日志与UART" in row["notes"] for row in self.index(release)))
+
+    def test_silent_requires_full_selection_and_explicit_flag(self):
+        self.fixture([self.row()], uart_results="none", log_level="0")
+        with self.assertRaisesRegex(ValueError, "selection=all"):
+            PACKAGER.package(self.artifact, require_silent=True)
+        self.fixture([self.row()], selection="all", uart_results="none", log_level="0")
+        with self.assertRaisesRegex(ValueError, "require --silent"):
+            PACKAGER.package(self.artifact)
+
+    def test_silent_rejects_regular_and_verbose_packages(self):
+        for level in ("1", "2"):
+            with self.subTest(level=level):
+                self.fixture([self.row()], selection="all", log_level=level)
+                with self.assertRaisesRegex(ValueError, "requires log_level=0"):
+                    PACKAGER.package(self.artifact, require_silent=True)
+
+    def test_default_all_rejects_silent_or_verbose(self):
+        for level, uart in (("0", "none"), ("2", "brief")):
+            with self.subTest(level=level):
+                self.fixture([self.row()], selection="all", uart_results=uart, log_level=level)
+                with self.assertRaisesRegex(ValueError, "requires brief UART"):
+                    PACKAGER.package(self.artifact, require_all=True)
+
+    def test_log_mode_must_match_level_and_dump(self):
+        for level, mode, uart, dump in (("0", "silent", "brief", "0"),
+                                       ("0", "silent", "full", "1"),
+                                       ("1", "minimal", "full", "1"),
+                                       ("1", "verbose", "brief", "0")):
+            with self.subTest(level=level, mode=mode, uart=uart, dump=dump):
+                self.fixture([self.row()], uart_results=uart, dump_results=dump,
+                             log_level=level, log_mode=mode)
+                with self.assertRaisesRegex(ValueError, "inconsistent UART"):
+                    PACKAGER.package(self.artifact)
+
+    def test_package_modes_are_mutually_exclusive(self):
+        self.fixture([self.row()])
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            PACKAGER.package(self.artifact, require_all=True, require_silent=True)
 
     def test_uart_export_tool_is_included_without_following_symlinks(self):
         self.fixture([self.row()])

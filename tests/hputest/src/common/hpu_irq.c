@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <am.h>
 #include <hpu/csr.h>
 #include <hpu/irq.h>
@@ -135,7 +136,7 @@ int irq_open(void) {
     g_config_disable_timer = 1;
     rc = _cte_init(NULL);
     if (rc != 0) {
-        printf("[HPU][IRQ][FAIL] phase=open reason=cte-init rc=%d\n", rc);
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=open reason=cte-init rc=%d\n", rc);
         return 1;
     }
 
@@ -159,21 +160,21 @@ int irq_open(void) {
         uint32_t enable = mmio_read32(PLIC_ENABLE_ADDR);
         uint32_t threshold = mmio_read32(PLIC_THRESHOLD_ADDR);
 
-        printf("[HPU][IRQ] plic=0x04000000 priority=0x%x enable=0x%x "
+        LOG_DEBUG("[HPU][IRQ] plic=0x04000000 priority=0x%x enable=0x%x "
                "threshold=0x%x\n",
                priority, enable, threshold);
         if (priority != 1U) {
-            printf("[HPU][IRQ][FAIL] phase=open reason=plic-priority actual=0x%x expected=1 source=%u\n",
+            LOG_ERROR("[HPU][IRQ][FAIL] phase=open reason=plic-priority actual=0x%x expected=1 source=%u\n",
                    priority, PLIC_SOURCE);
             return 1;
         }
         if ((enable & (1U << (PLIC_SOURCE % 32U))) == 0U) {
-            printf("[HPU][IRQ][FAIL] phase=open reason=plic-enable actual=0x%x required-mask=0x%x\n",
+            LOG_ERROR("[HPU][IRQ][FAIL] phase=open reason=plic-enable actual=0x%x required-mask=0x%x\n",
                    enable, 1U << (PLIC_SOURCE % 32U));
             return 1;
         }
         if (threshold != 0U) {
-            printf("[HPU][IRQ][FAIL] phase=open reason=plic-threshold actual=0x%x expected=0\n",
+            LOG_ERROR("[HPU][IRQ][FAIL] phase=open reason=plic-threshold actual=0x%x expected=0\n",
                    threshold);
             return 1;
         }
@@ -198,7 +199,7 @@ int irq_wait(void) {
             case IRQ_CLEAR_TIMEOUT: reason = "clear-level-timeout"; break;
             default: reason = "unknown-handler-error"; break;
             }
-            printf("[HPU][IRQ][FAIL] phase=wait reason=%s error=%u polls=%u "
+            LOG_ERROR("[HPU][IRQ][FAIL] phase=wait reason=%s error=%u polls=%u "
                    "event=%d claim=%u expected-claim=%u irq=0x%x clear-last=0x%x clear-polls=%u\n",
                    reason, error, timeout, irq_last_event, irq_last_claim,
                    PLIC_SOURCE, irq_last_level, irq_clear_last, irq_clear_polls);
@@ -207,7 +208,7 @@ int irq_wait(void) {
         if (irq_done == 1U) return 0;
     }
     /* 只打印缓存现场，不为诊断额外 claim PLIC 或读取 HPU MMIO。 */
-    printf("[HPU][IRQ][FAIL] phase=wait reason=timeout polls=%u handler-seen=%u "
+    LOG_ERROR("[HPU][IRQ][FAIL] phase=wait reason=timeout polls=%u handler-seen=%u "
            "done=%u error=%u event=%d claim=%u irq=0x%x clear-last=0x%x clear-polls=%u\n",
            timeout, irq_handler_seen, irq_done, irq_error, irq_last_event,
            irq_last_claim, irq_last_level, irq_clear_last, irq_clear_polls);
@@ -221,38 +222,38 @@ int irq_rearm(void) {
     uint32_t value = irq_done;
     /* 保持原先短路判断及 MMIO 读取顺序；每条失败日志只用已读到的值。 */
     if (value != 1U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=not-done done=%u status=0x%x\n",
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=not-done done=%u status=0x%x\n",
                value, status);
         return 1;
     }
     value = irq_error;
     if (value != 0U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=handler-error error=%u status=0x%x\n",
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=handler-error error=%u status=0x%x\n",
                value, status);
         return 1;
     }
     value = csr_read(CSR_IRQ);
     if ((value & IRQ_LEVEL) != 0U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=level-not-cleared irq=0x%x status=0x%x\n",
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=level-not-cleared irq=0x%x status=0x%x\n",
                value, status);
         return 1;
     }
     value = csr_read(CSR_FAULT);
     if ((value & FAULT_VALID) != 0U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=fault-valid fault=0x%x status=0x%x\n",
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=fault-valid fault=0x%x status=0x%x\n",
                value, status);
         return 1;
     }
     if ((status & STATUS_VALID) == 0U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=window-invalid status=0x%x\n", status);
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=window-invalid status=0x%x\n", status);
         return 1;
     }
     if ((status & STATUS_BUSY) != 0U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=busy status=0x%x\n", status);
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=busy status=0x%x\n", status);
         return 1;
     }
     if ((status & STATUS_FAULT) != 0U) {
-        printf("[HPU][IRQ][FAIL] phase=rearm reason=status-fault status=0x%x\n", status);
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=rearm reason=status-fault status=0x%x\n", status);
         return 1;
     }
     irq_done = 0U;

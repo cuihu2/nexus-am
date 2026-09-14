@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_APP_001\n");
-    printf("需确认应用为真实密文/FHE 还是模多项式，并提供对应接口/密钥/输入/精度/golden；当前两项均未实现。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_APP_001\n");
+    LOG_ERROR("需确认应用为真实密文/FHE 还是模多项式，并提供对应接口/密钥/输入/精度/golden；当前两项均未实现。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

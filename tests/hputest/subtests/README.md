@@ -2,7 +2,10 @@
 
 这里单独维护可并行的子项清单，不替换原九个完整用例，也不复制 37 份 C 源码。每个子项引用原 `src/03_compute_instructions/` 中的源文件，在构建时固化 `subcase=N`，生成一个独立 ELF/BIN。仿真时直接装载对应文件，无须再给仿真器传子项选择参数。
 
-新的下载包名称为 `nexus-am-hpu-subtests`。本地交付目录为 `build/subtests/release/03_compute_instructions/`，每个 `subtest_id` 对应同名 `.elf`、`.bin`、`.txt`（反汇编）。原常规包和全量 UART 诊断包保持不变；子项包默认使用常规摘要输出，仍保留阶段日志、错误项和自检。
+新的下载包名称为 `nexus-am-hpu-subtests`。本地交付目录为 `build/subtests/release/03_compute_instructions/`，每个 `subtest_id` 对应同名 `.elf`、`.bin`、`.txt`（反汇编）。子项包当前默认minimal，仅保留必要事件/错误和完整自检，不打印每轮阶段。
+
+无需printf时下载`nexus-am-hpu-silent-subtests`；本地`make silent-subtests`生成同样37项的静默版本，
+输出`build/silent-subtests/release`，同样可并行/绑核。静默不是直接返回成功，仍检查全部数据与guard。
 
 ## 构建与下载
 

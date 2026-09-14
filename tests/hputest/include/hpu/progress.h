@@ -5,7 +5,8 @@
  * 每个 main 最开始调用一次，且必须在 irq_open/_cte_init 降到 S 模式之前。
  * 空 mainargs 或 all 运行完整用例；subcase=N 只运行编号 N 的子场景。
  * 返回 1 表示参数无效，调用者应返回 case_fail，不能把未运行视为通过。
- * 此接口只允许 S 模式读取 cycle，不开启计时器或任何中断。
+ * 仅 HPU_LOG_LEVEL=2 时设置 cycle 访问并计时，不开启计时器或任何中断；
+ * 默认最小日志及静默版本只解析子项选择，不读 cycle、不写 mcounteren。
  */
 int progress_begin(const char *case_id, unsigned subcases);
 

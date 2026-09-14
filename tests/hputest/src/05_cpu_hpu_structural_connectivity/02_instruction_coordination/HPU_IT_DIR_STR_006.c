@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -15,7 +16,7 @@ static int failure(unsigned line, const char *phase) {
     const uint32_t fault = csr_read(CSR_FAULT);
     const uint32_t irq = csr_read(CSR_IRQ);
 
-    printf("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
+    LOG_ERROR("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
            phase, status, fault, irq);
     return case_fail(__FILE__, line);
 }
@@ -30,9 +31,9 @@ int main(void) {
     case_start(__FILE__);
     (void)result_context(__FILE__, 0U);
 
-    printf("[HPU][STR006][PREPARE] seed=0x%x commands=8 cpu-steps-per-command=128 "
+    LOG_DEBUG("[HPU][STR006][PREPARE] seed=0x%x commands=8 cpu-steps-per-command=128 "
            "expected-final=0x%x mod-line=%u\n", seed, expected_cpu, LINE_MOD);
-    printf("[HPU][STR006][SCOPE] completion/CPU-value/DDR checks only; "
+    LOG_DEBUG("[HPU][STR006][SCOPE] completion/CPU-value/DDR checks only; "
            "queue-full and commit-order require external IT evidence\n");
     if (v2_prepare(0U, MOD_Q0, MOD_Q1) != 0)
         return failure(__LINE__, "prepare");
@@ -61,7 +62,7 @@ int main(void) {
     if (check_status() != 0)
         return failure(__LINE__, "configured-status");
 
-    printf("[HPU][STR006][ISSUE] DLOAD mod -> "
+    LOG_DEBUG("[HPU][STR006][ISSUE] DLOAD mod -> "
            "(PMODLD + 128 CPU xorshift) x8 -> PFREE mod -> terminal PSYNC\n");
     if (dload_mod(LINE_MOD, 1U) != 0)
         return failure(__LINE__, "dload-mod");
@@ -69,7 +70,7 @@ int main(void) {
         uint32_t cpu_value = seed ^ command;
 
         if (pmodld(0U) != 0) {
-            printf("[HPU][STR006][FAIL] phase=pmodld command-index=%u\n", command);
+            LOG_ERROR("[HPU][STR006][FAIL] phase=pmodld command-index=%u\n", command);
             return failure(__LINE__, "pmodld");
         }
         /* uint32_t 运算保留既有模 2^32 语义，循环内部不打印或额外轮询 MMIO。 */
@@ -86,7 +87,7 @@ int main(void) {
     psync();
     rc = wait_irq();
     if (rc != 0) {
-        printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+        LOG_ERROR("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
         return failure(__LINE__, "terminal-psync");
     }
     if (completion_clear() != 0)
@@ -95,10 +96,10 @@ int main(void) {
         return failure(__LINE__, "final-status");
 
     actual_cpu = cpu_sink;
-    printf("[HPU][STR006][CHECK] CPU actual=0x%x expected=0x%x; "
+    LOG_DEBUG("[HPU][STR006][CHECK] CPU actual=0x%x expected=0x%x; "
            "no permitted DDR outputs\n", actual_cpu, expected_cpu);
     if (actual_cpu != expected_cpu) {
-        printf("[HPU][STR006][FAIL] phase=cpu-result actual=0x%x "
+        LOG_ERROR("[HPU][STR006][FAIL] phase=cpu-result actual=0x%x "
                "expected=0x%x seed=0x%x commands=8 steps=128\n",
                actual_cpu, expected_cpu, seed);
         return failure(__LINE__, "cpu-result");
@@ -106,7 +107,7 @@ int main(void) {
     if (v2_check_words("STR006-modulus", LINE_MOD, modulus, WORDS_PER_LINE, 0U) != 0 ||
         v2_check_memory("STR006-readonly-guard") != 0)
         return failure(__LINE__, "data-or-guard");
-    printf("[HPU][STR006][SOFTWARE-PASS] CPU result and memory preserved; "
+    LOG_DEBUG("[HPU][STR006][SOFTWARE-PASS] CPU result and memory preserved; "
            "queue/commit coverage still requires monitor evidence\n");
     return case_pass(__FILE__);
 }

@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/encoding.h>
 #include <hpu/it_v2.h>
 #include <klib.h>
@@ -19,7 +20,7 @@
     OBJECT_CASE(op_, 2, 2, 1)
 
 static int object_error(const char *op, unsigned dst, unsigned a, unsigned b) {
-    printf("[HPU][FAIL][%s] unsupported dst=p%u a=p%u b=p%u; no instruction issued\n",
+    LOG_ERROR("[HPU][FAIL][%s] unsupported dst=p%u a=p%u b=p%u; no instruction issued\n",
            op, dst, a, b);
     return 1;
 }
@@ -61,7 +62,7 @@ int op_mac(unsigned dst, unsigned a, unsigned b) {
     IMMEDIATE_CASE(op_, dst_, 255)
 
 static int immediate_error(const char *op, unsigned dst, unsigned a, unsigned imm) {
-    printf("[HPU][FAIL][%s] unsupported dst=p%u a=p%u imm=%u; no instruction issued\n",
+    LOG_ERROR("[HPU][FAIL][%s] unsupported dst=p%u a=p%u imm=%u; no instruction issued\n",
            op, dst, a, imm);
     return 1;
 }
@@ -93,7 +94,7 @@ int op_mac_imm(unsigned dst, unsigned a, unsigned imm) {
 
 static int stage_error(const char *op, unsigned dst, unsigned src,
                        unsigned twiddle, unsigned stage) {
-    printf("[HPU][FAIL][%s] unsupported dst=p%u src=p%u twiddle=p%u stage=%u; "
+    LOG_ERROR("[HPU][FAIL][%s] unsupported dst=p%u src=p%u twiddle=p%u stage=%u; "
            "no instruction issued\n", op, dst, src, twiddle, stage);
     return 1;
 }

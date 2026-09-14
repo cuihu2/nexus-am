@@ -1,5 +1,5 @@
 #include <hpu/progress.h>
-#include <klib.h>
+#include <hpu/log.h>
 #include <limits.h>
 #include <stdint.h>
 
@@ -16,8 +16,10 @@ static unsigned total_subcases;
 static unsigned selected_subcase;
 static int selected_all;
 static int started;
+#if HPU_LOG_LEVEL == 2
 static uint64_t previous_cycle;
 static const char *previous_phase;
+#endif
 
 static const char *mainargs(void) {
 #ifdef HPU_PROGRESS_HOST_TEST
@@ -27,6 +29,7 @@ static const char *mainargs(void) {
 #endif
 }
 
+#if HPU_LOG_LEVEL == 2
 static void enable_cycle(void) {
 #ifdef HPU_PROGRESS_HOST_TEST
     progress_host_enable_cycle();
@@ -46,6 +49,7 @@ static uint64_t read_cycle(void) {
     return cycle;
 #endif
 }
+#endif
 
 static int parse_selection(const char *argument, unsigned count) {
     static const char prefix[] = "subcase=";
@@ -80,30 +84,32 @@ int progress_begin(const char *case_id, unsigned subcases) {
 
     /* 防止后续已进入 S 模式时重复写 M CSR。初始化只允许调用一次。 */
     if (started) {
-        printf("[HPU][PROGRESS][FAIL] reason=already-started\n");
+        LOG_ERROR("[HPU][PROGRESS][FAIL] reason=already-started\n");
         return 1;
     }
     if (case_id == NULL || case_id[0] == '\0' ||
         parse_selection(argument, subcases) != 0) {
-        printf("[HPU][PROGRESS][FAIL] reason=invalid-mainargs args=%s "
+        LOG_ERROR("[HPU][PROGRESS][FAIL] reason=invalid-mainargs args=%s "
                "subcases=%u expected=all-or-subcase=N valid_N=0..count-1\n",
                argument != NULL ? argument : "(null)", subcases);
         return 1;
     }
-    enable_cycle();
     total_subcases = subcases;
+#if HPU_LOG_LEVEL == 2
+    enable_cycle();
     if (selected_all) {
-        printf("[HPU][PROGRESS] case=%s selection=all subcases=%u coverage=full\n",
+        LOG_DEBUG("[HPU][PROGRESS] case=%s selection=all subcases=%u coverage=full\n",
                case_id, subcases);
     } else {
-        printf("[HPU][PROGRESS] case=%s selection=subcase=%u subcases=%u "
+        LOG_DEBUG("[HPU][PROGRESS] case=%s selection=subcase=%u subcases=%u "
                "coverage=selected-subset-not-full\n",
                case_id, selected_subcase, subcases);
     }
-    printf("[HPU][PROGRESS] timing=CPU-phase-cycles not=HPU-pure-compute "
+    LOG_DEBUG("[HPU][PROGRESS] timing=CPU-phase-cycles not=HPU-pure-compute "
            "phase-log-print-excluded=1 other-UART-inside-phase-included=1\n");
     previous_phase = "begin";
     previous_cycle = read_cycle();
+#endif
     started = 1;
     return 0;
 }
@@ -115,14 +121,16 @@ int subcase_selected(unsigned index) {
 
 void phase_mark(const char *phase) {
     if (!started || phase == NULL || phase[0] == '\0') {
-        printf("[HPU][PHASE][FAIL] reason=invalid-phase-or-not-started\n");
+        LOG_ERROR("[HPU][PHASE][FAIL] reason=invalid-phase-or-not-started\n");
         return;
     }
+#if HPU_LOG_LEVEL == 2
     const uint64_t now = read_cycle();
-    printf("[HPU][PHASE] current=%s cycle=%lu previous=%s cpu_elapsed=%lu\n",
+    LOG_DEBUG("[HPU][PHASE] current=%s cycle=%lu previous=%s cpu_elapsed=%lu\n",
            phase, (unsigned long)now, previous_phase,
            (unsigned long)(now - previous_cycle));
     previous_phase = phase;
     /* 不把本条 phase 日志的 UART 阻塞时间归入下一计算阶段。 */
     previous_cycle = read_cycle();
+#endif
 }

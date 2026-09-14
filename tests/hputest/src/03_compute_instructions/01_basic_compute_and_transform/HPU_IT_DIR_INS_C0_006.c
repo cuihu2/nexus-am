@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -33,11 +34,11 @@ int main(void) {
             const uint32_t *input;
             int rc;
 
-            printf("[HPU][PINTT][ROUND] profile=%u stage=%u q=%u src=p%u "
+            LOG_DEBUG("[HPU][PINTT][ROUND] profile=%u stage=%u q=%u src=p%u "
                    "twiddle=p%u dst=p%u data_words=%u twiddle_words=%u\n",
                    profile, stage, STAGE_MODULUS, data_obj, twiddle_obj, output_obj,
                    POLY_WORDS, STAGE_WORDS);
-            printf("[HPU][PINTT][LAYOUT] index=physical-word loader_forward_stage=%u "
+            LOG_DEBUG("[HPU][PINTT][LAYOUT] index=physical-word loader_forward_stage=%u "
                    "twiddle=lazy-scale-batch-lane order=P-inverse-then-butterfly\n", 11U - stage);
             if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
                 return case_fail(__FILE__, __LINE__);
@@ -55,7 +56,7 @@ int main(void) {
                              STAGE_MODULUS, stage, 1U) != 0)
                 return case_fail(__FILE__, __LINE__);
 
-            printf("[HPU][PINTT][CONFIG] base=0x%lx window_lines=%u "
+            LOG_DEBUG("[HPU][PINTT][CONFIG] base=0x%lx window_lines=%u "
                    "input_line=%u twiddle_line=%u output_line=%u\n",
                    (unsigned long)MEM_BASE, WINDOW_LINES, LINE_A, LINE_TWIDDLE, LINE_OUT);
             phase_mark("configure");
@@ -78,7 +79,7 @@ int main(void) {
             if (wait_window(1) != 0 || check_status() != 0)
                 return case_fail(__FILE__, __LINE__);
 
-            printf("[HPU][PINTT][ISSUE] mod -> data -> inverse-twiddle -> stage=%u -> "
+            LOG_DEBUG("[HPU][PINTT][ISSUE] mod -> data -> inverse-twiddle -> stage=%u -> "
                    "DSTORE -> release twiddle/mod -> terminal PSYNC\n", stage);
             phase_mark("issue");
             if (dload_mod(LINE_MOD, 1U) != 0)
@@ -104,13 +105,13 @@ int main(void) {
             phase_mark("wait-completion");
             rc = wait_irq();
             if (rc != 0) {
-                printf("[HPU][PINTT][FAIL] phase=terminal-psync profile=%u stage=%u rc=%d\n",
+                LOG_ERROR("[HPU][PINTT][FAIL] phase=terminal-psync profile=%u stage=%u rc=%d\n",
                        profile, stage, rc);
                 return case_fail(__FILE__, __LINE__);
             }
             rc = completion_clear();
             if (rc != 0) {
-                printf("[HPU][PINTT][FAIL] phase=clear-completion stage=%u rc=%d\n", stage, rc);
+                LOG_ERROR("[HPU][PINTT][FAIL] phase=clear-completion stage=%u rc=%d\n", stage, rc);
                 return case_fail(__FILE__, __LINE__);
             }
             if (check_status() != 0)
@@ -123,7 +124,7 @@ int main(void) {
             if (data_rc != 0 || guard_rc != 0)
                 return case_fail(__FILE__, __LINE__);
             phase_mark("round-done");
-            printf("[HPU][PINTT][ROUND-PASS] profile=%u stage=%u compared=%u "
+            LOG_DEBUG("[HPU][PINTT][ROUND-PASS] profile=%u stage=%u compared=%u "
                    "readonly-and-guard=pass\n", profile, stage, POLY_WORDS);
         }
     }

@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/bconv_case.h>
 #include <hpu/completion.h>
 #include <hpu/result.h>
@@ -19,14 +20,14 @@ int main(void) {
     if (progress_begin(__FILE__, 1U) != 0)
         return case_fail(__FILE__, __LINE__);
     phase_mark("prepare");
-    printf("[HPU][BCONV][SCOPE] Q4->P3 N4096 basic; "
+    LOG_DEBUG("[HPU][BCONV][SCOPE] Q4->P3 N4096 basic; "
            "P->Q/boundary/other-sizes NOT_COVERED\n");
     if (bconv_prepare() != 0)
         return case_fail(__FILE__, __LINE__);
     for (unsigned basis = 0U; basis < BCONV_Q_COUNT + BCONV_P_COUNT; ++basis)
-        printf("[HPU][BCONV][MOD] context=%u modulus=%u\n", basis, bconv_moduli[basis]);
+        LOG_DEBUG("[HPU][BCONV][MOD] context=%u modulus=%u\n", basis, bconv_moduli[basis]);
     for (unsigned dma = 0U; dma < HPU_PROGRAM_BCONV_DMA_COUNT; ++dma)
-        printf("[HPU][BCONV][DMA-PLAN] dma=%u op=%s line=%u count=%u\n", dma,
+        LOG_DEBUG("[HPU][BCONV][DMA-PLAN] dma=%u op=%s line=%u count=%u\n", dma,
                bconv_dma_objects[dma], bconv_spans[dma].line_offset, bconv_spans[dma].line_count);
 
     /* BASE/SIZE/COMMIT 逐寄存器可见；2048line容纳Q4/P3常量、scratch和尾部guard。 */
@@ -50,24 +51,24 @@ int main(void) {
     if (wait_window(1) != 0 || check_status() != 0)
         return case_fail(__FILE__, __LINE__);
 
-    printf("[HPU][BCONV][ISSUE] load mod p4 -> Q0..3 normalized PMUL p0 "
+    LOG_DEBUG("[HPU][BCONV][ISSUE] load mod p4 -> Q0..3 normalized PMUL p0 "
            "-> P0..2 PMUL/PMAC p2 -> DSTORE outputs -> PFREE mod -> terminal PSYNC\n");
     phase_mark("issue");
     rc = hpu_program_bconv(bconv_spans, HPU_PROGRAM_BCONV_DMA_COUNT);
     if (rc != 0) {
-        printf("[HPU][BCONV][FAIL] phase=producer-program rc=%d\n", rc);
+        LOG_ERROR("[HPU][BCONV][FAIL] phase=producer-program rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     /* producer 已发出唯一末尾PSYNC；MMIO等待只观察完成，不额外发令。 */
     phase_mark("wait-completion");
     rc = wait_irq();
     if (rc != 0) {
-        printf("[HPU][BCONV][FAIL] phase=terminal-psync rc=%d\n", rc);
+        LOG_ERROR("[HPU][BCONV][FAIL] phase=terminal-psync rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     rc = completion_clear();
     if (rc != 0) {
-        printf("[HPU][BCONV][FAIL] phase=clear-completion rc=%d\n", rc);
+        LOG_ERROR("[HPU][BCONV][FAIL] phase=clear-completion rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     if (check_status() != 0)

@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_CMB_009\n");
-    printf("未指定算法库仓库/版本/API/密文参数。逐系数 PADD 不是 HADD 接口验收；PADD 已由 INS_C0_001 验证。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_009\n");
+    LOG_ERROR("未指定算法库仓库/版本/API/密文参数。逐系数 PADD 不是 HADD 接口验收；PADD 已由 INS_C0_001 验证。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

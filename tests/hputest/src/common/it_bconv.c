@@ -1,10 +1,11 @@
+#include <hpu/log.h>
 #include <hpu/bconv_case.h>
 #include <hpu/result.h>
 #include <hpu/report.h>
 
 int bconv_prepare(void) {
     volatile uint32_t *memory = ddr_line(0U);
-    printf("[HPU][BCONV][PREPARE] N=%u Q=%u P=%u window_lines=%u "
+    LOG_DEBUG("[HPU][BCONV][PREPARE] N=%u Q=%u P=%u window_lines=%u "
            "normalized_line=%u output_line=%u mod_line=%u "
            "layout=coefficient-bit-reversed\n", BCONV_N,
            BCONV_Q_COUNT, BCONV_P_COUNT, BCONV_LINES, BCONV_NORMALIZED, BCONV_OUTPUT, BCONV_MOD);
@@ -25,13 +26,13 @@ int bconv_check_memory(void) {
         if (word >= writable_first && word < writable_end) continue;
         uint32_t actual = memory[word];
         if (actual != bconv_window[word]) {
-            printf("[HPU][BCONV][FAIL] phase=readonly-guard word=%u line=%u lane=%u "
+            LOG_ERROR("[HPU][BCONV][FAIL] phase=readonly-guard word=%u line=%u lane=%u "
                    "actual=0x%x expected=0x%x\n", word, word / WORDS_PER_LINE,
                    word % WORDS_PER_LINE, actual, bconv_window[word]);
             return 1;
         }
     }
-    printf("[HPU][BCONV][MEMORY-PASS] readonly_guard_words=%u\n",
+    LOG_DEBUG("[HPU][BCONV][MEMORY-PASS] readonly_guard_words=%u\n",
            BCONV_WORDS - (writable_end - writable_first));
     return 0;
 }
@@ -48,7 +49,7 @@ int bconv_check_results(const uint32_t *moduli) {
         volatile const uint32_t *actual_words = ddr_line(line);
         invalidate_lines(line, 64U);
         /* UART 的 index 是当前分量的物理下标 p，对应自然多项式下标 bit_reverse_12(p)。 */
-        printf("[HPU][BCONV][BASIS] phase=%s basis=%u words=%u q=%u line=%u "
+        LOG_DEBUG("[HPU][BCONV][BASIS] phase=%s basis=%u words=%u q=%u line=%u "
                "index=physical logical_index=bit_reverse_12(index)\n",
                phase, output_basis, BCONV_N, moduli[basis], line);
         /* 任一分量失败也继续导出后续分量，但最终仍失败。 */

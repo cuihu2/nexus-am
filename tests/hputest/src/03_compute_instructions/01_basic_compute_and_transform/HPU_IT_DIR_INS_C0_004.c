@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -32,13 +33,13 @@ int main(void) {
         const uint32_t *b;
         int rc;
 
-        printf("[HPU][PMAC][ROUND] variant=%u profile=%u dst=p%u "
+        LOG_DEBUG("[HPU][PMAC][ROUND] variant=%u profile=%u dst=p%u "
                "accumulator=%s mode=%s repeats=%u words=%u q=%u\n",
                variant, profile, dst, alias_source ? "input-A" : "constant",
                immediate_mode ? "immediate" : "object", repeats,
                POLY_WORDS, MOD_Q0);
-        if (!alias_source) printf("[HPU][PMAC][PARAM] initial=%u\n", initial);
-        if (immediate_mode) printf("[HPU][PMAC][PARAM] immediate=255\n");
+        if (!alias_source) LOG_DEBUG("[HPU][PMAC][PARAM] initial=%u\n", initial);
+        if (immediate_mode) LOG_DEBUG("[HPU][PMAC][PARAM] immediate=255\n");
         if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
             return case_fail(__FILE__, __LINE__);
         if (v2_fill(LINE_SCRATCH, initial, POLY_WORDS) != 0)
@@ -78,7 +79,7 @@ int main(void) {
         if (wait_window(1) != 0 || check_status() != 0)
             return case_fail(__FILE__, __LINE__);
 
-        printf("[HPU][PMAC][ISSUE] mod -> A/B/accumulator DLOAD -> "
+        LOG_DEBUG("[HPU][PMAC][ISSUE] mod -> A/B/accumulator DLOAD -> "
                "PMAC -> DSTORE line=%u count=%u -> PFREE inputs -> PSYNC\n",
                LINE_OUT, POLY_LINES);
         phase_mark("issue");
@@ -94,7 +95,7 @@ int main(void) {
             rc = immediate_mode ? op_mac_imm(dst, P0, 255U) :
                 op_mac(dst, P0, P1);
             if (rc != 0) {
-                printf("[HPU][PMAC][FAIL] phase=issue index=%u rc=%d\n",
+                LOG_ERROR("[HPU][PMAC][FAIL] phase=issue index=%u rc=%d\n",
                        issued, rc);
                 return case_fail(__FILE__, __LINE__);
             }
@@ -109,12 +110,12 @@ int main(void) {
         phase_mark("wait-completion");
         rc = wait_irq();
         if (rc != 0) {
-            printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+            LOG_ERROR("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
             return case_fail(__FILE__, __LINE__);
         }
         rc = completion_clear();
         if (rc != 0) {
-            printf("[HPU][FAIL] phase=clear-completion rc=%d\n", rc);
+            LOG_ERROR("[HPU][FAIL] phase=clear-completion rc=%d\n", rc);
             return case_fail(__FILE__, __LINE__);
         }
         if (check_status() != 0)
@@ -126,7 +127,7 @@ int main(void) {
         if (data_rc != 0 || guard_rc != 0)
             return case_fail(__FILE__, __LINE__);
         phase_mark("round-done");
-        printf("[HPU][PMAC][ROUND-PASS] variant=%u compared=%u "
+        LOG_DEBUG("[HPU][PMAC][ROUND-PASS] variant=%u compared=%u "
                "readonly-and-guard=pass\n", variant, POLY_WORDS);
     }
     return case_pass(__FILE__);

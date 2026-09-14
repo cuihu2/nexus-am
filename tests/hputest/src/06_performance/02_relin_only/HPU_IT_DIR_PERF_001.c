@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_PERF_001\n");
-    printf("缺匹配的 CPU/HPU RelinOnly 实现、评估数据、统一纯计算计时边界与重复轮数。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_PERF_001\n");
+    LOG_ERROR("缺匹配的 CPU/HPU RelinOnly 实现、评估数据、统一纯计算计时边界与重复轮数。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

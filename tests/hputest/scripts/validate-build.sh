@@ -227,11 +227,13 @@ manifest_fhe=$(manifest_value fhe_count)
 manifest_not_qualified=$(manifest_value not_qualified_count)
 manifest_uart=$(manifest_value uart_results)
 manifest_dump=$(manifest_value hpu_dump_results)
-if [[ $manifest_uart:$manifest_dump != brief:0 && $manifest_uart:$manifest_dump != full:1 ]]; then
-  printf 'ERROR: inconsistent UART result mode in MANIFEST\n' >&2
-  exit 2
-fi
-if [[ $manifest_selection == diagnostic && $manifest_uart != full ]]; then
+manifest_log_level=$(manifest_value log_level)
+manifest_log_mode=$(manifest_value log_mode)
+case "$manifest_log_level:$manifest_log_mode:$manifest_uart:$manifest_dump" in
+  0:silent:none:0|1:minimal:brief:0|2:verbose:brief:0|2:verbose:full:1) ;;
+  *) printf 'ERROR: inconsistent log/UART result mode in MANIFEST\n' >&2; exit 2 ;;
+esac
+if [[ $manifest_selection == diagnostic && $manifest_log_level:$manifest_dump != 2:1 ]]; then
   printf 'ERROR: diagnostic selection requires full UART results\n' >&2
   exit 2
 fi
@@ -875,6 +877,9 @@ for elf in "${elfs[@]}"; do
   ) > "$rebuilt_txt"
   cmp "$txt" "$rebuilt_txt"
   reject_old_hpu_opcode "$txt"
+  if [[ $manifest_log_level == 0 ]]; then
+    python3 "$script_dir/verify-silent-elf.py" --elf "$elf" --cross-compile "$cross_compile"
+  fi
 
   if [[ $qualifier == blocked-not-issued ]]; then
     reject_generated_hpu_words "$txt"

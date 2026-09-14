@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/irq.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -32,7 +33,7 @@ int main(void) {
             unsigned polls;
             int rc;
 
-            printf("[HPU][PSYNC][ROUND] scenario=%s round=%u profile=%u "
+            LOG_DEBUG("[HPU][PSYNC][ROUND] scenario=%s round=%u profile=%u "
                    "completion=PLIC-source-257 words=%u\n",
                    names[scenario], round, round, POLY_WORDS);
             if (v2_prepare(round, MOD_Q0, MOD_Q1) != 0)
@@ -73,13 +74,13 @@ int main(void) {
             rc = round == 0U ? irq_open() : irq_rearm();
             if (rc != 0) {
                 irq_close();
-                printf("[HPU][PSYNC][FAIL] phase=%s scenario=%s round=%u rc=%d\n",
+                LOG_ERROR("[HPU][PSYNC][FAIL] phase=%s scenario=%s round=%u rc=%d\n",
                        round == 0U ? "irq-open" : "irq-rearm",
                        names[scenario], round, rc);
                 return case_fail(__FILE__, __LINE__);
             }
 
-            printf("[HPU][PSYNC][ISSUE] scenario=%s round=%u "
+            LOG_DEBUG("[HPU][PSYNC][ISSUE] scenario=%s round=%u "
                    "terminal-PSYNC-count=1; no polling/printing inside command burst\n",
                    names[scenario], round);
             phase_mark("issue");
@@ -88,7 +89,7 @@ int main(void) {
                 if (dload(P0, LINE_A, POLY_LINES) != 0 ||
                     dstore_release(P0, LINE_OUT, POLY_LINES) != 0) {
                     irq_close();
-                    printf("[HPU][PSYNC][FAIL] phase=issue-dma\n");
+                    LOG_ERROR("[HPU][PSYNC][FAIL] phase=issue-dma\n");
                     return case_fail(__FILE__, __LINE__);
                 }
             } else if (scenario == 2U) {
@@ -100,7 +101,7 @@ int main(void) {
                     dstore_release(P2, LINE_OUT, POLY_LINES) != 0 ||
                     pfree(P0) != 0 || pfree(P1) != 0 || pfree(P4) != 0) {
                     irq_close();
-                    printf("[HPU][PSYNC][FAIL] phase=issue-compute\n");
+                    LOG_ERROR("[HPU][PSYNC][FAIL] phase=issue-compute\n");
                     return case_fail(__FILE__, __LINE__);
                 }
             }
@@ -109,7 +110,7 @@ int main(void) {
             rc = irq_wait();
             if (rc != 0) {
                 irq_close();
-                printf("[HPU][PSYNC][FAIL] phase=irq-wait scenario=%s "
+                LOG_ERROR("[HPU][PSYNC][FAIL] phase=irq-wait scenario=%s "
                        "round=%u rc=%d\n", names[scenario], round, rc);
                 return case_fail(__FILE__, __LINE__);
             }
@@ -121,7 +122,7 @@ int main(void) {
                 if ((status & STATUS_FAULT) != 0U ||
                     (fault & FAULT_VALID) != 0U) {
                     irq_close();
-                    printf("[HPU][PSYNC][FAIL] phase=final-status "
+                    LOG_ERROR("[HPU][PSYNC][FAIL] phase=final-status "
                            "status=0x%x fault=0x%x polls=%u\n", status, fault, polls);
                     return case_fail(__FILE__, __LINE__);
                 }
@@ -130,14 +131,14 @@ int main(void) {
             }
             if (polls == TIMEOUT) {
                 irq_close();
-                printf("[HPU][PSYNC][FAIL] phase=idle-timeout "
+                LOG_ERROR("[HPU][PSYNC][FAIL] phase=idle-timeout "
                        "status=0x%x fault=0x%x polls=%u\n", status, fault, polls);
                 return case_fail(__FILE__, __LINE__);
             }
             level = csr_read(CSR_IRQ);
             if ((level & IRQ_LEVEL) != 0U) {
                 irq_close();
-                printf("[HPU][PSYNC][FAIL] phase=isr-clear irq=0x%x expected=0\n",
+                LOG_ERROR("[HPU][PSYNC][FAIL] phase=isr-clear irq=0x%x expected=0\n",
                        level);
                 return case_fail(__FILE__, __LINE__);
             }
@@ -148,12 +149,12 @@ int main(void) {
             rc |= v2_check_memory("PSYNC-readonly-and-guard");
             if (rc != 0) {
                 irq_close();
-                printf("[HPU][PSYNC][FAIL] phase=data-check scenario=%s round=%u rc=%d\n",
+                LOG_ERROR("[HPU][PSYNC][FAIL] phase=data-check scenario=%s round=%u rc=%d\n",
                        names[scenario], round, rc);
                 return case_fail(__FILE__, __LINE__);
             }
             phase_mark("round-done");
-            printf("[HPU][PSYNC][ROUND-PASS] scenario=%s round=%u "
+            LOG_DEBUG("[HPU][PSYNC][ROUND-PASS] scenario=%s round=%u "
                    "irq-cleared=1 status=0x%x readonly-and-guard=pass\n",
                    names[scenario], round, status);
         }

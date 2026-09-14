@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/result.h>
 #include <hpu/report.h>
@@ -20,7 +21,7 @@ int main(void) {
     if (progress_begin(__FILE__, 1U) != 0)
         return case_fail(__FILE__, __LINE__);
     phase_mark("prepare");
-    printf("[HPU][NTT][CONFIG] N=%u q=%u stages=12 data=p0 scratch=p3 twiddle=p1 mod=p2 "
+    LOG_DEBUG("[HPU][NTT][CONFIG] N=%u q=%u stages=12 data=p0 scratch=p3 twiddle=p1 mod=p2 "
            "input=bit-reversed-coefficient output=P-network-NTT\n", TRANSFORM_N, TRANSFORM_Q);
     if (transform_prepare(transform_ntt_image) != 0)
         return case_fail(__FILE__, __LINE__);
@@ -47,25 +48,25 @@ int main(void) {
     if (wait_window(1) != 0 || check_status() != 0)
         return case_fail(__FILE__, __LINE__);
 
-    printf("[HPU][NTT][ISSUE] mod/input -> PMUL pre-twist -> "
+    LOG_DEBUG("[HPU][NTT][ISSUE] mod/input -> PMUL pre-twist -> "
            "PNTT stage0..11(p0/p3 ping-pong, PFREE src/twiddle) -> DSTORE -> PFREE mod -> PSYNC\n");
     /* 函数末尾已包含唯一 PSYNC；这里不再额外发送。 */
     phase_mark("issue");
     rc = hpu_program_ntt(transform_ntt_spans, HPU_PROGRAM_NTT_DMA_COUNT);
     if (rc != 0) {
-        printf("[HPU][NTT][FAIL] phase=producer-program rc=%d\n", rc);
+        LOG_ERROR("[HPU][NTT][FAIL] phase=producer-program rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
-    printf("[HPU][NTT][WAIT] terminal-psync issued; wait IRQ and not-busy\n");
+    LOG_DEBUG("[HPU][NTT][WAIT] terminal-psync issued; wait IRQ and not-busy\n");
     phase_mark("wait-completion");
     rc = wait_irq();
     if (rc != 0) {
-        printf("[HPU][NTT][FAIL] phase=terminal-psync rc=%d\n", rc);
+        LOG_ERROR("[HPU][NTT][FAIL] phase=terminal-psync rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     rc = completion_clear();
     if (rc != 0) {
-        printf("[HPU][NTT][FAIL] phase=clear-completion rc=%d\n", rc);
+        LOG_ERROR("[HPU][NTT][FAIL] phase=clear-completion rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     if (check_status() != 0)

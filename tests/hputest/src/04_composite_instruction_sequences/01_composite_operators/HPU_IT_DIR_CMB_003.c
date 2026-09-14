@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/result.h>
 #include <hpu/report.h>
@@ -19,7 +20,7 @@ int main(void) {
     if (progress_begin(__FILE__, 1U) != 0)
         return case_fail(__FILE__, __LINE__);
     phase_mark("prepare");
-    printf("[HPU][INTT][CONFIG] N=%u q=%u stages=12 data=p0 scratch=p3 twiddle=p1 mod=p2 "
+    LOG_DEBUG("[HPU][INTT][CONFIG] N=%u q=%u stages=12 data=p0 scratch=p3 twiddle=p1 mod=p2 "
            "input=P-network-NTT output=bit-reversed-coefficient\n", TRANSFORM_N, TRANSFORM_Q);
     if (transform_prepare(transform_intt_image) != 0)
         return case_fail(__FILE__, __LINE__);
@@ -46,25 +47,25 @@ int main(void) {
     if (wait_window(1) != 0 || check_status() != 0)
         return case_fail(__FILE__, __LINE__);
 
-    printf("[HPU][INTT][ISSUE] mod/input -> PINTT stage0..11(p0/p3 ping-pong, PFREE src/twiddle) "
+    LOG_DEBUG("[HPU][INTT][ISSUE] mod/input -> PINTT stage0..11(p0/p3 ping-pong, PFREE src/twiddle) "
            "-> PMUL post-untwist-scale -> DSTORE -> PFREE mod -> PSYNC\n");
     /* 16次DMA和全部指令保持上游顺序，只有producer末尾的一条PSYNC。 */
     phase_mark("issue");
     rc = hpu_program_intt(transform_intt_spans, HPU_PROGRAM_INTT_DMA_COUNT);
     if (rc != 0) {
-        printf("[HPU][INTT][FAIL] phase=producer-program rc=%d\n", rc);
+        LOG_ERROR("[HPU][INTT][FAIL] phase=producer-program rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
-    printf("[HPU][INTT][WAIT] terminal-psync issued; wait IRQ and not-busy\n");
+    LOG_DEBUG("[HPU][INTT][WAIT] terminal-psync issued; wait IRQ and not-busy\n");
     phase_mark("wait-completion");
     rc = wait_irq();
     if (rc != 0) {
-        printf("[HPU][INTT][FAIL] phase=terminal-psync rc=%d\n", rc);
+        LOG_ERROR("[HPU][INTT][FAIL] phase=terminal-psync rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     rc = completion_clear();
     if (rc != 0) {
-        printf("[HPU][INTT][FAIL] phase=clear-completion rc=%d\n", rc);
+        LOG_ERROR("[HPU][INTT][FAIL] phase=clear-completion rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     if (check_status() != 0)

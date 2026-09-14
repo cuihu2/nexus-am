@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 
 /*
@@ -8,9 +9,9 @@
  */
 int main(void) {
     case_start(__FILE__);
-    printf("[HPU][BLOCKED] HPU_IT_DIR_PERF_002\n");
-    printf("功能实现见 CMB_002；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。\n");
-    printf("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_PERF_002\n");
+    LOG_ERROR("功能实现见 CMB_002；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。\n");
+    LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);
     return 1;
 }

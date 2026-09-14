@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -28,7 +29,7 @@ int main(void) {
         unsigned distinguishing = 0U;
         int rc;
 
-        printf("[HPU][PMODLD][ROUND] profile=%u context=0/6/0 "
+        LOG_DEBUG("[HPU][PMODLD][ROUND] profile=%u context=0/6/0 "
                "q=%u/%u/%u words=%u\n",
                profile, MOD_Q0, MOD_Q1, MOD_Q0, POLY_WORDS);
         if (v2_prepare(profile, MOD_Q0, MOD_Q1) != 0)
@@ -41,10 +42,10 @@ int main(void) {
             if (product % MOD_Q0 != product % MOD_Q1) ++distinguishing;
         }
         if (distinguishing == 0U) {
-            printf("[HPU][PMODLD][FAIL] phase=fixture reason=no-distinguishing-result\n");
+            LOG_ERROR("[HPU][PMODLD][FAIL] phase=fixture reason=no-distinguishing-result\n");
             return case_fail(__FILE__, __LINE__);
         }
-        printf("[HPU][PMODLD][DATA] distinguishing-coefficients=%u "
+        LOG_DEBUG("[HPU][PMODLD][DATA] distinguishing-coefficients=%u "
                "output-lines=%u/%u/%u\n", distinguishing,
                outputs[0], outputs[1], outputs[2]);
         for (unsigned step = 0U; step < 3U; ++step) {
@@ -73,7 +74,7 @@ int main(void) {
         if (wait_window(1) != 0 || check_status() != 0)
             return case_fail(__FILE__, __LINE__);
 
-        printf("[HPU][PMODLD][ISSUE] mod/A/B DLOAD -> "
+        LOG_DEBUG("[HPU][PMODLD][ISSUE] mod/A/B DLOAD -> "
                "(PMODLD -> PMUL -> DSTORE) x3 -> PFREE inputs -> PSYNC\n");
         phase_mark("issue");
         if (dload_mod(LINE_MOD, 1U) != 0 ||
@@ -84,7 +85,7 @@ int main(void) {
             if (pmodld(contexts[step]) != 0 ||
                 op_mul(P2, P0, P1) != 0 ||
                 dstore_release(P2, outputs[step], POLY_LINES) != 0) {
-                printf("[HPU][PMODLD][FAIL] phase=issue step=%u "
+                LOG_ERROR("[HPU][PMODLD][FAIL] phase=issue step=%u "
                        "context=%u output-line=%u\n",
                        step, contexts[step], outputs[step]);
                 return case_fail(__FILE__, __LINE__);
@@ -97,12 +98,12 @@ int main(void) {
         phase_mark("wait-completion");
         rc = wait_irq();
         if (rc != 0) {
-            printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+            LOG_ERROR("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
             return case_fail(__FILE__, __LINE__);
         }
         rc = completion_clear();
         if (rc != 0) {
-            printf("[HPU][FAIL] phase=clear-completion rc=%d\n", rc);
+            LOG_ERROR("[HPU][FAIL] phase=clear-completion rc=%d\n", rc);
             return case_fail(__FILE__, __LINE__);
         }
         if (check_status() != 0)
@@ -114,7 +115,7 @@ int main(void) {
             for (unsigned word = 0U; word < POLY_WORDS; ++word)
                 golden[word] = (uint32_t)(((uint64_t)a[word] * b[word]) %
                                          moduli[step]);
-            printf("[HPU][PMODLD][CHECK] step=%u context=%u q=%u "
+            LOG_DEBUG("[HPU][PMODLD][CHECK] step=%u context=%u q=%u "
                    "output-line=%u\n",
                    step, contexts[step], moduli[step], outputs[step]);
             failed |= v2_check_words("PMODLD-result", outputs[step], golden,
@@ -124,7 +125,7 @@ int main(void) {
         failed |= v2_check_memory("readonly-and-guard");
         if (failed != 0) return case_fail(__FILE__, __LINE__);
         phase_mark("round-done");
-        printf("[HPU][PMODLD][ROUND-PASS] profile=%u transitions=0-6-0 "
+        LOG_DEBUG("[HPU][PMODLD][ROUND-PASS] profile=%u transitions=0-6-0 "
                "readonly-and-guard=pass\n", profile);
     }
     return case_pass(__FILE__);

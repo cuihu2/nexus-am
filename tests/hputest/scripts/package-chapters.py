@@ -93,7 +93,9 @@ def write_index(path, rows):
         writer.writerows(rows)
 
 
-def package(artifact, require_all=False, require_diagnostic=False):
+def package(artifact, require_all=False, require_diagnostic=False, require_silent=False):
+    if sum((require_all, require_diagnostic, require_silent)) > 1:
+        raise ValueError("package modes are mutually exclusive")
     requested = Path(artifact).absolute()
     if requested.is_symlink() or requested.name != "artifact":
         raise ValueError("input must be a plain directory named artifact")
@@ -115,13 +117,19 @@ def package(artifact, require_all=False, require_diagnostic=False):
         metadata[key] = value
     if not rows or metadata.get("case_count") != str(len(rows)):
         raise ValueError("MANIFEST case_count does not match CASE_MANIFEST")
-    if require_all and metadata.get("selection") != "all":
-        raise ValueError("--all requires a full selection=all build")
-    if (metadata.get("uart_results"), metadata.get("hpu_dump_results")) not in {
-            ("brief", "0"), ("full", "1")}:
+    if (require_all or require_silent) and metadata.get("selection") != "all":
+        raise ValueError("--all/--silent requires a full selection=all build")
+    if (metadata.get("log_level"), metadata.get("log_mode"),
+            metadata.get("uart_results"), metadata.get("hpu_dump_results")) not in {
+            ("0", "silent", "none", "0"), ("1", "minimal", "brief", "0"),
+            ("2", "verbose", "brief", "0"), ("2", "verbose", "full", "1")}:
         raise ValueError("missing/inconsistent UART build mode metadata")
-    if require_all and metadata["uart_results"] != "brief":
-        raise ValueError("default --all package requires brief UART output")
+    if require_all and metadata["log_level"] != "1":
+        raise ValueError("default --all package requires brief UART output at log_level=1")
+    if require_silent and metadata["log_level"] != "0":
+        raise ValueError("--silent package requires log_level=0")
+    if metadata["log_level"] == "0" and not require_silent:
+        raise ValueError("silent chapter packages require --silent")
     if require_diagnostic != (metadata.get("selection") == "diagnostic"):
         raise ValueError("--diagnostic and selection=diagnostic must be used together")
     if require_diagnostic and metadata["uart_results"] != "full":
@@ -158,6 +166,8 @@ def package(artifact, require_all=False, require_diagnostic=False):
             entry["notes"] = "需要在匹配的 IT/simv 上运行；编译通过不等于功能通过"
             if require_diagnostic:
                 entry["notes"] += "；全量 UART 诊断版本，打印 HPU/golden 每项数据，运行明显更慢"
+            if require_silent:
+                entry["notes"] += "；关闭日志与UART，检查不变，通过仿真终止码判断结果"
             if qualifier == "waveform-hold":
                 entry["notes"] = "故意无限等待看波形；必须设置仿真 cycle-limit，不等待 PASS"
             elif qualifier == "termination-probe-fail":
@@ -183,7 +193,7 @@ def package(artifact, require_all=False, require_diagnostic=False):
                     else "04_composite_instruction_sequences")
                 for row in indexes):
             raise ValueError("diagnostic package must contain exactly the twelve ready 03/04 cases")
-    if require_all:
+    if require_all or require_silent:
         instruction_ids = {
             row["case_id"] for row in indexes
             if row["chapter"] == "03_compute_instructions"
@@ -230,19 +240,31 @@ def package(artifact, require_all=False, require_diagnostic=False):
             count = sum(bool(row["elf"]) for row in chapter_rows)
             summary.append(f"| {chapter} | {len(chapter_rows)} | {count} | {len(chapter_rows) - count} |")
         uart_note = (
+            "## 静默版（关闭 printf / UART）\n\n"
+            "构建参数为 `HPU_LOG_LEVEL=0 HPU_DUMP_RESULTS=0`；不打印阶段、统计或错误项，"
+            "但仍执行原有全部指令、同步、逐项 golden 和 guard 检查。"
+            "日志实参不求值，AM 启动的串口初始化及字符输出也已关闭。\n\n"
+            "本包名为 `nexus-am-hpu-silent-workloads`。请依靠仿真器的终止码判断："
+            "正常用例 return 0 才是通过，return 1 是失败；超时不能当作通过。"
+            "waveform-hold 和终止探针仍按各自说明处理。"
+            "需要定位失败时，换精简日志包运行同一用例/子项。\n\n"
+            if require_silent else
             "## 全量 UART 正确性诊断版（不是加速包）\n\n"
             "本包只包含 03 的九个用例以及 04 的 BConv、整体 NTT、整体 INTT，共 12 个 ELF。"
-            "构建参数为 `HPU_DUMP_RESULTS=1`；每个已执行的结果比较都会保留完整的 "
+            "构建参数为 `HPU_LOG_LEVEL=2 HPU_DUMP_RESULTS=1`；每个已执行的结果比较都会保留完整的 "
             "4096 项 HPU 实际结果及软件 golden，多 RNS 时逐分量打印，不以抽样代替正确性检查。\n\n"
             "全量串口输出会明显增加仿真 cycle 和现实耗时；只对需要定位的用例使用本包，"
             "并为 UART 输出单独预留仿真周期。它不是提速版本，也不改变比较标准。"
             "默认下载并使用 `nexus-am-hpu-workloads` 常规摘要包；本包另名为 "
-            "`nexus-am-hpu-uart-results`，请勿混用两包的 ELF/BIN。\n\n"
+            "`nexus-am-hpu-uart-results`，请勿混用两包的 ELF/BIN。"
+            "该包仅在手动运行 workflow 并勾选全量诊断时生成，不随普通 push 默认发布。\n\n"
             if require_diagnostic else
             "## 默认 UART 摘要版\n\n"
-            "构建参数为 `HPU_DUMP_RESULTS=0`，打印阶段、结果统计和错误项；完整正确性比较仍然执行。"
-            "03/04 如需保存每项 HPU/golden 数据，请单独下载 `nexus-am-hpu-uart-results`。"
-            "全量诊断版明显更慢，不作为日常回归默认包。\n\n"
+            "构建参数为 `HPU_LOG_LEVEL=1 HPU_DUMP_RESULTS=0`，仅保留精简事件、结果摘要和限量错误项；"
+            "不打印每轮阶段和成功系数，完整正确性比较仍然执行。"
+            "完全不需要串口时选 `nexus-am-hpu-silent-workloads`。"
+            "03/04 如需保存每项 HPU/golden 数据，手动运行 workflow 并勾选全量诊断，"
+            "再下载 `nexus-am-hpu-uart-results`；它明显更慢，不作为日常回归默认包。\n\n"
         )
         readme = (
             "# HPU 按章节测试包\n\n" + uart_note +
@@ -295,10 +317,11 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--all", action="store_true", help="要求完整摘要构建且 03 包含全部九条指令")
     mode.add_argument("--diagnostic", action="store_true", help="要求 03/04 十二项全量 UART 诊断构建")
+    mode.add_argument("--silent", action="store_true", help="要求完整静默构建，关闭日志但保留全部检查")
     args = parser.parse_args()
     try:
         package(args.artifact, require_all=args.all,
-                require_diagnostic=args.diagnostic)
+                require_diagnostic=args.diagnostic, require_silent=args.silent)
     except (OSError, ValueError) as error:
         parser.exit(2, f"package-chapters: {error}\n")
 

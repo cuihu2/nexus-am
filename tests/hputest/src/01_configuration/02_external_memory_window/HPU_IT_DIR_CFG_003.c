@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 #include <hpu/report.h>
 #include <hpu/it_v2.h>
@@ -22,9 +23,9 @@ static int failure(unsigned source_line, const char *phase) {
     const uint32_t size_lo = csr_read(CSR_SIZE_LO);
     const uint32_t size_hi = csr_read(CSR_SIZE_HI);
 
-    printf("[HPU][FAIL] phase=%s source_line=%u status=0x%x fault=0x%x irq=0x%x\n",
+    LOG_ERROR("[HPU][FAIL] phase=%s source_line=%u status=0x%x fault=0x%x irq=0x%x\n",
            phase, source_line, status, fault, irq);
-    printf("[HPU][FAIL][window-shadow] base_hi=0x%x base_lo=0x%x "
+    LOG_ERROR("[HPU][FAIL][window-shadow] base_hi=0x%x base_lo=0x%x "
            "size_hi=0x%x size_lo=0x%x\n", base_hi, base_lo, size_hi, size_lo);
     return case_fail(__FILE__, source_line);
 }
@@ -51,7 +52,7 @@ int main(void) {
         const unsigned lines = ranges[round].lines;
 
         phase = "range-data";
-        printf("[HPU][RANGE] round=%u point=%s source=%u output=%u lines=%u "
+        LOG_DEBUG("[HPU][RANGE] round=%u point=%s source=%u output=%u lines=%u "
                "words=%u window=[0,%u)\n", round, ranges[round].point,
                source, output, lines, lines * WORDS_PER_LINE, WINDOW_LINES);
         if (v2_prepare(0U, MOD_Q0, MOD_Q1) != 0 ||
@@ -59,7 +60,7 @@ int main(void) {
             return failure(__LINE__, phase);
 
         phase = "range-config";
-        printf("[HPU][CONFIG] expected_base=0x%lx expected_lines=%u\n",
+        LOG_DEBUG("[HPU][CONFIG] expected_base=0x%lx expected_lines=%u\n",
                (unsigned long)MEM_BASE, WINDOW_LINES);
         csr_write(CSR_FAULT, FAULT_VALID);
         csr_write(CSR_IRQ, IRQ_LEVEL);
@@ -78,7 +79,7 @@ int main(void) {
             return failure(__LINE__, phase);
 
         phase = "range-dma";
-        printf("[HPU][ISSUE] p0 DLOAD line=%u count=%u -> "
+        LOG_DEBUG("[HPU][ISSUE] p0 DLOAD line=%u count=%u -> "
                "DSTORE line=%u count=%u -> PSYNC\n", source, lines, output, lines);
         if (dload(P0, source, lines) != 0 ||
             dstore_release(P0, output, lines) != 0)
@@ -94,10 +95,10 @@ int main(void) {
                            lines * WORDS_PER_LINE, MOD_Q0) != 0 ||
             v2_check_memory("range-readonly-and-guard") != 0)
             return failure(__LINE__, phase);
-        printf("[HPU][RANGE-PASS] round=%u words=%u readonly-and-guard=pass\n",
+        LOG_DEBUG("[HPU][RANGE-PASS] round=%u words=%u readonly-and-guard=pass\n",
                round, lines * WORDS_PER_LINE);
     }
-    printf("[HPU][SW-CHECK-PASS] monitor=needs-monitor; "
+    LOG_DEBUG("[HPU][SW-CHECK-PASS] monitor=needs-monitor; "
            "AXI address/length and window-external side effects not proved by C\n");
     return case_pass(__FILE__);
 }

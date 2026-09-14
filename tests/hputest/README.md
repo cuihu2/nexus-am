@@ -7,7 +7,11 @@ committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
 [V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续49项中29项有软件自检，20项尚未接入；
-软件自检不等于整个测试点或IT验证已通过。00冒烟源码保持不变。
+软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
+
+**当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；另提供
+`nexus-am-hpu-silent-workloads` 与 `nexus-am-hpu-silent-subtests` 完全关闭printf。
+选包和构建方法见 [日志模式说明](docs/LOG_MODES.md)。全量UART包仅手动选择生成。
 
 03/04运行过久或结果失败时，先看 [运行时间与UART诊断](docs/RUNTIME_UART_DIAGNOSTICS.md)：
 默认摘要包、单子项选择及独立全量结果包均已支持；不会以误差容限放宽模整数自检。
@@ -77,9 +81,9 @@ initialization function.  Instructions remain equally visible as
 `dload(P0, LINE_A, POLY_LINES)`, `padd()`, `dstore_release(...)`, and
 `psync()`.
 
-The IT environment exposes UART.  Every testcase prints a stable `START`
-record and then `PASS`, `FAIL`, `NOT_QUALIFIED`, or `HOLD` as appropriate;
-ordinary failures include the source line.  UART is diagnostic evidence, while
+With minimal/verbose logging, testcases print a `START` record and a final
+`PASS`, `FAIL`, `NOT_QUALIFIED`, or `HOLD`; silent builds print none of them.
+UART is diagnostic evidence, while
 the authoritative result remains `main()==0` for a completed self-check and
 `main()!=0` for failure.  The DLOAD-hold case intentionally does not return
 and must be stopped by the simulation cycle limit.

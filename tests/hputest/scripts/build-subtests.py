@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from subtest_support import load_catalog, verify_elf
@@ -17,7 +18,8 @@ from subtest_support import load_catalog, verify_elf
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = ".hpu-subtests-build"
 INDEX_FIELDS = ("parent_case_id", "subcase", "subtest_id", "programs", "description",
-                "source", "mainargs", "elf", "bin", "disassembly", "build_status")
+                "source", "mainargs", "elf", "bin", "disassembly", "build_status",
+                "log_level", "log_mode")
 
 
 def run(command, **kwargs):
@@ -116,7 +118,11 @@ def publish(staging, destination):
     staging.rename(destination)
 
 
-def build(output, generated, arch, cross, jobs, dump):
+def build(output, generated, arch, cross, jobs, dump, log_level=1):
+    if log_level not in (0, 1, 2) or dump not in (0, 1) or (dump and log_level != 2):
+        raise ValueError("log level must be 0/1/2; full results require --log-level 2")
+    log_mode = ("silent", "minimal", "verbose")[log_level]
+    uart_results = "none" if log_level == 0 else ("full" if dump else "brief")
     rows = load_catalog(ROOT)
     am_home = ROOT.parents[1]
     generated = generated.resolve(strict=True)
@@ -137,13 +143,14 @@ def build(output, generated, arch, cross, jobs, dump):
         for row in rows:
             relative = Path("03_compute_instructions") / row["subtest_id"]
             binary = staging / relative
-            objects = output / "obj" / f"uart-{dump}" / row["parent_case_id"]
+            objects = output / "obj" / f"log-{log_level}-dump-{dump}" / row["parent_case_id"]
             print(f"[hputest][subtest] {row['subtest_id']} mainargs=subcase={row['subcase']}", flush=True)
             command = ["make", "-C", str(ROOT), "-f", "Makefile.case", f"-j{jobs}",
                        f"ARCH={arch}", f"CROSS_COMPILE={cross}", "LINUX_GNU_TOOLCHAIN=1",
                        f"CASE_SOURCE={ROOT / row['source']}", f"CASE_ID={row['parent_case_id']}",
                        f"HPU_DST_DIR={objects}/", f"BINARY={binary}",
                        f"HPU_GENERATED_ROOT={generated}", f"HPU_DUMP_RESULTS={dump}",
+                       f"HPU_LOG_LEVEL={log_level}",
                        f"mainargs=subcase={row['subcase']}"]
             with (staging / "logs" / (row["subtest_id"] + ".log")).open("w") as log:
                 run(command, env=environment, stdout=log, stderr=subprocess.STDOUT)
@@ -153,12 +160,16 @@ def build(output, generated, arch, cross, jobs, dump):
             disassembly = subprocess.check_output([cross + "objdump", "-d", elf.name], cwd=elf.parent, text=True)
             binary.with_suffix(".txt").write_text(disassembly, encoding="utf-8")
             verify_elf(elf, row, cross)
+            if log_level == 0:
+                run([sys.executable, str(ROOT / "scripts/verify-silent-elf.py"),
+                     "--elf", str(elf), "--cross-compile", cross])
             check_commands(disassembly, allowed)
             index.append(dict(row, mainargs=f"subcase={row['subcase']}",
                               elf=relative.with_suffix(".elf").as_posix(),
                               bin=relative.with_suffix(".bin").as_posix(),
                               disassembly=relative.with_suffix(".txt").as_posix(),
-                              build_status="BUILD_READY_NOT_IT_PASS"))
+                              build_status="BUILD_READY_NOT_IT_PASS",
+                              log_level=str(log_level), log_mode=log_mode))
         with (staging / "INDEX.tsv").open("w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=INDEX_FIELDS, delimiter="\t")
             writer.writeheader()
@@ -167,11 +178,17 @@ def build(output, generated, arch, cross, jobs, dump):
         (staging / "MANIFEST.txt").write_text(
             f"format=hpu-subtests-v1\nrevision={revision}\ninline_asm_commit={commit}\n"
             f"arch={arch}\nparent_cases=9\nsubtests={len(rows)}\nprograms=40\n"
-            f"hpu_dump_results={dump}\nuart_results={'full' if dump else 'brief'}\n"
+            f"hpu_dump_results={dump}\nuart_results={uart_results}\n"
+            f"log_level={log_level}\nlog_mode={log_mode}\n"
             "execution=one-independent-simv-per-elf\nqualification=BUILD_READY_NOT_IT_PASS\n", encoding="utf-8")
         shutil.copyfile(ROOT / "subtests/cases.tsv", staging / "cases.tsv")
         readme = (ROOT / "subtests/README.md").read_text(encoding="utf-8")
-        note = f"本包实际构建模式：HPU_DUMP_RESULTS={dump}（{'全量输出，更慢' if dump else '常规摘要'}）。\n\n"
+        mode_text = {"silent": "关闭日志与UART；只通过仿真终止码判断结果",
+                     "minimal": "精简日志，不打印逐项成功结果",
+                     "verbose": "详细日志"}[log_mode]
+        note = (f"本包实际构建模式：HPU_LOG_LEVEL={log_level} ({log_mode})，"
+                f"HPU_DUMP_RESULTS={dump}；{mode_text}。"
+                f"{'全量结果打印会明显拖慢仿真。' if dump else ''}\n\n")
         (staging / "README.md").write_text(readme.replace("\n\n", "\n\n" + note, 1), encoding="utf-8")
         for source, destination in (("inline-asm/mm", "inline-asm-mm"), ("instruction-data", "instruction-data")):
             shutil.copytree(generated / source, staging / "provenance" / destination)
@@ -198,11 +215,13 @@ def main():
     parser.add_argument("--cross-compile", default="riscv64-linux-gnu-")
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--dump-results", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--log-level", type=int, choices=(0, 1, 2), default=1)
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be positive")
     try:
-        build(args.output_root, args.generated_root, args.arch, args.cross_compile, args.jobs, args.dump_results)
+        build(args.output_root, args.generated_root, args.arch, args.cross_compile,
+              args.jobs, args.dump_results, args.log_level)
     except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Subtest build failed: {error}\n")
 

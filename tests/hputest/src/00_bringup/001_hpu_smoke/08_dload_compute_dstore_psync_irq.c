@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/result.h>
 #include <hpu/csr.h>
 #include <hpu/fixture.h>
@@ -26,12 +27,12 @@ int main(void) {
 
     rc = fixture_validate();
     if (rc != 0) {
-        printf("[HPU][08][FAIL] phase=fixture rc=%d\n", rc);
+        LOG_ERROR("[HPU][08][FAIL] phase=fixture rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     rc = fixture_validate_mm();
     if (rc != 0) {
-        printf("[HPU][08][FAIL] phase=mm-fixture rc=%d\n", rc);
+        LOG_ERROR("[HPU][08][FAIL] phase=mm-fixture rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
 
@@ -45,25 +46,25 @@ int main(void) {
     /* 保存本次读回值；失败日志不再次读取寄存器，避免掩盖出错现场。 */
     value = csr_read(CSR_BASE_LO);
     if (value != (uint32_t)MEM_BASE) {
-        printf("[HPU][08][FAIL] phase=config reg=BASE_LO actual=0x%x expected=0x%x\n",
+        LOG_ERROR("[HPU][08][FAIL] phase=config reg=BASE_LO actual=0x%x expected=0x%x\n",
                value, (uint32_t)MEM_BASE);
         return case_fail(__FILE__, __LINE__);
     }
     value = csr_read(CSR_BASE_HI);
     if (value != (uint32_t)(MEM_BASE >> 32U)) {
-        printf("[HPU][08][FAIL] phase=config reg=BASE_HI actual=0x%x expected=0x%x\n",
+        LOG_ERROR("[HPU][08][FAIL] phase=config reg=BASE_HI actual=0x%x expected=0x%x\n",
                value, (uint32_t)(MEM_BASE >> 32U));
         return case_fail(__FILE__, __LINE__);
     }
     value = csr_read(CSR_SIZE_LO);
     if (value != SMOKE_LINES) {
-        printf("[HPU][08][FAIL] phase=config reg=SIZE_LO actual=0x%x expected=0x%x\n",
+        LOG_ERROR("[HPU][08][FAIL] phase=config reg=SIZE_LO actual=0x%x expected=0x%x\n",
                value, (uint32_t)SMOKE_LINES);
         return case_fail(__FILE__, __LINE__);
     }
     value = csr_read(CSR_SIZE_HI);
     if (value != 0U) {
-        printf("[HPU][08][FAIL] phase=config reg=SIZE_HI actual=0x%x expected=0\n",
+        LOG_ERROR("[HPU][08][FAIL] phase=config reg=SIZE_HI actual=0x%x expected=0\n",
                value);
         return case_fail(__FILE__, __LINE__);
     }
@@ -72,19 +73,19 @@ int main(void) {
     for (timeout = 0U; timeout < TIMEOUT; ++timeout) {
         status = csr_read(CSR_STATUS);
         if ((status & STATUS_FAULT) != 0U) {
-            printf("[HPU][08][FAIL] phase=commit reason=fault status=0x%x polls=%u\n",
+            LOG_ERROR("[HPU][08][FAIL] phase=commit reason=fault status=0x%x polls=%u\n",
                    status, timeout);
             return case_fail(__FILE__, __LINE__);
         }
         if ((status & STATUS_VALID) != 0U) break;
     }
     if (timeout == TIMEOUT) {
-        printf("[HPU][08][FAIL] phase=commit reason=timeout status=0x%x polls=%u\n",
+        LOG_ERROR("[HPU][08][FAIL] phase=commit reason=timeout status=0x%x polls=%u\n",
                status, timeout);
         return case_fail(__FILE__, __LINE__);
     }
     if ((status & STATUS_BUSY) != 0U) {
-        printf("[HPU][08][FAIL] phase=commit reason=busy status=0x%x\n", status);
+        LOG_ERROR("[HPU][08][FAIL] phase=commit reason=busy status=0x%x\n", status);
         return case_fail(__FILE__, __LINE__);
     }
 
@@ -95,7 +96,7 @@ int main(void) {
 
     rc = irq_open();
     if (rc != 0) {
-        printf("[HPU][08][FAIL] phase=irq-open rc=%d\n", rc);
+        LOG_ERROR("[HPU][08][FAIL] phase=irq-open rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
 
@@ -103,44 +104,44 @@ int main(void) {
      * 完整执行库生成的指令流，保留其机器码及 x10/x11 操作数绑定。
      * 模表 DLOAD 与 PMODLD 的依赖由硬件维护，只在程序末尾发出一次 PSYNC。
      */
-    printf("[HPU][08][PHASE] issue MM: mod DLOAD -> PMODLD -> input DLOAD -> PMUL -> DSTORE -> PSYNC\n");
+    LOG_DEBUG("[HPU][08][PHASE] issue MM: mod DLOAD -> PMODLD -> input DLOAD -> PMUL -> DSTORE -> PSYNC\n");
     rc = hpu_program_mm(spans, HPU_PROGRAM_MM_DMA_COUNT);
     if (rc != 0) {
         irq_close();
-        printf("[HPU][08][FAIL] phase=mm-program rc=%d\n", rc);
+        LOG_ERROR("[HPU][08][FAIL] phase=mm-program rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     /* 中断处理函数清除完成电平并完成 PLIC claim；主程序再检查最终状态。 */
     rc = irq_wait();
     irq_close();
     if (rc != 0) {
-        printf("[HPU][08][FAIL] phase=compute-irq-wait rc=%d\n", rc);
+        LOG_ERROR("[HPU][08][FAIL] phase=compute-irq-wait rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     status = csr_read(CSR_STATUS);
     if ((status & STATUS_VALID) == 0U) {
-        printf("[HPU][08][FAIL] phase=final-status reason=window-invalid status=0x%x\n", status);
+        LOG_ERROR("[HPU][08][FAIL] phase=final-status reason=window-invalid status=0x%x\n", status);
         return case_fail(__FILE__, __LINE__);
     }
     if ((status & STATUS_BUSY) != 0U) {
-        printf("[HPU][08][FAIL] phase=final-status reason=busy status=0x%x\n", status);
+        LOG_ERROR("[HPU][08][FAIL] phase=final-status reason=busy status=0x%x\n", status);
         return case_fail(__FILE__, __LINE__);
     }
     if ((status & STATUS_FAULT) != 0U) {
-        printf("[HPU][08][FAIL] phase=final-status reason=fault status=0x%x\n", status);
+        LOG_ERROR("[HPU][08][FAIL] phase=final-status reason=fault status=0x%x\n", status);
         return case_fail(__FILE__, __LINE__);
     }
     value = csr_read(CSR_IRQ);
     if ((value & IRQ_LEVEL) != 0U) {
-        printf("[HPU][08][FAIL] phase=final-irq reason=level-not-cleared irq=0x%x\n", value);
+        LOG_ERROR("[HPU][08][FAIL] phase=final-irq reason=level-not-cleared irq=0x%x\n", value);
         return case_fail(__FILE__, __LINE__);
     }
 
-    printf("[HPU][08][PHASE] compute IRQ and status checked; compare data\n");
+    LOG_DEBUG("[HPU][08][PHASE] compute IRQ and status checked; compare data\n");
     /* HPU 输出、producer golden 和 C 的 4096 项模乘结果必须全相同。 */
     rc = check_pmul();
     if (rc != 0) {
-        printf("[HPU][08][FAIL] phase=pmul-check rc=%d\n", rc);
+        LOG_ERROR("[HPU][08][FAIL] phase=pmul-check rc=%d\n", rc);
         return case_fail(__FILE__, __LINE__);
     }
     return case_pass(__FILE__);

@@ -1,3 +1,4 @@
+#include <hpu/log.h>
 #include <hpu/completion.h>
 #include <hpu/it_v2.h>
 #include <hpu/result.h>
@@ -15,7 +16,7 @@ static int failure(unsigned line, const char *phase) {
     const uint32_t fault = csr_read(CSR_FAULT);
     const uint32_t irq = csr_read(CSR_IRQ);
 
-    printf("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
+    LOG_ERROR("[HPU][FAIL] phase=%s post-failure-status=0x%x fault=0x%x irq=0x%x\n",
            phase, status, fault, irq);
     return case_fail(__FILE__, line);
 }
@@ -23,7 +24,7 @@ static int failure(unsigned line, const char *phase) {
 int main(void) {
     case_start(__FILE__);
     (void)result_context(__FILE__, 0U);
-    printf("[HPU][STING-STR001][SCOPE] deterministic adapter sample, NOT a STING generator; "
+    LOG_DEBUG("[HPU][STING-STR001][SCOPE] deterministic adapter sample, NOT a STING generator; "
            "random/replay/ready/CDC evidence must come from the external harness\n");
 
     for (unsigned round = 0U; round < 2U; ++round) {
@@ -33,7 +34,7 @@ int main(void) {
         const uint32_t *expected;
         int rc;
 
-        printf("[HPU][STING-STR001][PREPARE] round=%u profile=%u "
+        LOG_DEBUG("[HPU][STING-STR001][PREPARE] round=%u profile=%u "
                "object=p%u source-line=%u output-line=%u count=%u\n",
                round, round, object, source_line, output_line, POLY_LINES);
         if (v2_prepare(round, MOD_Q0, MOD_Q1) != 0)
@@ -65,7 +66,7 @@ int main(void) {
         if (check_status() != 0)
             return failure(__LINE__, "configured-status");
 
-        printf("[HPU][STING-STR001][ISSUE] round=%u DLOAD p%u -> "
+        LOG_DEBUG("[HPU][STING-STR001][ISSUE] round=%u DLOAD p%u -> "
                "DSTORE release p%u -> terminal PSYNC\n", round, object, object);
         if (dload(object, source_line, POLY_LINES) != 0)
             return failure(__LINE__, "dload");
@@ -75,7 +76,7 @@ int main(void) {
         psync();
         rc = wait_irq();
         if (rc != 0) {
-            printf("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
+            LOG_ERROR("[HPU][FAIL] phase=terminal-psync rc=%d\n", rc);
             return failure(__LINE__, "terminal-psync");
         }
         if (completion_clear() != 0)
@@ -83,12 +84,12 @@ int main(void) {
         if (check_status() != 0)
             return failure(__LINE__, "final-status");
 
-        printf("[HPU][STING-STR001][CHECK] round=%u compare immutable input and non-output DDR\n", round);
+        LOG_DEBUG("[HPU][STING-STR001][CHECK] round=%u compare immutable input and non-output DDR\n", round);
         if (v2_check_words("STING-STR001-loopback", output_line, expected,
                            POLY_WORDS, MOD_Q0) != 0 ||
             v2_check_memory("STING-STR001-readonly-guard") != 0)
             return failure(__LINE__, "data-or-guard");
-        printf("[HPU][STING-STR001][ROUND-PASS] round=%u deterministic-software-only\n", round);
+        LOG_DEBUG("[HPU][STING-STR001][ROUND-PASS] round=%u deterministic-software-only\n", round);
     }
     return case_pass(__FILE__);
 }

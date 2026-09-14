@@ -276,7 +276,7 @@ class V2MemoryTests(unittest.TestCase):
         harness.write_text(HARNESS, encoding="utf-8")
         cls.executable = root / "test-v2-memory"
         command = shlex.split(os.environ.get("HOST_CC", "cc")) + [
-            "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-O2",
+            "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-O2", "-DHPU_LOG_LEVEL=2",
             f"-I{root}", f"-I{TEST_ROOT / 'include'}",
             str(harness), str(TEST_ROOT / "runtime" / "it_v2_memory.c"),
             str(TEST_ROOT / "runtime" / "it_report.c"),
@@ -285,6 +285,11 @@ class V2MemoryTests(unittest.TestCase):
         compiled = subprocess.run(command, text=True, capture_output=True, check=False)
         if compiled.returncode:
             raise AssertionError(f"host compile failed:\n{compiled.stdout}{compiled.stderr}")
+        cls.quiet_executable = root / "test-v2-memory-silent"
+        quiet_command = ["-DHPU_LOG_LEVEL=0" if arg == "-DHPU_LOG_LEVEL=2" else
+                         str(cls.quiet_executable) if arg == str(cls.executable) else arg
+                         for arg in command]
+        subprocess.run(quiet_command, text=True, capture_output=True, check=True)
 
     def run_scenario(self, scenario):
         result = subprocess.run([str(self.executable), scenario],
@@ -343,6 +348,14 @@ class V2MemoryTests(unittest.TestCase):
 
     def test_power_of_two_modulus_uses_floor_two_to_64(self):
         self.assertNotIn("[FAIL]", self.run_scenario("power_of_two"))
+
+    def test_silent_still_detects_guard_data_and_permission_failures(self):
+        for scenario in ("shadow", "guard", "permissions", "compare", "noncanonical", "invalidate_partition"):
+            with self.subTest(scenario=scenario):
+                result = subprocess.run([str(self.quiet_executable), scenario],
+                                        text=True, capture_output=True, check=True)
+                self.assertIn(f"[HARNESS] PASS {scenario}", result.stdout)
+                self.assertNotIn("[HPU]", result.stdout)
 
 
 if __name__ == "__main__":
