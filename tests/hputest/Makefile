@@ -13,7 +13,7 @@ SUBTEST_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/subtests
 SILENT_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/silent
 SILENT_SUBTEST_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/silent-subtests
 
-.PHONY: all group one diagnostic subtests silent silent-subtests prepare-inline-asm-mm verify-inline-asm validate clean
+.PHONY: all group one diagnostic subtests silent silent-subtests unified prepare-inline-asm-mm verify-inline-asm validate clean
 
 all: verify-inline-asm
 	@AM_HOME="$(AM_HOME)" ARCH="$(ARCH)" \
@@ -74,6 +74,14 @@ subtests:
 	  --jobs "$(JOBS)" --dump-results "$(HPU_DUMP_RESULTS)" \
 	  --log-level "$(HPU_LOG_LEVEL)"
 
+unified:
+	@python3 scripts/package-unified.py \
+	  --workloads "$(OUTPUT_ROOT)/release" \
+	  --silent-workloads "$(SILENT_OUTPUT_ROOT)/release" \
+	  --subtests "$(SUBTEST_OUTPUT_ROOT)/release" \
+	  --silent-subtests "$(SILENT_SUBTEST_OUTPUT_ROOT)/release" \
+	  --output-root "$(OUTPUT_ROOT)/unified"
+
 silent-subtests:
 	@python3 scripts/build-subtests.py \
 	  --output-root "$(SILENT_SUBTEST_OUTPUT_ROOT)" \
@@ -102,6 +110,7 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-subtest-support.py
 	@python3 scripts/test-build-log-modes.py
 	@python3 scripts/test-run-subtests.py
+	@python3 scripts/test-package-unified.py
 	@python3 scripts/test-stage-reference.py
 	@python3 scripts/test-stage-data.py \
 	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs"

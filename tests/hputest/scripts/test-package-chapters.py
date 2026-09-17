@@ -173,7 +173,7 @@ class ChapterPackageTests(unittest.TestCase):
         readme = (release / "README.md").read_text(encoding="utf-8")
         self.assertIn("不是加速包", readme)
         self.assertIn("4096", readme)
-        self.assertIn("nexus-am-hpu-uart-results", readme)
+        self.assertIn("按需本地生成", readme)
 
     def test_diagnostic_rejects_brief_artifacts(self):
         self.fixture(self.diagnostic_rows(), selection="diagnostic")

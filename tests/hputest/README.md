@@ -9,15 +9,15 @@ committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 [V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续49项中29项有软件自检，20项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
-**当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；另提供
-`nexus-am-hpu-silent-workloads` 与 `nexus-am-hpu-silent-subtests` 完全关闭printf。
-选包和构建方法见 [日志模式说明](docs/LOG_MODES.md)。全量UART包仅手动选择生成。
+**当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
+`nexus-am-hpu-tests`下载包还包含文件名带`_silent`的真正静默版本。
+两种模式的差异和构建方法见 [日志模式说明](docs/LOG_MODES.md)。
 
 03/04运行过久或结果失败时，先看 [运行时间与UART诊断](docs/RUNTIME_UART_DIAGNOSTICS.md)：
-默认摘要包、单子项选择及独立全量结果包均已支持；不会以误差容限放宽模整数自检。
+默认摘要、真正静默、单子项选择及本地全量结果构建均已支持；不会以误差容限放宽模整数自检。
 
 03还提供 [独立subtest目录](subtests/README.md)：9个父用例拆成37个可直接加载的ELF/BIN，
-单独下载`nexus-am-hpu-subtests`，可在用例外并行或可选绑核；原整例包保留。
+统一下载包只发布这些独立子项，不再发布03的整例ELF；可在用例外并行或可选绑核。
 
 ## Source layout
 
@@ -350,16 +350,20 @@ Local output is ignored under `tests/hputest/build/`.  A full build produces
 `provenance/inline-asm-mm/` directory containing the selected producer
 program, data, tables, producer commit, and resolved DMA spans.
 
-本地生成章节下载包：
+本地生成统一下载包：
 
 ```bash
-python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/artifact --all
+make -C tests/hputest subtests JOBS=4
+make -C tests/hputest silent JOBS=4
+python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/silent/artifact --silent
+make -C tests/hputest silent-subtests JOBS=4
+make -C tests/hputest unified
 ```
 
-GitHub Actions在push/PR/手动运行中全量构建，然后统一上传
-`nexus-am-hpu-workloads`，内容来自 `build/release/`。
-包内按00至07章节组织，03的全部九个用例放在一起；`INDEX.tsv`列实际下载路径、用途和未就绪原因。
-当前发布40组非占位产物（含冒烟与返回值探针），20项只保留索引；原始构建清单和provenance各保留一份。
+GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
+内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
+替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
+共68个测试身份、136组ELF/BIN/TXT；20项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

@@ -1,11 +1,10 @@
 # 03 指令测试独立子项
 
-这里单独维护可并行的子项清单，不替换原九个完整用例，也不复制 37 份 C 源码。每个子项引用原 `src/03_compute_instructions/` 中的源文件，在构建时固化 `subcase=N`，生成一个独立 ELF/BIN。仿真时直接装载对应文件，无须再给仿真器传子项选择参数。
+这里单独维护可并行的子项清单，不复制 37 份 C 源码。源码和本地整例构建仍保留；统一下载包用这些子项替换原九个完整用例。每个子项引用原 `src/03_compute_instructions/` 中的源文件，在构建时固化 `subcase=N`，生成一个独立 ELF/BIN。仿真时直接装载对应文件，无须再给仿真器传子项选择参数。
 
-新的下载包名称为 `nexus-am-hpu-subtests`。本地交付目录为 `build/subtests/release/03_compute_instructions/`，每个 `subtest_id` 对应同名 `.elf`、`.bin`、`.txt`（反汇编）。子项包当前默认minimal，仅保留必要事件/错误和完整自检，不打印每轮阶段。
-
-无需printf时下载`nexus-am-hpu-silent-subtests`；本地`make silent-subtests`生成同样37项的静默版本，
-输出`build/silent-subtests/release`，同样可并行/绑核。静默不是直接返回成功，仍检查全部数据与guard。
+GitHub下载包名称为`nexus-am-hpu-tests`。其中`03_compute_instructions/`只放这37个独立子项；
+每个`subtest_id`对应普通`.elf/.bin/.txt`以及扩展名前带`_silent`的真正静默版本。
+普通版为minimal日志，静默版仍检查全部数据与guard，并不直接返回成功。
 
 ## 构建与下载
 
@@ -21,12 +20,19 @@ make -C tests/hputest subtests JOBS=4
 每次以`mainargs=subcase=N`重新链接，并从实际ELF加载段读取参数验证，不能把同一个全轮ELF复制改名凑数。
 原C源码不变，选择参数已在每个ELF/BIN中固化，仿真运行时无需另传`subcase=N`。
 
-GitHub Actions追加发布`nexus-am-hpu-subtests`，不替换原有两个包。新包包含：
+统一下载包包含：
 
-- `03_compute_instructions/`：37组独立ELF/BIN/反汇编；
-- `INDEX.tsv`：父用例、选择号、说明、真实文件名；`cases.tsv`是对应源清单；
+- `03_compute_instructions/`：37组独立子项的普通/静默ELF、BIN和反汇编；
+- `INDEX.tsv`：父用例、选择号、模式、说明和真实文件名；对应源清单保存在`provenance/testplan/SUBTEST_CASES.tsv`；
 - `MANIFEST.txt`及`provenance/`：AM/inline版本、数据与编码来源；
 - `tools/run-subtests.py`：用例外并行/可选绑核；`tools/parse-uart-results.py`：UART结果提取。
+
+统一包默认运行普通子项；静默子项显式传`--variant silent`。例如：
+
+```bash
+python3 tools/run-subtests.py --package . --variant silent --jobs 4 --run-dir /tmp/hpu-runs -- \
+  /absolute/path/to/simv <IT环境参数> {elf}
+```
 
 每项包含自己的输入数据；无需在服务器上重新编译或手改ELF。
 
@@ -76,7 +82,7 @@ HPU_IT_DIR_INS_C0_001__s03_boundary_dependent
 把你们原启动命令里的ELF路径替换为`{elf}`，其它仿真参数保持原样；程序/脚本须使用绝对路径并在前台等待仿真结束。
 
 ```text
-python3 tools/run-subtests.py --package /data/subtests \
+python3 tools/run-subtests.py --package /data/hputest \
   --id-prefix HPU_IT_DIR_INS_C0_001__ \
   --jobs 4 --run-dir /data/runs/padd-first \
   --cpus 0,1,2,3 \

@@ -111,8 +111,9 @@ NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式
 
 ## 7. 下载和复验
 
-GitHub Actions产物统一名 `nexus-am-hpu-workloads`，内部是00至07章节目录和 `INDEX.tsv`。
-只发布40组非占位ELF/BIN/反汇编（含00的11组辅助程序）；20项未就绪只列原因，不夹在可运行列表中。
+GitHub Actions的唯一HPU产物名为`nexus-am-hpu-tests`，内部是00至07章节目录和`INDEX.tsv`。
+03用37个独立subtest替换九个串行整例，其余章节保留31组非占位workload；每项同时提供普通和
+`_silent`版本，共136组ELF/BIN/反汇编。20项未就绪只列原因，不夹在可运行列表中。
 `provenance/`保留固定producer版本、实际指令、DMA/数据布局和本说明。
 新用例需要更多初始化、逐项golden和guard扫描，不承诺100万cycle一定足够；由IT测定预算并保存原始超时日志。
 失败回传至少包含case ID、AM/producer/RTL/simv版本、cycle-limit、最后阶段、首错日志和对应波形。

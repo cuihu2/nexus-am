@@ -2,11 +2,12 @@
 """在独立进程中并行运行下载包中的 subtest；不改变 DUT 的核数或开启 FGP。
 
 示例（仿真器参数必须按实际 IT 环境填写，本工具不猜测 ELF 参数名）：
-  python3 run-subtests.py --package /data/subtests --jobs 4 \
+  python3 run-subtests.py --package /data/hputest --variant normal --jobs 4 \
       --run-dir /data/runs/new-run --cpus 0,1,2,3 -- \
       /absolute/path/to/simv <IT环境参数> {elf}
 
-INDEX.tsv 至少包含 subtest_id、elf 列。{elf} 替换为绝对路径；不经过 shell。
+统一包的INDEX.tsv使用kind/test_id/variant/elf列；旧子项包的subtest_id/elf格式仍兼容。
+{elf} 替换为绝对路径；不经过 shell。
 每个子项使用自己的工作目录和 sim.log，summary.tsv 记录进程运行状态。
 进程退出码 0 不代表 VCS/用例 PASS，verdict 始终为 NOT_EVALUATED。
 必须另行使用 IT 环境规定的 PASS/FAIL 判据审核日志。
@@ -53,26 +54,41 @@ def relative_file(root, value, label):
     return target
 
 
-def read_index(package):
+def read_index(package, selected_variant="normal"):
     index = relative_file(package, "INDEX.tsv", "index")
     cases = []
     seen = set()
     with index.open(newline="", encoding="utf-8-sig") as source:
         reader = csv.DictReader(source, delimiter="\t")
-        if not {"subtest_id", "elf"}.issubset(reader.fieldnames or []):
-            raise ValueError("INDEX.tsv requires subtest_id and elf columns")
+        fields = set(reader.fieldnames or [])
+        unified = {"kind", "test_id", "variant", "elf"}.issubset(fields)
+        legacy = {"subtest_id", "elf"}.issubset(fields)
+        if not unified and not legacy:
+            raise ValueError("INDEX.tsv requires unified kind/test_id/variant/elf or legacy subtest_id/elf columns")
         for row in reader:
-            case_id = row.get("subtest_id", "")
+            if unified:
+                if row.get("kind") != "subtest":
+                    continue
+                variant = row.get("variant", "")
+                if variant not in {"normal", "silent"}:
+                    raise ValueError(f"invalid subtest variant on line {reader.line_num}: {variant!r}")
+                case_id = row.get("test_id", "")
+                identity = (variant, case_id)
+            else:
+                variant = selected_variant
+                case_id = row.get("subtest_id", "")
+                identity = case_id
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", case_id or ""):
                 raise ValueError(f"invalid subtest_id on line {reader.line_num}: {case_id!r}")
-            if case_id in seen:
-                raise ValueError(f"duplicate subtest_id: {case_id}")
-            seen.add(case_id)
+            if identity in seen:
+                raise ValueError(f"duplicate subtest_id/variant: {case_id}/{variant}")
+            seen.add(identity)
             elf_name = row.get("elf") or ""
             elf = relative_file(package, elf_name, case_id)
-            cases.append((case_id, elf_name, elf))
+            if not unified or variant == selected_variant:
+                cases.append((case_id, elf_name, elf))
     if not cases:
-        raise ValueError("INDEX.tsv contains no subtests")
+        raise ValueError(f"INDEX.tsv contains no {selected_variant} subtests")
     return cases
 
 
@@ -172,6 +188,8 @@ def execute_case(case, root, template, cpu, taskset, timeout, stop):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--package", required=True, type=Path)
+    parser.add_argument("--variant", choices=("normal", "silent"), default="normal",
+                        help="统一包中要运行的文件版本（默认normal；旧单独子项包忽略此区分）")
     parser.add_argument("--id-prefix", help="只运行 subtest_id 以此前缀开头的子项；仍先校验完整清单")
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--run-dir", required=True, type=Path)
@@ -190,7 +208,7 @@ def main(argv=None):
         package = args.package.resolve(strict=True)
         if not package.is_dir():
             raise ValueError("--package must be a directory")
-        cases = read_index(package)
+        cases = read_index(package, args.variant)
         if args.id_prefix is not None:
             cases = [case for case in cases if case[0].startswith(args.id_prefix)]
             if not cases:

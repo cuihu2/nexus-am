@@ -53,7 +53,7 @@ current=round-done
 
 ## 单独定位一轮，默认仍完整覆盖
 
-无需自己构建时，可下载新增的`nexus-am-hpu-subtests`：03的37个独立选择项已经分别固化到ELF/BIN，
+无需自己构建时，可下载`nexus-am-hpu-tests`：03的37个独立选择项已经分别固化到ELF/BIN，
 并提供用例外并行工具。详细文件映射和运行方式见 [subtest目录](https://github.com/cuihu2/nexus-am/tree/master/tests/hputest/subtests)。
 
 AM已有mainargs入口。03可通过`subcase=N`只运行一组，源码不需要删循环；空参数或`all`运行全部。
@@ -80,11 +80,10 @@ make -C tests/hputest one \
 04每个完整算子目前只一段程序，支持all或subcase=0，不能从中间NTT stage开始执行。
 多用例并行和VCS FGP不是一回事；本次没有更改仿真调度器或开关，也不保证相同墙钟加速比。
 
-## 两种下载包
+## 一个下载包、两种文件
 
-- `nexus-am-hpu-workloads`：当前默认minimal，只打印必要事件和失败首错，不再打印前4项成功数据。
-- `nexus-am-hpu-uart-results`：仅手动勾选生成，包含03九项和04 BConv/NTT/INTT三项；每个结果逐项打印actual/golden/q/delta。
-- `nexus-am-hpu-silent-workloads` / `nexus-am-hpu-silent-subtests`：新增完整/子项静默包，关闭printf和UART初始化。
+`nexus-am-hpu-tests`同时包含普通minimal文件和`_silent`静默文件。03只发布37个独立子项，
+其它章节发布原workload；完整逐项UART结果仅按需在本地构建。
 
 全量包不是加速包。UART是阻塞输出，4096项、多RNS或多round可能产生大量日志，仿真会更慢。
 先用摘要确定哪一例/哪一轮有问题，再用全量或单子项构建定位。
