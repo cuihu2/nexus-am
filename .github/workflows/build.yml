@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [ master ]
   workflow_dispatch:
-    inputs:
-      full_uart_diagnostics:
-        description: '另外构建全量逐系数UART诊断包（很慢，仅定位数据错误时使用）'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -137,7 +131,7 @@ jobs:
           retention-days: 7
 
   build-hpu:
-    name: build HPU workloads by chapter
+    name: build unified HPU package
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -165,61 +159,22 @@ jobs:
             JOBS=4
       - name: Package HPU workloads by chapter
         run: python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/artifact --all
-      - name: Upload HPU chapter package
-        uses: actions/upload-artifact@v7
-        with:
-          name: nexus-am-hpu-workloads
-          path: tests/hputest/build/release
-          if-no-files-found: error
-          retention-days: 7
-      - name: Build full UART diagnostics with the same producer data
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_uart_diagnostics }}
-        env:
-          AM_HOME: ${{ github.workspace }}
-        run: |
-          make -C tests/hputest diagnostic \
-            ARCH=riscv64-xs \
-            CROSS_COMPILE=riscv64-linux-gnu- \
-            JOBS=4
-      - name: Package full UART correctness diagnostics
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_uart_diagnostics }}
-        run: python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/diagnostic/artifact --diagnostic
-      - name: Upload separate full UART diagnostic package
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_uart_diagnostics }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: nexus-am-hpu-uart-results
-          path: tests/hputest/build/diagnostic/release
-          if-no-files-found: error
-          retention-days: 7
       - name: Build independent HPU subtests using prepared data
         run: make -C tests/hputest subtests JOBS=4
-      - name: Upload independent HPU subtests
-        uses: actions/upload-artifact@v7
-        with:
-          name: nexus-am-hpu-subtests
-          path: tests/hputest/build/subtests/release
-          if-no-files-found: error
-          retention-days: 7
       - name: Build silent HPU workloads with the same checks
         env:
           AM_HOME: ${{ github.workspace }}
         run: make -C tests/hputest silent JOBS=4
       - name: Package silent HPU workloads by chapter
         run: python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/silent/artifact --silent
-      - name: Upload silent HPU chapter package
-        uses: actions/upload-artifact@v7
-        with:
-          name: nexus-am-hpu-silent-workloads
-          path: tests/hputest/build/silent/release
-          if-no-files-found: error
-          retention-days: 7
       - name: Build independent silent HPU subtests
         run: make -C tests/hputest silent-subtests JOBS=4
-      - name: Upload independent silent HPU subtests
+      - name: Assemble normal and silent HPU artifacts
+        run: make -C tests/hputest unified
+      - name: Upload one HPU package
         uses: actions/upload-artifact@v7
         with:
-          name: nexus-am-hpu-silent-subtests
-          path: tests/hputest/build/silent-subtests/release
+          name: nexus-am-hpu-tests
+          path: tests/hputest/build/unified/release
           if-no-files-found: error
           retention-days: 7

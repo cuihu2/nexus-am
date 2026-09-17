@@ -2,6 +2,7 @@
 """只运行小型 host 假进程，检查隔离、调度、退出记录和清理；不运行 VCS。"""
 
 import csv
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,9 @@ import unittest
 
 
 RUNNER = Path(__file__).with_name("run-subtests.py")
+SPEC = importlib.util.spec_from_file_location("run_subtests", RUNNER)
+RUNNER_MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(RUNNER_MODULE)
 DUMMY = r'''
 import json
 import os
@@ -55,6 +59,46 @@ def live_process(pid):
         return False
 
 
+class IndexTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="hpu-subtest-index-")
+        self.addCleanup(self.temp.cleanup)
+        self.package = Path(self.temp.name)
+        artifacts = self.package / "03_compute_instructions"
+        artifacts.mkdir()
+        for name in ("case.elf", "case_silent.elf", "workload.elf"):
+            (artifacts / name).write_text("fixture", encoding="utf-8")
+
+    def write_unified_index(self, rows):
+        with (self.package / "INDEX.tsv").open("w", encoding="utf-8", newline="") as output:
+            writer = csv.DictWriter(output, fieldnames=("kind", "test_id", "variant", "elf"), delimiter="\t")
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def rows(self):
+        return [
+            {"kind": "workload", "test_id": "workload", "variant": "normal",
+             "elf": "03_compute_instructions/workload.elf"},
+            {"kind": "subtest", "test_id": "case", "variant": "normal",
+             "elf": "03_compute_instructions/case.elf"},
+            {"kind": "subtest", "test_id": "case", "variant": "silent",
+             "elf": "03_compute_instructions/case_silent.elf"},
+        ]
+
+    def test_unified_index_selects_variant_and_ignores_workloads(self):
+        self.write_unified_index(self.rows())
+        cases = RUNNER_MODULE.read_index(self.package, "silent")
+        self.assertEqual([(case_id, name) for case_id, name, _path in cases],
+                         [("case", "03_compute_instructions/case_silent.elf")])
+
+    def test_unified_index_validates_unselected_subtest_variant(self):
+        rows = self.rows()
+        rows[1]["elf"] = "../outside.elf"
+        self.write_unified_index(rows)
+        with self.assertRaisesRegex(ValueError, "invalid package-relative path"):
+            RUNNER_MODULE.read_index(self.package, "silent")
+
+
 @unittest.skipUnless(sys.platform.startswith("linux"), "runner integration checks require Linux")
 class RunnerTests(unittest.TestCase):
     def setUp(self):
@@ -83,6 +127,12 @@ class RunnerTests(unittest.TestCase):
     def write_index(self, rows):
         with (self.package / "INDEX.tsv").open("w", newline="") as output:
             writer = csv.DictWriter(output, fieldnames=("subtest_id", "elf", "parent_case_id"), delimiter="\t")
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def write_unified_index(self, rows):
+        with (self.package / "INDEX.tsv").open("w", newline="") as output:
+            writer = csv.DictWriter(output, fieldnames=("kind", "test_id", "variant", "elf"), delimiter="\t")
             writer.writeheader()
             writer.writerows(rows)
 
@@ -161,6 +211,27 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("no subtest_id matches", result.stderr)
         self.assertFalse(self.run_dir.exists())
+
+    def test_unified_index_selects_only_requested_subtest_variant(self):
+        normal = self.package / "elf/subtest.elf"
+        silent = self.package / "elf/subtest_silent.elf"
+        workload = self.package / "elf/workload.elf"
+        normal.parent.mkdir()
+        normal.write_text("0")
+        silent.write_text("0")
+        workload.write_text("9")
+        self.write_unified_index([
+            {"kind": "workload", "test_id": "workload", "variant": "normal",
+             "elf": "elf/workload.elf"},
+            {"kind": "subtest", "test_id": "subtest", "variant": "normal",
+             "elf": "elf/subtest.elf"},
+            {"kind": "subtest", "test_id": "subtest", "variant": "silent",
+             "elf": "elf/subtest_silent.elf"},
+        ])
+        result = self.run_runner(mode="exit", options=("--variant", "silent"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([(row["subtest_id"], row["elf"]) for row in self.summary()],
+                         [("subtest", "elf/subtest_silent.elf")])
 
     def test_timeout_kills_own_process_group(self):
         self.package_cases(1)

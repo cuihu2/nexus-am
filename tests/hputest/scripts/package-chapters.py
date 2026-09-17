@@ -244,7 +244,8 @@ def package(artifact, require_all=False, require_diagnostic=False, require_silen
             "构建参数为 `HPU_LOG_LEVEL=0 HPU_DUMP_RESULTS=0`；不打印阶段、统计或错误项，"
             "但仍执行原有全部指令、同步、逐项 golden 和 guard 检查。"
             "日志实参不求值，AM 启动的串口初始化及字符输出也已关闭。\n\n"
-            "本包名为 `nexus-am-hpu-silent-workloads`。请依靠仿真器的终止码判断："
+            "本目录是统一交付包的静默workload输入；最终文件以 `_silent` 后缀区分。"
+            "请依靠仿真器的终止码判断："
             "正常用例 return 0 才是通过，return 1 是失败；超时不能当作通过。"
             "waveform-hold 和终止探针仍按各自说明处理。"
             "需要定位失败时，换精简日志包运行同一用例/子项。\n\n"
@@ -255,16 +256,15 @@ def package(artifact, require_all=False, require_diagnostic=False, require_silen
             "4096 项 HPU 实际结果及软件 golden，多 RNS 时逐分量打印，不以抽样代替正确性检查。\n\n"
             "全量串口输出会明显增加仿真 cycle 和现实耗时；只对需要定位的用例使用本包，"
             "并为 UART 输出单独预留仿真周期。它不是提速版本，也不改变比较标准。"
-            "默认下载并使用 `nexus-am-hpu-workloads` 常规摘要包；本包另名为 "
-            "`nexus-am-hpu-uart-results`，请勿混用两包的 ELF/BIN。"
-            "该包仅在手动运行 workflow 并勾选全量诊断时生成，不随普通 push 默认发布。\n\n"
+            "这是按需本地生成的诊断目录，不由CI作为独立下载包发布。\n\n"
             if require_diagnostic else
             "## 默认 UART 摘要版\n\n"
             "构建参数为 `HPU_LOG_LEVEL=1 HPU_DUMP_RESULTS=0`，仅保留精简事件、结果摘要和限量错误项；"
             "不打印每轮阶段和成功系数，完整正确性比较仍然执行。"
-            "完全不需要串口时选 `nexus-am-hpu-silent-workloads`。"
-            "03/04 如需保存每项 HPU/golden 数据，手动运行 workflow 并勾选全量诊断，"
-            "再下载 `nexus-am-hpu-uart-results`；它明显更慢，不作为日常回归默认包。\n\n"
+            "本目录是统一交付包的普通workload输入；组包时03父用例会被独立subtest替换，"
+            "并与 `_silent` 文件一起进入 `nexus-am-hpu-tests`。"
+            "03/04 如需保存每项 HPU/golden 数据，请按需在本地构建diagnostic；"
+            "它明显更慢，不作为默认下载内容。\n\n"
         )
         readme = (
             "# HPU 按章节测试包\n\n" + uart_note +

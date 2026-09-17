@@ -21,17 +21,15 @@ minimal/silent不再采样阶段cycle或写`mcounteren.CY`，也不计算只用�
 关闭的日志不求值实参；原报告的block递增已移出日志参数，避免静默后漏更新软件状态。
 关键CSR写读、自检、HPU发令、中断claim/clear及返回码均不放入可关闭的日志宏。
 
-## 该下载哪个包
+## 下载包
 
-- `nexus-am-hpu-workloads`：原完整用例，默认minimal。
-- `nexus-am-hpu-subtests`：03的37个独立子项，默认minimal。
-- **`nexus-am-hpu-silent-subtests`**：37个独立子项，完全无printf，适合此次先并行复测。
-- `nexus-am-hpu-silent-workloads`：原完整用例的无printf版本。
+GitHub Actions只发布一个`nexus-am-hpu-tests`。普通minimal版本保留原文件名，真正无printf的
+版本在扩展名前加`_silent`，例如`foo.elf`和`foo_silent.elf`。03只发布37个独立子项，
+不发布原九个串行整例；其它章节使用原workload。20项未接入用例仍不发布占位二进制。
 
-上述四包在普通push后生成；20项未接入用例仍不发布占位二进制。
-`nexus-am-hpu-uart-results`不再默认发布。确需全量数据时，在GitHub Actions手动运行workflow，
-勾选`full_uart_diagnostics`，才额外生成该12例慢速诊断包。不要继续使用旧链接里的全量包做速度复验。
-每包的MANIFEST记录`log_level/log_mode/uart_results`，对象缓存也按模式分离，防止混用。
+`INDEX.tsv`记录每个文件的`variant/log_mode/uart_results`。各模式仍先在独立构建目录完成
+静态验证，再由组包器核对revision、producer、清单和文件集合后合并，防止混用。
+全量逐系数结果不放进默认下载包，需要时仍可在本地使用`make diagnostic`构建。
 
 ## 本地构建
 
@@ -40,17 +38,16 @@ minimal/silent不再采样阶段cycle或写`mcounteren.CY`，也不计算只用�
 ```bash
 export AM_HOME=/path/to/nexus-am
 make -C tests/hputest verify-inline-asm
+make -C tests/hputest all
+python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/artifact --all
+make -C tests/hputest subtests
 make -C tests/hputest silent
-make -C tests/hputest silent-subtests
-```
-
-静默完整包输出`build/silent/artifact`，章节下载目录由以下命令生成：
-
-```bash
 python3 tests/hputest/scripts/package-chapters.py tests/hputest/build/silent/artifact --silent
+make -C tests/hputest silent-subtests
+make -C tests/hputest unified
 ```
 
-静默子项包直接输出`build/silent-subtests/release`，保留原并行运行脚本。
+最终目录为`build/unified/release/hputest/`；其中保留并行运行脚本和四份输入构建清单。
 单例可使用`make one CASE=... HPU_LOG_LEVEL=0`；详细日志用`HPU_LOG_LEVEL=2`，
 只有同时显式设置`HPU_DUMP_RESULTS=1`才输出所有系数。
 

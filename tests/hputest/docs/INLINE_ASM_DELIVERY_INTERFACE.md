@@ -327,11 +327,12 @@ producer instruction/data generation stages
 -> package artifact
 ```
 
-GitHub Actions全量构建并发布章节合并的 `nexus-am-hpu-workloads`，另外提供03/04的
-`nexus-am-hpu-uart-results` 全量UART诊断包。生成数据只运行一批，由两种构建复用；artifact保留7天，包含：
+GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只运行一批，由普通和静默
+两种构建复用；artifact保留7天，包含：
 
-- 章节目录中的ELF/BIN/TXT：常规包40组非占位产物，诊断包12组；另20个未就绪项只列原因；
-- `MANIFEST.txt`、`CASE_MANIFEST.tsv` 和 `NOT_QUALIFIED.tsv`；
+- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节31组workload，
+  每项同时提供普通和`_silent`文件；另20个未就绪项只列原因；
+- 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，
   以及 `upstream/` 中保留的原始程序与编码表。
