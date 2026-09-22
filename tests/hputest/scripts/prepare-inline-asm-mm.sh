@@ -55,8 +55,10 @@ cmake_build="$output_root/inline-asm-cmake"
 # 按生产者提交隔离输出，切换分支时不读取旧 submodule 内的 outputs。
 producer_work="$output_root/inline-asm-producer/$producer_commit"
 producer_mm="$producer_work/outputs/mm"
+producer_keyswitch="$producer_work/outputs/keyswitch"
 generated_root="$output_root/generated"
 import_root="$generated_root/inline-asm/mm"
+keyswitch_source_root="$generated_root/keyswitch-source"
 generated_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 tool_root="$output_root/inline-asm-tools"
 encoding_tsv="$tool_root/encoder_words.tsv"
@@ -75,7 +77,7 @@ required_outputs=(
   "$producer_mm/test_data/hardware/constants/mod_ctx.u32.bin"
 )
 
-echo "[hputest] generating selected inline-asm MM inputs at $producer_commit"
+echo "[hputest] generating selected inline-asm MM and KeySwitch inputs at $producer_commit"
 cmake -S "$inline_asm_root" -B "$cmake_build" \
   -DBUILD_TESTING=ON \
   -DHPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE=OFF \
@@ -138,4 +140,9 @@ python3 "$script_dir/import-bconv-data.py" \
   --destination "$generated_root/bconv-data" \
   --producer-commit "$producer_commit" --encodings "$encoding_tsv"
 
-echo '[hputest] inline-asm MM/stage/transform generation/import PASS'
+python3 "$script_dir/stage-keyswitch-package.py" \
+  --source "$producer_keyswitch" \
+  --destination "$keyswitch_source_root" \
+  --producer-commit "$producer_commit"
+
+echo '[hputest] inline-asm MM/stage/transform import and KeySwitch source staging PASS'

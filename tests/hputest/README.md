@@ -63,9 +63,10 @@ third_party/
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
-└── generated/                  # validated, selected MM delivery
+└── generated/                  # selected imports and source staging
     ├── include/hpu/inline_asm_mm_delivery.h
-    └── inline-asm/mm/
+    ├── inline-asm/mm/          # validated, selected MM delivery
+    └── keyswitch-source/       # structurally checked raw package; semantic import pending
 ```
 
 Each source has its own readable `main()`.  The MMIO register setup, data preparation,

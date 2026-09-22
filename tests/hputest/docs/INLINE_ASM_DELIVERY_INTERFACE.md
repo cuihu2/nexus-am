@@ -63,6 +63,12 @@ make -C tests/hputest prepare-inline-asm-mm JOBS=4
 逐字段检查选中的 MM 契约，再将交付内容导入
 `HPU_GENERATED_ROOT/inline-asm/mm`。这使接收端不依赖未使用算子的整包交付流程，
 也不复用 submodule 源码目录中可能残留的旧生成数据。
+
+`prepare-inline-asm-mm.sh`同时对同批`outputs/keyswitch`执行基础结构检查，
+并原样暂存到`HPU_GENERATED_ROOT/keyswitch-source/upstream`；暂存目录记录
+producer commit及`semantic_import=false`。这一步只检查缺包、未解析DMA，并记录
+当次生成批次；不代替KeySwitch的checksum、数学参数、line map、指令编码、
+scratch及fixture语义导入，也不解锁`HPU_IT_DIR_CMB_004`。
 构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
 当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
