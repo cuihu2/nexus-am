@@ -75,8 +75,9 @@ relocation。KeySwitch的ModUp/ModDown支持常量仅存在于同批`outputs/aut
 检查Auto嵌入的KeySwitch程序和resolved-plan尾段与独立程序一致，再导入这些常量，
 独立分配AM scratch、poison输出和guard，并自行生成716条`resolved_dma.tsv`。
 结果发布到`HPU_GENERATED_ROOT/keyswitch-data`，不借用Auto的地址布局。
-该步骤完成AM侧语义接收工具，但尚未实现fixture、Makefile.case绑定和运行时
-结果/guard/FAULT/IRQ校验，因此仍不解锁`HPU_IT_DIR_CMB_004`。
+`HPU_IT_DIR_CMB_004`通过只读`.incbin` fixture接收该窗口，配置14721 line（含64-line
+尾部guard），执行唯一末尾PSYNC后检查FAULT/IRQ，再逐项比较2×Q4输出，并确认输入、密钥、
+常量和guard未改写。当前仅覆盖这一固定基础参数组合，构建就绪不代表已在IT/VCS运行通过。
 构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
 当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
@@ -344,8 +345,8 @@ producer instruction/data generation stages
 GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只运行一批，由普通和静默
 两种构建复用；artifact保留7天，包含：
 
-- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节31组workload，
-  每项同时提供普通和`_silent`文件；另20个未就绪项只列原因；
+- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节32组workload，
+  每项同时提供普通和`_silent`文件；另19个未就绪项只列原因；
 - 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，

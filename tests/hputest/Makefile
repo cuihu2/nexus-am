@@ -126,6 +126,8 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-keyswitch-delivery.py \
 	  --source "$(OUTPUT_ROOT)/inline-asm-producer/$$(git -C "$(INLINE_ASM_ROOT)" rev-parse HEAD)/outputs" \
 	  --encodings "$(OUTPUT_ROOT)/inline-asm-tools/encoder_words.tsv"
+	@python3 scripts/test-keyswitch-runtime.py \
+	  --delivery "$(HPU_GENERATED_ROOT)/keyswitch-data"
 	@python3 scripts/test-stage-keyswitch-package.py
 
 validate:

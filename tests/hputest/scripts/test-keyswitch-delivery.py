@@ -59,6 +59,19 @@ class KeySwitchDeliveryTests(unittest.TestCase):
         output = prepared["output_offset"] * 256
         self.assertEqual(prepared["window"][output:output + 4], struct.pack("<I", 0xDEADBEEF))
         self.assertTrue(all(row["status"] == "RESOLVED" for row in prepared["resolved"]))
+        stores = {row["artifact"] for row in prepared["resolved"]
+                  if row["direction"] == "dstore"}
+        self.assertEqual(stores, {"am/runtime/keyswitch_scratch.u32.bin",
+                                  "am/output_q.u32.bin"})
+
+    def test_published_header_distinguishes_active_window_from_guard(self):
+        with __import__("tempfile").TemporaryDirectory(prefix="keyswitch-publish-") as root:
+            destination = Path(root) / "keyswitch-data"
+            IMPORTER.publish(destination, self.prepare(), "1" * 40, self.encodings)
+            header = (destination / "keyswitch_delivery.h").read_text(encoding="utf-8")
+        self.assertIn("#define HPU_KEYSWITCH_WINDOW_LINES 14657U", header)
+        self.assertIn("#define HPU_KEYSWITCH_GUARD_OFFSET 14657U", header)
+        self.assertIn("#define HPU_KEYSWITCH_TOTAL_LINES 14721U", header)
 
     def test_changed_key_parameter_is_rejected(self):
         path = self.source / "keyswitch/test_data/params.json"

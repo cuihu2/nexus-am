@@ -516,6 +516,7 @@ def publish(destination: Path, prepared: dict[str, object], commit: str, encodin
                   f"#define HPU_KEYSWITCH_WINDOW_LINES {prepared['window_lines']}U",
                   f"#define HPU_KEYSWITCH_GUARD_OFFSET {prepared['guard_offset']}U",
                   f"#define HPU_KEYSWITCH_GUARD_LINES {GUARD_LINES}U",
+                  f"#define HPU_KEYSWITCH_TOTAL_LINES {prepared['window_lines'] + GUARD_LINES}U",
                   f"#define HPU_KEYSWITCH_SCRATCH_OFFSET {prepared['scratch_offset']}U",
                   f"#define HPU_KEYSWITCH_OUTPUT_OFFSET {prepared['output_offset']}U",
                   "static const hpu_dma_span_t keyswitch_spans[HPU_KEYSWITCH_DMA_COUNT] = {"]

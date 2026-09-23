@@ -64,6 +64,9 @@ def verify(delivery, elf, disassembly, operator):
         fixtures = [("bconv_window", "window.u32.bin"),
                     ("bconv_golden", "golden_p.u32.bin"),
                     ("bconv_normalized", "normalized_cpu.u32.bin")]
+    if operator == "keyswitch":
+        fixtures = [("keyswitch_window", "window.u32.bin"),
+                    ("keyswitch_golden", "golden.u32.bin")]
     for symbol, filename in fixtures:
         if symbol_bytes(elf, symbol) != (delivery / filename).read_bytes():
             raise ValueError(f"{operator}: linked {symbol} differs from validated delivery")
@@ -75,6 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("--delivery", required=True, type=Path)
     parser.add_argument("--elf", required=True, type=Path)
     parser.add_argument("--disassembly", required=True, type=Path)
-    parser.add_argument("--operator", required=True, choices=("ntt", "intt", "bconv"))
+    parser.add_argument("--operator", required=True,
+                        choices=("ntt", "intt", "bconv", "keyswitch"))
     args = parser.parse_args()
     verify(args.delivery, args.elf, args.disassembly, args.operator)

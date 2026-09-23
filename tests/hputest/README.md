@@ -6,7 +6,7 @@ IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续49项中29项有软件自检，20项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续49项中30项有软件自检，19项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -287,7 +287,7 @@ Planning rows must carry the exact `case_id` from `cases.tsv`; a parallel set
 of informal testcase numbers is not authoritative.
 
 基础用例使用producer的两组不可变一RNS输入 `RNS_A/RNS_B`，各4096个32位系数。
-整体NTT/INTT/BConv改用各自的完整数据、常量和golden交付，不用MM输入冒充算子数据。
+整体NTT/INTT/BConv/KeySwitch改用各自的完整数据、常量和golden交付，不用MM输入冒充算子数据。
 未接入用例不再为了凑数据而强制保留无关fixture。
 
 | Group | Contents |
@@ -296,9 +296,9 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-29个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT
-已接入完整producer序列和golden，但仅覆盖各自固定基础组合。
-其它20项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
+30个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT和
+KeySwitch已接入完整producer序列及golden，但仅覆盖各自固定基础组合。
+其它19项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
 也有AM接收工作未实现，不能笼统归因于上游“没有数据”。原HADD的单条PADD替身已取消，
 真实PADD覆盖保留在03-001；HADD需真实算法库API后再启用。
 
@@ -365,7 +365,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共68个测试身份、136组ELF/BIN/TXT；20项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共69个测试身份、138组ELF/BIN/TXT；19项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary
