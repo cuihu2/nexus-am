@@ -36,6 +36,7 @@ ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/instruction-data
 ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/transform-data
 ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/bconv-data
 ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/keyswitch-data
+ASFLAGS += -Wa,-I$(HPU_GENERATED_ROOT)/auto-data
 INLINE_ASM_DELIVERY_HEADER := \
   $(HPU_GENERATED_ROOT)/include/hpu/inline_asm_mm_delivery.h
 
@@ -107,6 +108,15 @@ SRCS += $(TEST_ROOT)/src/common/it_keyswitch_fixture.S
 SRCS += $(HPU_GENERATED_ROOT)/keyswitch-data/keyswitch.c
 INC_DIR += $(HPU_GENERATED_ROOT)/keyswitch-data
 endif
+ifneq ($(filter %/HPU_IT_DIR_CMB_005.c,$(CASE_SOURCE)),)
+ifeq ($(wildcard $(HPU_GENERATED_ROOT)/auto-data/auto_delivery.h),)
+$(error missing Auto delivery; run 'make prepare-inline-asm-mm')
+endif
+SRCS += $(TEST_ROOT)/src/common/it_auto.c
+SRCS += $(TEST_ROOT)/src/common/it_auto_fixture.S
+SRCS += $(HPU_GENERATED_ROOT)/auto-data/auto.c
+INC_DIR += $(HPU_GENERATED_ROOT)/auto-data
+endif
 endif
 ifeq ($(HPU_LOG_LEVEL),0)
 # 不改共享 AM/klib。封住初始化和字符出口，启动路径也不能等待 UART。
@@ -162,6 +172,10 @@ $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_bconv_fixture.o: \
 
 $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_keyswitch_fixture.o: \
   $(addprefix $(HPU_GENERATED_ROOT)/keyswitch-data/,window.u32.bin \
+  golden.u32.bin)
+
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_auto_fixture.o: \
+  $(addprefix $(HPU_GENERATED_ROOT)/auto-data/,window.u32.bin \
   golden.u32.bin)
 
 # Nexus-AM adds -ggdb in Makefile.compile.  Published smoke ELFs do not need

@@ -118,7 +118,7 @@ done < "$roster"
 if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 30 || $roster_migrated_blocked -ne 19 ]]; then
+      $roster_migrated_software -ne 31 || $roster_migrated_blocked -ne 18 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -162,10 +162,10 @@ else
   for source_case_id in "${roster_ids[@]}"; do
     source_group=${roster_group[$source_case_id]}
     if [[ $case_group == diagnostic ]]; then
-      # 只发布已接入结果比较的 03 九项和 04 BConv/NTT/INTT/KeySwitch 四项。
+      # 只发布已接入结果比较的 03 九项和 04 BConv/NTT/INTT/KeySwitch/Auto 五项。
       # 不纳入没有真实接口/golden 的占位项，也不重新发布 00 冒烟。
       if [[ $source_case_id =~ ^HPU_IT_DIR_INS_C0_00[1-9]$ || \
-            $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-4]$ ]]; then
+            $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ ]]; then
         if [[ ${roster_qualifier[$source_case_id]} != software-self-check ]]; then
           printf 'ERROR: diagnostic testcase is not qualified: %s\n' "$source_case_id" >&2
           exit 2
@@ -285,6 +285,8 @@ test -s "$generated_root/bconv-data/producer_commit.txt"
 cp -a "$generated_root/bconv-data" "$artifact_root/provenance/bconv-data"
 test -s "$generated_root/keyswitch-data/producer_commit.txt"
 cp -a "$generated_root/keyswitch-data" "$artifact_root/provenance/keyswitch-data"
+test -s "$generated_root/auto-data/producer_commit.txt"
+cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
@@ -303,7 +305,7 @@ else
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=13 ;;
-    diagnostic) expected_cases=13 ;;
+    diagnostic) expected_cases=14 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then

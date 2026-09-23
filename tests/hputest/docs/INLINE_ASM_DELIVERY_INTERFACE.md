@@ -78,6 +78,15 @@ relocation。KeySwitch的ModUp/ModDown支持常量仅存在于同批`outputs/aut
 `HPU_IT_DIR_CMB_004`通过只读`.incbin` fixture接收该窗口，配置14721 line（含64-line
 尾部guard），执行唯一末尾PSYNC后检查FAULT/IRQ，再逐项比较2×Q4输出，并确认输入、密钥、
 常量和guard未改写。当前仅覆盖这一固定基础参数组合，构建就绪不代表已在IT/VCS运行通过。
+
+`import-auto-data.py`直接接收同批`outputs/auto`的完整producer窗口和941行
+resolved `dma_plan.csv`，不在AM侧重建Auto planner。接收门禁固定`g=3`、
+generator-3左旋一步、`host_preprocess=false`和`auto_intt_g3` modified-root表，
+逐条对拍C/ASM/inst32/cmd26、relocation、DMA对象及line span。最终
+`expected/ciphertext_q.bin`独立转换为系数域bit-reversed `uint32` golden；producer
+workspace保持唯一可写区，窗口尾追加64-line guard。`HPU_IT_DIR_CMB_005`执行完整
+3009条NTT+Auto+Galois KeySwitch程序、等待唯一末尾PSYNC，并检查FAULT/IRQ、2×Q4
+输出、只读输入/密钥/常量和guard。其它Galois element与旋转步仍未覆盖。
 构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
 当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
@@ -346,7 +355,7 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
 两种构建复用；artifact保留7天，包含：
 
 - 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节32组workload，
-  每项同时提供普通和`_silent`文件；另19个未就绪项只列原因；
+  每项同时提供普通和`_silent`文件；另18个未就绪项只列原因；
 - 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，

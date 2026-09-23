@@ -1,8 +1,8 @@
 # v2 测试点落实范围与运行说明
 
 依据 `HPU-IT测试点分解v2.xlsx` 的原用例 ID，以及本轮提供的功能、边界、性能、CPU 回归要求更新。
-**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，30 个具备真实软件自检；
-19 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
+**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，31 个具备真实软件自检；
+18 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改，inline-asm仍为main `6903096`。
 本版同步说明见 [inline-main更新](INLINE_MAIN_6903096.md)。
@@ -64,11 +64,11 @@
 | CMB_002 | 整体NTT，Q0/N4096；pre-twist+12stage+写回；57指令/16DMA | 其它模数基、边界数据、其它规模 |
 | CMB_003 | 整体INTT，Q0/N4096；12stage+归一化/逆twist+写回；57指令/16DMA | 同上 |
 | CMB_004 | Q4/P3/D2 KeySwitch，N4096；2167指令/716DMA；2×Q4输出、只读区及guard逐项检查 | 其它参数、边界数据和真实IT/VCS运行 |
-| CMB_005 | 未接入NTT+Auto | producer已有Auto专用交付，AM接收校验/绑定尚未实现 |
+| CMB_005 | N4096/Q4/P3/D2，g=3；标准NTT+modified-root融合Auto INTT+Galois KeySwitch；3009指令/941DMA；2×Q4输出、只读区及guard逐项检查 | 其它Galois element/旋转步、参数、边界数据和真实IT/VCS运行 |
 | CMB_009..015 | 未接入真实算法库API | 需库仓库、固定commit、接口、参数、密钥、数据、精度和golden |
 | STING_CMB_007 | 未接入随机长链 | STING入口、seed重放、对象分配与逐阶段golden |
 
-整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口。均保留导入布局并添加尾部guard。
+整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard。
 输入/常量从producer交付接收，输出区填poison，golden位于只读ELF中而不预填到HPU输出区。
 NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式复核，不错误替换为精确CRT还原。
 每次DLOAD/DSTORE的序号、对象、line及来源记录在 `resolved_dma.tsv`；原C/ASM/inst32/cmd26及表格均保留。
@@ -112,8 +112,8 @@ NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式
 ## 7. 下载和复验
 
 GitHub Actions的唯一HPU产物名为`nexus-am-hpu-tests`，内部是00至07章节目录和`INDEX.tsv`。
-03用37个独立subtest替换九个串行整例，其余章节保留32组非占位workload；每项同时提供普通和
-`_silent`版本，共138组ELF/BIN/反汇编。19项未就绪只列原因，不夹在可运行列表中。
+03用37个独立subtest替换九个串行整例，其余章节保留33组非占位workload；每项同时提供普通和
+`_silent`版本，共140组ELF/BIN/反汇编。18项未就绪只列原因，不夹在可运行列表中。
 `provenance/`保留固定producer版本、实际指令、DMA/数据布局和本说明。
 新用例需要更多初始化、逐项golden和guard扫描，不承诺100万cycle一定足够；由IT测定预算并保存原始超时日志。
 失败回传至少包含case ID、AM/producer/RTL/simv版本、cycle-limit、最后阶段、首错日志和对应波形。

@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 30 || $roster_migrated_blocked -ne 19 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 38 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 19 || \
+      $roster_migrated_software -ne 31 || $roster_migrated_blocked -ne 18 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 39 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 18 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -903,7 +903,8 @@ for elf in "${elfs[@]}"; do
       if [[ $qualifier != blocked-not-issued && $name != HPU_IT_DIR_CMB_001 && \
             $name != HPU_IT_DIR_CMB_002 && \
             $name != HPU_IT_DIR_CMB_003 && \
-            $name != HPU_IT_DIR_CMB_004 ]]; then
+            $name != HPU_IT_DIR_CMB_004 && \
+            $name != HPU_IT_DIR_CMB_005 ]]; then
         require_rns_fixture "$elf"
       fi
       reject_mm_only_fixture "$elf" ;;
@@ -950,6 +951,10 @@ for elf in "${elfs[@]}"; do
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/keyswitch-data" \
         --elf "$elf" --disassembly "$txt" --operator keyswitch ;;
+    HPU_IT_DIR_CMB_005)
+      python3 "$script_dir/verify-operator-elf.py" \
+        --delivery "$artifact_root/provenance/auto-data" \
+        --elf "$elf" --disassembly "$txt" --operator auto ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)

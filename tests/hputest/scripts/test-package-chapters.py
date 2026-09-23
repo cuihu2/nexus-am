@@ -160,13 +160,13 @@ class ChapterPackageTests(unittest.TestCase):
                 for i in range(1, 10)] + [
             self.row(f"HPU_IT_DIR_CMB_{i:03d}", "transform" if i < 4 else "fhe",
                      chapter="04_composite_instruction_sequences")
-            for i in range(1, 5)]
+            for i in range(1, 6)]
 
-    def test_diagnostic_publishes_thirteen_full_uart_cases(self):
+    def test_diagnostic_publishes_fourteen_full_uart_cases(self):
         self.fixture(self.diagnostic_rows(), selection="diagnostic",
                      uart_results="full", dump_results="1")
         release = PACKAGER.package(self.artifact, require_diagnostic=True)
-        self.assertEqual(len(list(release.rglob("*.elf"))), 13)
+        self.assertEqual(len(list(release.rglob("*.elf"))), 14)
         self.assertEqual({row["case_id"] for row in self.index(release)},
                          PACKAGER.DIAGNOSTIC_IDS)
         self.assertTrue(all("全量 UART" in row["notes"] for row in self.index(release)))
@@ -193,22 +193,22 @@ class ChapterPackageTests(unittest.TestCase):
     def test_diagnostic_rejects_missing_case(self):
         self.fixture(self.diagnostic_rows()[:-1], selection="diagnostic",
                      uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the thirteen"):
+        with self.assertRaisesRegex(ValueError, "exactly the fourteen"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_diagnostic_rejects_blocked_placeholder(self):
         rows = self.diagnostic_rows()
         rows[-1]["qualifier"] = "blocked-not-issued"
         self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the thirteen"):
+        with self.assertRaisesRegex(ValueError, "exactly the fourteen"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_diagnostic_rejects_wrong_chapter(self):
         rows = self.diagnostic_rows()
-        rows[-1] = self.row("HPU_IT_DIR_CMB_004", "fhe",
+        rows[-1] = self.row("HPU_IT_DIR_CMB_005", "fhe",
                             chapter="00_bringup")
         self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the thirteen"):
+        with self.assertRaisesRegex(ValueError, "exactly the fourteen"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_uart_macro_and_metadata_must_agree(self):
