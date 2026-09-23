@@ -517,7 +517,8 @@ for name, word_text, assembly in tables[0]:
     require(match is not None, "explicit three-object STG syntax: " + name)
     operation, dst, src, twiddle, stage = match.groups()
     dst, src, twiddle, stage = map(int, (dst, src, twiddle, stage))
-    require((dst, src, twiddle) in ((2, 0, 1), (0, 2, 3), (3, 0, 1), (0, 3, 1))
+    require((dst, src, twiddle) in ((2, 0, 1), (2, 0, 3), (0, 2, 3),
+                                    (3, 0, 1), (0, 3, 1))
             and stage < 12,
             "STG object mapping/stage: " + name)
     expected_name = f"HPU_INSN_{operation.upper()}_P{dst}_P{src}_P{twiddle}_STAGE{stage}"
@@ -527,7 +528,7 @@ for name, word_text, assembly in tables[0]:
                      | dst << 25 | src << 22 | twiddle << 14 | stage << 10 | 0x5b)
     require(int(word_text, 16) == expected_word, "STG manual bitfields: " + name)
     stage_macros.add(name)
-require(len(stage_macros) == 96, "STG must cover four object maps and 12 stages/direction")
+require(len(stage_macros) == 120, "STG must cover five object maps and 12 stages/direction")
 for name in ("mm.h", "mm.asm", "mm.cmd26", "dma_relocation_manifest.csv"):
     require((raw / name).read_bytes() == (root / name).read_bytes(),
             "non-opcode input changed: " + name)
