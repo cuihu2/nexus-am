@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 31 || $roster_migrated_blocked -ne 18 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 39 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 18 || \
+      $roster_migrated_software -ne 32 || $roster_migrated_blocked -ne 17 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 40 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 17 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -220,6 +220,7 @@ manifest_value() {
 
 manifest_cases=$(manifest_value case_count)
 manifest_inline_asm=$(manifest_value inline_asm_commit)
+manifest_hpu_seal=$(manifest_value hpu_seal_commit)
 manifest_selection=$(manifest_value selection)
 manifest_core=$(manifest_value core_count)
 manifest_transform=$(manifest_value transform_count)
@@ -248,7 +249,8 @@ case "$manifest_selection" in
       group=${roster_group[$case_id]}
       if [[ $manifest_selection == diagnostic ]]; then
         [[ ${roster_source[$case_id]} == src/03_compute_instructions/* || \
-           $case_id =~ ^HPU_IT_DIR_CMB_00[1234]$ ]] || continue
+           $case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
+           $case_id == HPU_IT_DIR_CMB_009 ]] || continue
       elif [[ $manifest_selection != all && $group != "$manifest_selection" ]]; then
         continue
       fi
@@ -420,6 +422,22 @@ if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
   printf 'ERROR: selected inline-asm MM provenance is incomplete\n' >&2
   exit 2
 fi
+hadd_artifact="$artifact_root/provenance/hadd-data"
+if [[ ! $manifest_hpu_seal =~ ^[0-9a-f]{40}$ ]] || \
+   [[ ! -s $hadd_artifact/producer_commit.txt ]] || \
+   [[ $manifest_hpu_seal != "$(<"$hadd_artifact/producer_commit.txt")" ]]; then
+  printf 'ERROR: selected HPU_SEAL HADD provenance is incomplete\n' >&2
+  exit 2
+fi
+for required in hadd.c hadd.h hadd.asm hadd.inst32 hadd.cmd26 \
+                resolved_dma.csv allocations.csv metadata.json \
+                window.u32.bin golden.u32.bin hadd_layout.h hadd_delivery.h \
+                DELIVERY_SUMMARY.md; do
+  if [[ ! -s $hadd_artifact/$required ]]; then
+    printf 'ERROR: selected HPU_SEAL HADD provenance omits %s\n' "$required" >&2
+    exit 2
+  fi
+done
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
                 mm.c mm.h mm.asm mm.inst32 mm.cmd26 dma_relocation_manifest.csv \
                 opcode_map.csv upstream/mm.c upstream/mm.h upstream/mm.asm \
@@ -905,7 +923,8 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_002 && \
             $name != HPU_IT_DIR_CMB_003 && \
             $name != HPU_IT_DIR_CMB_004 && \
-            $name != HPU_IT_DIR_CMB_005 ]]; then
+            $name != HPU_IT_DIR_CMB_005 && \
+            $name != HPU_IT_DIR_CMB_009 ]]; then
         require_rns_fixture "$elf"
       fi
       reject_mm_only_fixture "$elf" ;;
@@ -956,6 +975,10 @@ for elf in "${elfs[@]}"; do
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/auto-data" \
         --elf "$elf" --disassembly "$txt" --operator auto ;;
+    HPU_IT_DIR_CMB_009)
+      python3 "$script_dir/verify-operator-elf.py" \
+        --delivery "$artifact_root/provenance/hadd-data" \
+        --elf "$elf" --disassembly "$txt" --operator hadd ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)

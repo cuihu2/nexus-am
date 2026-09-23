@@ -118,7 +118,7 @@ done < "$roster"
 if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 31 || $roster_migrated_blocked -ne 18 ]]; then
+      $roster_migrated_software -ne 32 || $roster_migrated_blocked -ne 17 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -162,10 +162,11 @@ else
   for source_case_id in "${roster_ids[@]}"; do
     source_group=${roster_group[$source_case_id]}
     if [[ $case_group == diagnostic ]]; then
-      # 只发布已接入结果比较的 03 九项和 04 BConv/NTT/INTT/KeySwitch/Auto 五项。
+      # 只发布已接入结果比较的 03 九项和 04 BConv/NTT/INTT/KeySwitch/Auto/HADD 六项。
       # 不纳入没有真实接口/golden 的占位项，也不重新发布 00 冒烟。
       if [[ $source_case_id =~ ^HPU_IT_DIR_INS_C0_00[1-9]$ || \
-            $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ ]]; then
+            $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
+            $source_case_id == HPU_IT_DIR_CMB_009 ]]; then
         if [[ ${roster_qualifier[$source_case_id]} != software-self-check ]]; then
           printf 'ERROR: diagnostic testcase is not qualified: %s\n' "$source_case_id" >&2
           exit 2
@@ -287,6 +288,8 @@ test -s "$generated_root/keyswitch-data/producer_commit.txt"
 cp -a "$generated_root/keyswitch-data" "$artifact_root/provenance/keyswitch-data"
 test -s "$generated_root/auto-data/producer_commit.txt"
 cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
+test -s "$generated_root/hadd-data/producer_commit.txt"
+cp -a "$generated_root/hadd-data" "$artifact_root/provenance/hadd-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
@@ -305,7 +308,7 @@ else
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=13 ;;
-    diagnostic) expected_cases=14 ;;
+    diagnostic) expected_cases=15 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then
@@ -330,6 +333,7 @@ fi
   printf 'fhe_count=%u\n' "${group_counts[fhe]}"
   printf 'not_qualified_count=%u\n' "$not_qualified_count"
   printf 'inline_asm_commit=%s\n' "$(<"$mm_delivery_source/PRODUCER_COMMIT")"
+  printf 'hpu_seal_commit=%s\n' "$(<"$generated_root/hadd-data/producer_commit.txt")"
 } > "$artifact_root/MANIFEST.txt"
 
 EXPECTED_CASES=$expected_cases CROSS_COMPILE="$cross_compile" \

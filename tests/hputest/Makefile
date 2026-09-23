@@ -4,6 +4,7 @@ CROSS_COMPILE ?= riscv64-linux-gnu-
 OUTPUT_ROOT ?= $(CURDIR)/build
 JOBS ?= 4
 INLINE_ASM_ROOT ?= $(CURDIR)/third_party/inline-asm
+HPU_SEAL_ROOT ?= $(CURDIR)/third_party/hpu-seal
 HPU_GENERATED_ROOT ?= $(OUTPUT_ROOT)/generated
 export mainargs
 HPU_DUMP_RESULTS ?= 0
@@ -91,7 +92,7 @@ silent-subtests:
 
 prepare-inline-asm-mm:
 	@scripts/prepare-inline-asm-mm.sh \
-	  "$(INLINE_ASM_ROOT)" "$(OUTPUT_ROOT)" "$(JOBS)"
+	  "$(INLINE_ASM_ROOT)" "$(OUTPUT_ROOT)" "$(JOBS)" "$(HPU_SEAL_ROOT)"
 
 verify-inline-asm: prepare-inline-asm-mm
 	@HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
@@ -133,6 +134,10 @@ verify-inline-asm: prepare-inline-asm-mm
 	  --encodings "$(OUTPUT_ROOT)/inline-asm-tools/encoder_words.tsv"
 	@python3 scripts/test-auto-runtime.py \
 	  --delivery "$(HPU_GENERATED_ROOT)/auto-data"
+	@python3 scripts/test-hpu-seal-hadd-delivery.py \
+	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hadd" \
+	  --encodings "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hadd_encoder_words.tsv" \
+	  --producer-commit "$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)"
 	@python3 scripts/test-stage-keyswitch-package.py
 
 validate:

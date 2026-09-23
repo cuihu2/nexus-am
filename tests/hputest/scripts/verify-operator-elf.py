@@ -44,7 +44,10 @@ def stream(disassembly, function):
     for line in disassembly.splitlines():
         label = re.match(r"^[0-9a-f]+ <([^>]+)>:", line)
         if label:
-            active = label[1] == function
+            # GCC may outline the generated body as hpu_program_<op>.part.0
+            # when the zero-argument resolved-plan wrapper makes it a constant
+            # propagation candidate.  It remains the same source function.
+            active = label[1] == function or label[1].startswith(function + ".")
         word = re.match(r"^\s*[0-9a-f]+:\s+([0-9a-f]{8})(?:\s|$)", line)
         if active and word and int(word[1], 16) & 0x7f in (0x0b, 0x2b, 0x5b):
             found.append(int(word[1], 16))
@@ -70,6 +73,9 @@ def verify(delivery, elf, disassembly, operator):
     if operator == "auto":
         fixtures = [("auto_window", "window.u32.bin"),
                     ("auto_golden", "golden.u32.bin")]
+    if operator == "hadd":
+        fixtures = [("hadd_window", "window.u32.bin"),
+                    ("hadd_golden", "golden.u32.bin")]
     for symbol, filename in fixtures:
         if symbol_bytes(elf, symbol) != (delivery / filename).read_bytes():
             raise ValueError(f"{operator}: linked {symbol} differs from validated delivery")
@@ -82,6 +88,6 @@ if __name__ == "__main__":
     parser.add_argument("--elf", required=True, type=Path)
     parser.add_argument("--disassembly", required=True, type=Path)
     parser.add_argument("--operator", required=True,
-                        choices=("ntt", "intt", "bconv", "keyswitch", "auto"))
+                        choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd"))
     args = parser.parse_args()
     verify(args.delivery, args.elf, args.disassembly, args.operator)

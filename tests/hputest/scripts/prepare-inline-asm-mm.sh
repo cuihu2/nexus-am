@@ -6,12 +6,16 @@ test_root=$(cd -- "$script_dir/.." && pwd)
 inline_asm_root=${1:-"$test_root/third_party/inline-asm"}
 output_root=${2:-"$test_root/build"}
 jobs=${3:-${JOBS:-4}}
+hpu_seal_root=${4:-"$test_root/third_party/hpu-seal"}
 
 if [[ $inline_asm_root != /* ]]; then
   inline_asm_root=$(cd -- "$test_root" && realpath -m -- "$inline_asm_root")
 fi
 if [[ $output_root != /* ]]; then
   output_root=$(cd -- "$test_root" && realpath -m -- "$output_root")
+fi
+if [[ $hpu_seal_root != /* ]]; then
+  hpu_seal_root=$(cd -- "$test_root" && realpath -m -- "$hpu_seal_root")
 fi
 if [[ ! $jobs =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: JOBS must be a positive integer: $jobs" >&2
@@ -44,6 +48,27 @@ if [[ $producer_commit != "$gitlink_commit" ]]; then
   echo "checkout: $producer_commit" >&2
   exit 2
 fi
+if [[ ! -f $hpu_seal_root/CMakeLists.txt ]] || \
+   ! git -C "$hpu_seal_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo 'ERROR: HPU_SEAL submodule is not initialized' >&2
+  echo 'run: git submodule update --init --recursive tests/hputest/third_party/hpu-seal' >&2
+  exit 2
+fi
+if ! git -C "$hpu_seal_root" diff --quiet -- || \
+   ! git -C "$hpu_seal_root" diff --cached --quiet --; then
+  echo 'ERROR: HPU_SEAL submodule contains tracked modifications' >&2
+  exit 2
+fi
+hpu_seal_path=${hpu_seal_root#"$repository_root/"}
+hpu_seal_gitlink=$(git -C "$repository_root" ls-files -s -- "$hpu_seal_path" |
+  awk '$1 == "160000" { print $2 }')
+hpu_seal_commit=$(git -C "$hpu_seal_root" rev-parse HEAD)
+if [[ -z $hpu_seal_gitlink || $hpu_seal_commit != "$hpu_seal_gitlink" ]]; then
+  echo 'ERROR: HPU_SEAL checkout does not match the Nexus-AM gitlink' >&2
+  echo "gitlink:  $hpu_seal_gitlink" >&2
+  echo "checkout: $hpu_seal_commit" >&2
+  exit 2
+fi
 for tool in cmake python3 "${CXX:-c++}"; do
   command -v "$tool" >/dev/null || {
     echo "ERROR: missing build tool: $tool" >&2
@@ -64,8 +89,14 @@ auto_import_root="$generated_root/auto-data"
 generated_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 tool_root="$output_root/inline-asm-tools"
 encoding_tsv="$tool_root/encoder_words.tsv"
+hpu_seal_build="$output_root/hpu-seal-cmb009-cmake/$hpu_seal_commit"
+hpu_seal_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hadd"
+hpu_seal_import="$generated_root/hadd-data"
+hpu_seal_tool_root="$output_root/hpu-seal-tools/$hpu_seal_commit"
+hpu_seal_encodings="$hpu_seal_tool_root/hadd_encoder_words.tsv"
 
-mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work"
+mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
+  "$hpu_seal_build" "$hpu_seal_source" "$hpu_seal_tool_root"
 required_outputs=(
   "$producer_mm/mm.c"
   "$producer_mm/mm.h"
@@ -159,4 +190,28 @@ python3 "$script_dir/import-auto-data.py" \
   --producer-commit "$producer_commit" \
   --encodings "$encoding_tsv"
 
-echo '[hputest] inline-asm MM/stage/transform, KeySwitch and Auto semantic import PASS'
+echo "[hputest] generating HPU_SEAL BFV HADD at $hpu_seal_commit"
+cmake -S "$test_root/tools/hpu-seal-cmb009" -B "$hpu_seal_build" \
+  -DINLINE_ASM_ROOT="$hpu_seal_root" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$hpu_seal_build" --parallel "$jobs" --target hpu_seal_cmb009_generator
+"$hpu_seal_build/hpu_seal_cmb009_generator" "$hpu_seal_source" "$hpu_seal_commit"
+
+"${CXX:-c++}" \
+  -std=c++17 -Wall -Wextra -Werror \
+  -I"$hpu_seal_root/encode/include" \
+  "$script_dir/generate-hpu-seal-hadd-encodings.cpp" \
+  "$hpu_seal_root/encode/src/instruction.cpp" \
+  "$hpu_seal_root/encode/src/parser.cpp" \
+  "$hpu_seal_root/encode/src/encoder.cpp" \
+  "$hpu_seal_root/encode/src/assembler.cpp" \
+  -o "$hpu_seal_tool_root/generate-hpu-seal-hadd-encodings"
+"$hpu_seal_tool_root/generate-hpu-seal-hadd-encodings" "$hpu_seal_encodings"
+
+python3 "$script_dir/import-hpu-seal-hadd.py" \
+  --source "$hpu_seal_source" \
+  --destination "$hpu_seal_import" \
+  --producer-commit "$hpu_seal_commit" \
+  --encodings "$hpu_seal_encodings"
+
+echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD semantic import PASS'

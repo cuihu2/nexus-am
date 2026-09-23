@@ -75,8 +75,9 @@ class UnifiedPackageTests(unittest.TestCase):
             "repository=test/repository\nrevision=am-revision\narch=riscv64-xs\n"
             "selection=all\nmainargs=all\n"
             f"log_level={level}\nlog_mode={mode}\nuart_results={uart}\n"
-            "hpu_dump_results=0\ncase_count=60\nnot_qualified_count=18\n"
-            "inline_asm_commit=producer-commit\n", encoding="utf-8")
+            "hpu_dump_results=0\ncase_count=60\nnot_qualified_count=17\n"
+            "inline_asm_commit=producer-commit\n"
+            "hpu_seal_commit=hpu-seal-producer-commit\n", encoding="utf-8")
         rows = []
         for source in self.rows(TEST_ROOT / "cases.tsv"):
             relative_source = PurePosixPath(source["source"])
@@ -132,7 +133,7 @@ class UnifiedPackageTests(unittest.TestCase):
     def test_one_tree_contains_normal_and_silent_and_replaces_03_parents(self):
         release = self.package()
         package = release / "hputest"
-        self.assertEqual(len(list(package.rglob("*.elf"))), 140)
+        self.assertEqual(len(list(package.rglob("*.elf"))), 142)
         normal = package / "01_configuration/01_hpu_register_access/HPU_IT_DIR_CFG_001.elf"
         silent = normal.with_name("HPU_IT_DIR_CFG_001_silent.elf")
         self.assertTrue(normal.is_file())
@@ -143,9 +144,9 @@ class UnifiedPackageTests(unittest.TestCase):
         self.assertTrue((package / "03_compute_instructions" / f"{subtest}.elf").is_file())
         self.assertTrue((package / "03_compute_instructions" / f"{subtest}_silent.elf").is_file())
         rows = PACKAGER.read_tsv(package / "INDEX.tsv", PACKAGER.INDEX_FIELDS)
-        self.assertEqual(len(rows), 158)
-        self.assertEqual(sum(bool(row["elf"]) for row in rows), 140)
-        self.assertEqual(sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in rows), 18)
+        self.assertEqual(len(rows), 159)
+        self.assertEqual(sum(bool(row["elf"]) for row in rows), 142)
+        self.assertEqual(sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in rows), 17)
         self.assertEqual({row["variant"] for row in rows if row["elf"]}, {"normal", "silent"})
         normal_cases = RUNNER.read_index(package, "normal")
         silent_cases = RUNNER.read_index(package, "silent")
@@ -157,6 +158,14 @@ class UnifiedPackageTests(unittest.TestCase):
         manifest.write_text(manifest.read_text(encoding="utf-8").replace(
             "log_level=0", "log_level=1"), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "wrong build mode"):
+            self.package()
+
+    def test_inconsistent_hpu_seal_commit_is_rejected(self):
+        manifest = self.silent_workloads / "MANIFEST.txt"
+        manifest.write_text(manifest.read_text(encoding="utf-8").replace(
+            "hpu_seal_commit=hpu-seal-producer-commit",
+            "hpu_seal_commit=other-hpu-seal-producer-commit"), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "hpu_seal_commit"):
             self.package()
 
     def test_inconsistent_subtest_row_mode_is_rejected(self):

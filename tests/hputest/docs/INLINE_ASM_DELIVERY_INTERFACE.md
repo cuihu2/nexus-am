@@ -6,12 +6,16 @@
 
 ## 1. 版本与目录
 
-生产者以 git submodule 固定在：
+生产者以两个 git submodule 固定在：
 
 ```text
 tests/hputest/third_party/inline-asm
 branch main
 commit 69030963e71dbcf32897e8ae08695cfa2e65d79a
+
+tests/hputest/third_party/hpu-seal
+branch HPU_SEAL
+commit 8ac575158d28c07e2741da2101296a4eb31e5916
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
@@ -20,8 +24,9 @@ commit 69030963e71dbcf32897e8ae08695cfa2e65d79a
 当前引用上游 `main` 的上述固定提交，接收其 STG 与 DMA 编码、生成程序和
 编程约定更新；规范来源为该提交中的 `doc/HPU_PROGRAMMING_MANUAL.md`，
 不能仅用仍标作 v0.4 的文档标题判断内容相同。
-AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
-`HPU_SEAL` 保留为历史来源，本次不修改它们。
+AM 不再引用 `HPU_SEAL_manual_0905` 试验分支。开发者确认后，正式算法库接口改从
+独立固定的 `HPU_SEAL` gitlink 接收；既有MM、stage、transform、BConv、KeySwitch和
+Auto仍从main接收。两者不能相互替换，因为当前STG语法和部分对象编码不同。
 
 上述上游原生使用HPU主opcode `0x5B`，AM验证后原样接收，旧`0x0B`指令拒绝。
 本次更新固定gitlink，不修改上游源码。STG变为三对象，数据变为物理域布局，见
@@ -32,6 +37,7 @@ AM 不再引用 `HPU_SEAL_manual_0905` 试验分支；该分支及原
 
 ```text
 tests/hputest/build/inline-asm-producer/<producer_commit>/
+tests/hputest/build/hpu-seal-producer/<producer_commit>/
 tests/hputest/build/generated/
 tests/hputest/build/artifact/
 ```
@@ -49,7 +55,8 @@ tests/hputest/build/artifact/
 三个阶段：
 
 ```bash
-git submodule update --init --recursive tests/hputest/third_party/inline-asm
+git submodule update --init --recursive \
+  tests/hputest/third_party/inline-asm tests/hputest/third_party/hpu-seal
 make -C tests/hputest prepare-inline-asm-mm JOBS=4
 ```
 
@@ -90,6 +97,13 @@ workspace保持唯一可写区，窗口尾追加64-line guard。`HPU_IT_DIR_CMB_
 构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
 当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
+
+`prepare-inline-asm-mm.sh`还单独构建`tools/hpu-seal-cmb009`。该工具使用固定HPU_SEAL
+中的BFV `BfvOperationPlan::append_add`，构造N4096/Q4、2-component、coefficient-domain
+密文，使用同上下文SEAL `Evaluator::add`和HPU_SEAL software executor双重核对，然后
+导出59条指令、25条resolved DMA、1601-line窗口及golden。接收脚本用HPU_SEAL自己的
+assembler重新生成HADD所需编码表，逐指令核对后发布到`HPU_GENERATED_ROOT/hadd-data`。
+`HPU_IT_DIR_CMB_009`执行该程序并检查2×Q4输出、输入、模数表和尾部guard。
 
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
@@ -354,12 +368,14 @@ producer instruction/data generation stages
 GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只运行一批，由普通和静默
 两种构建复用；artifact保留7天，包含：
 
-- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节32组workload，
-  每项同时提供普通和`_silent`文件；另18个未就绪项只列原因；
+- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节34组workload，
+  每项同时提供普通和`_silent`文件；另17个未就绪项只列原因；
 - 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，
   以及 `upstream/` 中保留的原始程序与编码表。
+- `provenance/hadd-data/`：HPU_SEAL生成的HADD程序、resolved DMA、窗口、golden、
+  固定producer commit及接收摘要。
 
 生成物不进入 Git history。
 
