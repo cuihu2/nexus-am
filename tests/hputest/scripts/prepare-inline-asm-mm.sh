@@ -59,6 +59,7 @@ producer_keyswitch="$producer_work/outputs/keyswitch"
 generated_root="$output_root/generated"
 import_root="$generated_root/inline-asm/mm"
 keyswitch_source_root="$generated_root/keyswitch-source"
+keyswitch_import_root="$generated_root/keyswitch-data"
 generated_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 tool_root="$output_root/inline-asm-tools"
 encoding_tsv="$tool_root/encoder_words.tsv"
@@ -145,4 +146,10 @@ python3 "$script_dir/stage-keyswitch-package.py" \
   --destination "$keyswitch_source_root" \
   --producer-commit "$producer_commit"
 
-echo '[hputest] inline-asm MM/stage/transform import and KeySwitch source staging PASS'
+python3 "$script_dir/import-keyswitch-data.py" \
+  --source "$producer_work/outputs" \
+  --destination "$keyswitch_import_root" \
+  --producer-commit "$producer_commit" \
+  --encodings "$encoding_tsv"
+
+echo '[hputest] inline-asm MM/stage/transform import and KeySwitch semantic import PASS'

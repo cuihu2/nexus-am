@@ -47,25 +47,14 @@ class KeySwitchPackageStagingTests(unittest.TestCase):
             json.dumps({"size_lines": 2}), encoding="utf-8")
         (hardware / "hpu_mem_image.u32.bin").write_bytes(bytes(2 * STAGER.LINE_BYTES))
 
-        plan_fields = ["instruction_index", "dma_index", "direction", "object_slot",
-                       "logical_object", "artifact", "line_offset", "line_count", "status"]
-        plan = [
-            {"instruction_index": "0", "dma_index": "0", "direction": "dload",
-             "object_slot": "0", "logical_object": "base", "artifact": "images/base.u32.bin",
-             "line_offset": "0", "line_count": "1", "status": "RESOLVED"},
-            {"instruction_index": "1", "dma_index": "1", "direction": "dstore",
-             "object_slot": "1", "logical_object": "output", "artifact": "images/out.u32.bin",
-             "line_offset": "1", "line_count": "1", "status": "RESOLVED"},
-        ]
-        self.write_csv(data / "dma_plan.csv", plan_fields, plan)
         relocation_fields = ["instruction_index", "dma_index", "direction", "obj_id",
                              "type_or_release", "flag", "rs1", "rs2", "word_hex", "normalized_asm"]
         relocations = [
-            {"instruction_index": row["instruction_index"], "dma_index": row["dma_index"],
-             "direction": row["direction"], "obj_id": row["object_slot"],
+            {"instruction_index": str(index), "dma_index": str(index),
+             "direction": direction, "obj_id": str(index),
              "type_or_release": "0", "flag": "0", "rs1": "x10", "rs2": "x11",
-             "word_hex": "0x0000002b", "normalized_asm": row["direction"]}
-            for row in plan
+             "word_hex": "0x0000002b", "normalized_asm": direction}
+            for index, direction in enumerate(("dload", "dstore"))
         ]
         self.write_csv(self.source / "dma_relocation_manifest.csv",
                        relocation_fields, relocations)
@@ -95,15 +84,16 @@ class KeySwitchPackageStagingTests(unittest.TestCase):
         marker = json.loads((self.destination / "STAGING_STATUS.json").read_text())
         self.assertFalse(marker["semantic_import"])
         self.assertEqual(marker["validation_scope"], "producer-package-structure-only")
-        self.assertEqual(marker["dma_rows"], 2)
+        self.assertEqual(marker["dma_relocations"], 2)
+        self.assertFalse(marker["resolved_dma_plan"])
         self.assertTrue((self.destination / "upstream/keyswitch.c").is_file())
 
-    def test_unresolved_dma_is_rejected_before_publish(self):
-        path = self.source / "test_data/dma_plan.csv"
+    def test_noncontiguous_dma_relocation_is_rejected_before_publish(self):
+        path = self.source / "dma_relocation_manifest.csv"
         records = STAGER.rows(path)
-        records[1]["status"] = "UNRESOLVED"
+        records[1]["dma_index"] = "8"
         self.write_csv(path, list(records[0]), records)
-        with self.assertRaisesRegex(ValueError, "span is not RESOLVED"):
+        with self.assertRaisesRegex(ValueError, "dma_index is not contiguous"):
             STAGER.validate(self.source)
         self.assertFalse(self.destination.exists())
 

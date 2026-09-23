@@ -22,7 +22,6 @@ REQUIRED_FILES = (
     "dma_relocation_manifest.csv",
     "test_data/params.json",
     "test_data/artifact_manifest.csv",
-    "test_data/dma_plan.csv",
     "test_data/input_base_q.bin",
     "test_data/input_t2_q.bin",
     "test_data/rlk_ntt_qp.bin",
@@ -68,21 +67,15 @@ def validate(source: Path) -> dict[str, int]:
     require(params.get("operation") == "keyswitch",
             "params.json does not describe the KeySwitch package")
 
-    plan = rows(data / "dma_plan.csv")
     relocations = rows(source / "dma_relocation_manifest.csv")
-    require(plan, "KeySwitch DMA plan is empty")
-    require(len(plan) == len(relocations),
-            "KeySwitch DMA plan and relocation manifest row counts differ")
-    for index, (span, relocation) in enumerate(zip(plan, relocations)):
-        for field in ("instruction_index", "dma_index", "direction"):
-            require(span.get(field) == relocation.get(field),
-                    f"KeySwitch DMA {index}: {field} differs between manifests")
-        require(span.get("object_slot") == relocation.get("obj_id"),
-                f"KeySwitch DMA {index}: object slot differs between manifests")
-        require(span.get("status") == "RESOLVED",
-                f"KeySwitch DMA {index}: span is not RESOLVED")
-        require(int(span.get("line_count", "0"), 0) > 0,
-                f"KeySwitch DMA {index}: line count must be positive")
+    require(relocations, "KeySwitch DMA relocation manifest is empty")
+    for index, relocation in enumerate(relocations):
+        require(relocation.get("dma_index") == str(index),
+                f"KeySwitch DMA relocation {index}: dma_index is not contiguous")
+        require(relocation.get("direction") in ("dload", "dstore"),
+                f"KeySwitch DMA relocation {index}: invalid direction")
+        require(relocation.get("rs1") == "x10" and relocation.get("rs2") == "x11",
+                f"KeySwitch DMA relocation {index}: expected x10/x11 address registers")
 
     config = json.loads((hardware / "hpu_mem_config.json").read_text(encoding="utf-8"))
     size_lines = int(config.get("size_lines", 0))
@@ -106,7 +99,7 @@ def validate(source: Path) -> dict[str, int]:
                 f"KeySwitch hardware manifest references a missing file: {relative}")
 
     return {
-        "dma_rows": len(plan),
+        "dma_relocations": len(relocations),
         "artifact_rows": len(artifact_rows),
         "hardware_rows": len(hardware_rows),
         "size_lines": size_lines,
@@ -138,6 +131,7 @@ def publish(source: Path, destination: Path, producer_commit: str,
                 "source_package": "outputs/keyswitch",
                 "validation_scope": "producer-package-structure-only",
                 "semantic_import": False,
+                "resolved_dma_plan": False,
                 "qualification": "not-evaluated",
                 **summary,
             }, indent=2, sort_keys=True) + "\n",

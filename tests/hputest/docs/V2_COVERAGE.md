@@ -63,7 +63,7 @@
 | CMB_001 | Q4→P3 FastBConv，N4096；93指令/40DMA；4个normalized Q及3个P分量逐项检查 | P→Q、边界数据、其它代表性规模 |
 | CMB_002 | 整体NTT，Q0/N4096；pre-twist+12stage+写回；57指令/16DMA | 其它模数基、边界数据、其它规模 |
 | CMB_003 | 整体INTT，Q0/N4096；12stage+归一化/逆twist+写回；57指令/16DMA | 同上 |
-| CMB_004 | 未接入KeySwitch | 独立密钥/常量/scratch及DMA绑定未完成 |
+| CMB_004 | AM importer已完成Q4/P3/D2数据、密钥/支持常量、scratch及716条DMA绑定 | fixture、Makefile.case绑定及运行时输出/guard/FAULT/IRQ校验未完成 |
 | CMB_005 | 未接入NTT+Auto | producer已有Auto专用交付，AM接收校验/绑定尚未实现 |
 | CMB_009..015 | 未接入真实算法库API | 需库仓库、固定commit、接口、参数、密钥、数据、精度和golden |
 | STING_CMB_007 | 未接入随机长链 | STING入口、seed重放、对象分配与逐阶段golden |

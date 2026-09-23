@@ -66,9 +66,17 @@ make -C tests/hputest prepare-inline-asm-mm JOBS=4
 
 `prepare-inline-asm-mm.sh`同时对同批`outputs/keyswitch`执行基础结构检查，
 并原样暂存到`HPU_GENERATED_ROOT/keyswitch-source/upstream`；暂存目录记录
-producer commit及`semantic_import=false`。这一步只检查缺包、未解析DMA，并记录
-当次生成批次；不代替KeySwitch的checksum、数学参数、line map、指令编码、
-scratch及fixture语义导入，也不解锁`HPU_IT_DIR_CMB_004`。
+producer commit及`semantic_import=false`。独立KeySwitch包只有716条DMA relocation，
+不含resolved DMA plan；暂存步骤只确认这一原始包结构，不能把不存在的plan当成交付输入。
+
+随后`import-keyswitch-data.py`固定接收Q4/P3/D2、N4096组合，逐项检查参数、数学与
+硬件manifest/checksum、line map、modulus context、C/ASM/inst32/cmd26和716条
+relocation。KeySwitch的ModUp/ModDown支持常量仅存在于同批`outputs/auto`；importer
+检查Auto嵌入的KeySwitch程序和resolved-plan尾段与独立程序一致，再导入这些常量，
+独立分配AM scratch、poison输出和guard，并自行生成716条`resolved_dma.tsv`。
+结果发布到`HPU_GENERATED_ROOT/keyswitch-data`，不借用Auto的地址布局。
+该步骤完成AM侧语义接收工具，但尚未实现fixture、Makefile.case绑定和运行时
+结果/guard/FAULT/IRQ校验，因此仍不解锁`HPU_IT_DIR_CMB_004`。
 构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
 当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。

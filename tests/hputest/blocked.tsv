@@ -1,5 +1,5 @@
 case_id	reason
-HPU_IT_DIR_CMB_004	缺独立 KeySwitch 程序的已解析 DMA/常量/密钥/中间区绑定，不能借用其它算子的布局。
+HPU_IT_DIR_CMB_004	AM importer 已完成独立 KeySwitch 数据、密钥/支持常量、scratch 和 716 条 DMA 绑定；尚缺 fixture、Makefile.case 绑定及输出/guard/FAULT/IRQ 运行时校验。
 HPU_IT_DIR_CMB_005	producer 的 Auto 专用数据和已解析表已具备，AM 对旋转因子、对象和 scratch 的接收校验尚未实现。
 HPU_IT_DIR_CMB_009	未指定算法库仓库/版本/API/密文参数。逐系数 PADD 不是 HADD 接口验收；PADD 已由 INS_C0_001 验证。
 HPU_IT_DIR_CMB_010	缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。
@@ -16,6 +16,6 @@ HPU_IT_DIR_PERF_001	缺匹配的 CPU/HPU RelinOnly 实现、评估数据、统�
 HPU_IT_DIR_PERF_002	功能实现见 CMB_002；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。
 HPU_IT_DIR_PERF_003	功能实现见 CMB_003；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。
 HPU_IT_DIR_PERF_004	缺 AM BConv 完整接收和相同输入/参数的 CPU 对照、纯计算计数边界与轮数。
-HPU_IT_DIR_PERF_005	缺完整 KeySwitch 数据绑定和匹配 CPU 基线，纯计算计数边界与轮数未确认。
+HPU_IT_DIR_PERF_005	KeySwitch 数据绑定已完成；尚缺功能用例运行验证、匹配 CPU 基线、纯计算计数边界与轮数。
 HPU_IT_DIR_PERF_006	缺项目算法库密文乘法接口/基线与纯计算计数边界，不能用单系数 PMUL 计时替代。
 HPU_IT_DIR_APP_001	需确认应用为真实密文/FHE 还是模多项式，并提供对应接口/密钥/输入/精度/golden；当前两项均未实现。
