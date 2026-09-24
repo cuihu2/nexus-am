@@ -5,6 +5,7 @@
 #include <hpu/layout.h>
 #include <klib.h>
 #include <xsextra.h>
+#include <xs.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,21 +15,20 @@
 #define PLIC_CONTEXT_S      1U
 #define SIE_SEIE            (UINT64_C(1) << 9U)
 
-/* LinkNan device block中的PLIC窗口，不使用通用XS旧地址0x3c000000。 */
-#define HPU_PLIC_BASE UINT64_C(0x04000000)
+/* 与 AM 的 plic_init() 共用平台地址，不在用例层另设 PLIC 基址。 */
 
 #define PLIC_PRIORITY_ADDR \
-    (HPU_PLIC_BASE + UINT64_C(0x4) + \
+    (PLIC_BASE_ADDR + UINT64_C(0x4) + \
      (uint64_t)PLIC_PRIORITY_INDEX * sizeof(uint32_t))
 #define PLIC_ENABLE_ADDR \
-    (HPU_PLIC_BASE + UINT64_C(0x2000) + \
+    (PLIC_BASE_ADDR + UINT64_C(0x2000) + \
      (uint64_t)PLIC_CONTEXT_S * UINT64_C(0x80) + \
      (uint64_t)(PLIC_SOURCE / 32U) * sizeof(uint32_t))
 #define PLIC_THRESHOLD_ADDR \
-    (HPU_PLIC_BASE + UINT64_C(0x200000) + \
+    (PLIC_BASE_ADDR + UINT64_C(0x200000) + \
      (uint64_t)PLIC_CONTEXT_S * UINT64_C(0x1000))
 #define PLIC_CLAIM_ADDR \
-    (HPU_PLIC_BASE + UINT64_C(0x200004) + \
+    (PLIC_BASE_ADDR + UINT64_C(0x200004) + \
      (uint64_t)PLIC_CONTEXT_S * UINT64_C(0x1000))
 
 extern int g_config_disable_timer;
@@ -160,9 +160,9 @@ int irq_open(void) {
         uint32_t enable = mmio_read32(PLIC_ENABLE_ADDR);
         uint32_t threshold = mmio_read32(PLIC_THRESHOLD_ADDR);
 
-        LOG_DEBUG("[HPU][IRQ] plic=0x04000000 priority=0x%x enable=0x%x "
+        LOG_DEBUG("[HPU][IRQ] plic=0x%lx priority=0x%x enable=0x%x "
                "threshold=0x%x\n",
-               priority, enable, threshold);
+               (unsigned long)PLIC_BASE_ADDR, priority, enable, threshold);
         if (priority != 1U) {
             LOG_ERROR("[HPU][IRQ][FAIL] phase=open reason=plic-priority actual=0x%x expected=1 source=%u\n",
                    priority, PLIC_SOURCE);

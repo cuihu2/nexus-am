@@ -103,6 +103,7 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-dma-poll.py
 	@python3 scripts/test-fixture-diagnostics.py
 	@python3 scripts/test-runtime-wait.py
+	@python3 scripts/test-plic-address.py
 	@python3 scripts/test-v2-memory.py
 	@python3 scripts/test-result-report.py
 	@python3 scripts/test-log.py
