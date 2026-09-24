@@ -162,11 +162,12 @@ else
   for source_case_id in "${roster_ids[@]}"; do
     source_group=${roster_group[$source_case_id]}
     if [[ $case_group == diagnostic ]]; then
-      # 只发布已接入结果比较的 03 九项和 04 BConv/NTT/INTT/KeySwitch/Auto/HADD 六项。
+      # 只发布已接入结果比较的 03 九项和 04 已定资格算子。
       # 不纳入没有真实接口/golden 的占位项，也不重新发布 00 冒烟。
       if [[ $source_case_id =~ ^HPU_IT_DIR_INS_C0_00[1-9]$ || \
             $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
-            $source_case_id == HPU_IT_DIR_CMB_009 ]]; then
+            $source_case_id == HPU_IT_DIR_CMB_009 || \
+            $source_case_id == HPU_IT_DIR_CMB_012 ]]; then
         if [[ ${roster_qualifier[$source_case_id]} != software-self-check ]]; then
           printf 'ERROR: diagnostic testcase is not qualified: %s\n' "$source_case_id" >&2
           exit 2
@@ -290,7 +291,7 @@ test -s "$generated_root/auto-data/producer_commit.txt"
 cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
 test -s "$generated_root/hadd-data/producer_commit.txt"
 cp -a "$generated_root/hadd-data" "$artifact_root/provenance/hadd-data"
-for profile in polynomial composed; do
+for profile in reline polynomial composed; do
   test -s "$generated_root/ckks-data/$profile/producer_commit.txt"
 done
 cp -a "$generated_root/ckks-data" "$artifact_root/provenance/ckks-data"

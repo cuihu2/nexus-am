@@ -152,8 +152,8 @@ def workload_rows(release, mode):
                     raise ValueError(f"wrong {field} extension for workload: {identity}")
     blocked = sum(row["qualifier"] == "blocked-not-issued" for row in rows)
     published = sum(bool(row["elf"]) for row in rows)
-    if (published, blocked) != (45, 17):
-        raise ValueError(f"{mode} workloads require 45 published and 17 blocked cases")
+    if (published, blocked) != (46, 16):
+        raise ValueError(f"{mode} workloads require 46 published and 16 blocked cases")
     instruction = {row["case_id"] for row in rows
                    if row["chapter"] == "03_compute_instructions" and row["elf"]}
     if instruction != INSTRUCTION_IDS:
@@ -415,7 +415,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
 
         published = sum(bool(row["elf"]) for row in indexes)
         blocked = sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in indexes)
-        if (published, blocked, len(indexes)) != (146, 17, 163):
+        if (published, blocked, len(indexes)) != (148, 16, 164):
             raise ValueError(f"unexpected unified counts: published={published} blocked={blocked} rows={len(indexes)}")
         metadata = manifests["workloads"]
         (package_root / "MANIFEST.txt").write_text(
@@ -425,8 +425,8 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             f"hpu_seal_commit={metadata['hpu_seal_commit']}\n"
             "variants=normal,silent\nnormal_log_mode=minimal\nsilent_log_mode=silent\n"
             "parent_instruction_cases_replaced=9\nsubtests=37\n"
-            "published_test_identities=73\npublished_variant_sets=146\n"
-            "blocked_index_only=17\nqualification=BUILD_READY_NOT_IT_PASS\n",
+            "published_test_identities=74\npublished_variant_sets=148\n"
+            "blocked_index_only=16\nqualification=BUILD_READY_NOT_IT_PASS\n",
             encoding="utf-8")
         (package_root / "README.md").write_text(
             "# HPU 统一测试包\n\n"
@@ -438,7 +438,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             "golden 与 guard 检查，但不打印，必须依靠仿真终止状态判定。"
             "构建成功不代表已经在 IT/VCS 上运行通过。\n\n"
             "`INDEX.tsv` 标明 kind、父用例、subcase、variant 和真实路径。"
-            "17个尚未接入的测试只保留索引与原因，不发布占位二进制。"
+            "16个尚未接入的测试只保留索引与原因，不发布占位二进制。"
             "并行运行03子项可使用 `tools/run-subtests.py`。\n",
             encoding="utf-8")
         (package_root / PACKAGE_MARKER).write_text(PACKAGE_IDENTITY, encoding="ascii")
@@ -451,7 +451,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             shutil.rmtree(staging)
         raise
     print(f"Unified HPU package: {output / 'release' / 'hputest'}; "
-          "73 tests x 2 variants, 17 blocked index-only")
+          "74 tests x 2 variants, 16 blocked index-only")
     return output / "release"
 
 

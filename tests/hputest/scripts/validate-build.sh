@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
-      $roster_migrated_software -ne 34 || $roster_migrated_blocked -ne 17 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 42 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 17 || \
+      $roster_migrated_software -ne 35 || $roster_migrated_blocked -ne 16 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 43 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 16 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -250,7 +250,8 @@ case "$manifest_selection" in
       if [[ $manifest_selection == diagnostic ]]; then
         [[ ${roster_source[$case_id]} == src/03_compute_instructions/* || \
            $case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
-           $case_id == HPU_IT_DIR_CMB_009 ]] || continue
+           $case_id == HPU_IT_DIR_CMB_009 || \
+           $case_id == HPU_IT_DIR_CMB_012 ]] || continue
       elif [[ $manifest_selection != all && $group != "$manifest_selection" ]]; then
         continue
       fi
@@ -924,7 +925,7 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_003 && \
             $name != HPU_IT_DIR_CMB_004 && \
             $name != HPU_IT_DIR_CMB_005 && \
-            $name != HPU_IT_DIR_CMB_009 && \
+            $name != HPU_IT_DIR_CMB_009 && $name != HPU_IT_DIR_CMB_012 && \
             $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 ]]; then
         require_rns_fixture "$elf"
       fi
@@ -980,6 +981,11 @@ for elf in "${elfs[@]}"; do
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/hadd-data" \
         --elf "$elf" --disassembly "$txt" --operator hadd ;;
+    HPU_IT_DIR_CMB_012)
+      delivery="$artifact_root/provenance/ckks-data/reline"
+      [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
+      python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
+        --elf "$elf" --disassembly "$txt" --operator ckks_reline ;;
     HPU_IT_DIR_APP_002|HPU_IT_DIR_APP_003)
       profile=polynomial
       operator=ckks_polynomial_x2_plus_one

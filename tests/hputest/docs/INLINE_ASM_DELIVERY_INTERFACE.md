@@ -105,6 +105,13 @@ workspace保持唯一可写区，窗口尾追加64-line guard。`HPU_IT_DIR_CMB_
 assembler重新生成HADD所需编码表，逐指令核对后发布到`HPU_GENERATED_ROOT/hadd-data`。
 `HPU_IT_DIR_CMB_009`执行该程序并检查2×Q4输出、输入、模数表和尾部guard。
 
+`tools/hpu-seal-cmb012`使用同一固定main提交的CKKS
+`CkksOperationPlan::append_relinearize`，直接接收N4096/Q4\|P1、canonical-NTT
+的三分量乘积密文。交付程序只含Reline，不包含Multiply/Rescale；主机端用
+SEAL `Evaluator::relinearize_inplace`和HPU-SEAL software executor精确对拍，固定2753条指令、
+1055条resolved DMA和11458-line初始镜像。AM追加64-line guard，按真实DSTORE标记
+三分量输入转换区、scratch及二分量输出为可写，其余密钥/常量/twiddle不可写。
+
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
 - `N=4096`；
@@ -368,14 +375,16 @@ producer instruction/data generation stages
 GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只运行一批，由普通和静默
 两种构建复用；artifact保留7天，包含：
 
-- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节34组workload，
-  每项同时提供普通和`_silent`文件；另17个未就绪项只列原因；
+- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节35组workload，
+  每项同时提供普通和`_silent`文件；另16个未就绪项只列原因；
 - 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，
   以及 `upstream/` 中保留的原始程序与编码表。
 - `provenance/hadd-data/`：HPU_SEAL生成的HADD程序、resolved DMA、窗口、golden、
   固定producer commit及接收摘要。
+- `provenance/ckks-data/reline/`：HPU_SEAL生成的独立Reline程序、resolved DMA、
+  可写掩码、三分量输入、二分量golden及固定producer commit。
 
 生成物不进入 Git history。
 
@@ -402,7 +411,7 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
 `legacy-main` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
 迁移 IT 中的基础
 CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
-program/data/golden/relocation 契约的 24 个测试点被标成
+program/data/golden/relocation 契约的 16 个测试点被标成
 `blocked-not-issued`，不发明指令并固定返回 1。GitHub Actions 的绿色结果也只证明
 生成、导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS
 失败记录应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。
