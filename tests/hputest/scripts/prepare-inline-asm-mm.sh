@@ -27,7 +27,7 @@ if [[ ! -f $inline_asm_root/CMakeLists.txt ]] || \
   echo 'run: git submodule update --init --recursive tests/hputest/third_party/inline-asm' >&2
   exit 2
 fi
-if ! git -C "$inline_asm_root" diff --quiet -- || \
+if ! git -C "$inline_asm_root" diff --ignore-space-at-eol --quiet -- || \
    ! git -C "$inline_asm_root" diff --cached --quiet --; then
   echo 'ERROR: inline-asm submodule contains tracked modifications' >&2
   exit 2
@@ -54,7 +54,7 @@ if [[ ! -f $hpu_seal_root/CMakeLists.txt ]] || \
   echo 'run: git submodule update --init --recursive tests/hputest/third_party/hpu-seal' >&2
   exit 2
 fi
-if ! git -C "$hpu_seal_root" diff --quiet -- || \
+if ! git -C "$hpu_seal_root" diff --ignore-space-at-eol --quiet -- || \
    ! git -C "$hpu_seal_root" diff --cached --quiet --; then
   echo 'ERROR: HPU_SEAL submodule contains tracked modifications' >&2
   exit 2
@@ -92,14 +92,22 @@ encoding_tsv="$tool_root/encoder_words.tsv"
 hpu_seal_build="$output_root/hpu-seal-operators-cmake/$hpu_seal_commit"
 hpu_seal_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hadd"
 hpu_seal_import="$generated_root/hadd-data"
+hpu_reline_build="$output_root/hpu-seal-cmb012-cmake/$hpu_seal_commit"
+hpu_reline_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/reline"
+hpu_seal_rotate_build="$output_root/hpu-seal-cmb014-cmake/$hpu_seal_commit"
+hpu_seal_rotate_source="$output_root/hpu-seal-producer/$hpu_seal_commit/rotate"
+hpu_seal_rotate_import="$generated_root/rotate-data"
 hpu_seal_tool_root="$output_root/hpu-seal-tools/$hpu_seal_commit"
 hpu_seal_encodings="$hpu_seal_tool_root/hadd_encoder_words.tsv"
 hmul_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hmul"
 hmul_import="$generated_root/hmul-data"
 hmul_encodings="$hpu_seal_tool_root/hmul_encoder_words.tsv"
+hpu_seal_encoder="$hpu_seal_tool_root/verify-ckks-encoding"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
-  "$hpu_seal_build" "$hpu_seal_source" "$hmul_source" "$hpu_seal_tool_root"
+  "$hpu_seal_build" "$hpu_seal_source" "$hmul_source" "$hpu_reline_build" \
+  "$hpu_reline_source" "$hpu_seal_rotate_build" \
+  "$hpu_seal_rotate_source" "$hpu_seal_tool_root"
 required_outputs=(
   "$producer_mm/mm.c"
   "$producer_mm/mm.h"
@@ -239,16 +247,47 @@ python3 "$script_dir/import-hpu-seal-hmul.py" \
   --producer-commit "$hpu_seal_commit" \
   --encodings "$hmul_encodings"
 
-echo "[hputest] adding upstream CKKS applications at $hpu_seal_commit"
-cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
-  hpu_ckks_polynomial_example hpu_ckks_composed_application_example
+echo "[hputest] generating HPU_SEAL CKKS Reline at $hpu_seal_commit"
+cmake -S "$test_root/tools/hpu-seal-cmb012" -B "$hpu_reline_build" \
+  -DINLINE_ASM_ROOT="$hpu_seal_root" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$hpu_reline_build" --parallel "$jobs" \
+  --target hpu_seal_cmb012_generator
+"$hpu_reline_build/hpu_seal_cmb012_generator" \
+  "$hpu_reline_source" "$hpu_seal_commit" \
+  > "$hpu_reline_source/HOST_ORACLE.log"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
   -I"$hpu_seal_root/encode/include" "$script_dir/verify-ckks-encoding.cpp" \
   "$hpu_seal_root/encode/src/instruction.cpp" \
   "$hpu_seal_root/encode/src/parser.cpp" \
   "$hpu_seal_root/encode/src/encoder.cpp" \
   "$hpu_seal_root/encode/src/assembler.cpp" \
-  -o "$hpu_seal_tool_root/verify-ckks-encoding"
+  -o "$hpu_seal_encoder"
+python3 "$script_dir/import-ckks-data.py" --source "$hpu_reline_source" \
+  --destination "$generated_root/ckks-data/reline" --profile reline \
+  --encoder "$hpu_seal_encoder" \
+  --producer-commit "$hpu_seal_commit"
+
+echo "[hputest] generating HPU_SEAL BFV RotateRows at $hpu_seal_commit"
+cmake -S "$test_root/tools/hpu-seal-cmb014" -B "$hpu_seal_rotate_build" \
+  -DINLINE_ASM_ROOT="$hpu_seal_root" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$hpu_seal_rotate_build" --parallel "$jobs" \
+  --target hpu_seal_cmb014_generator
+"$hpu_seal_rotate_build/hpu_seal_cmb014_generator" \
+  "$hpu_seal_rotate_source" "$hpu_seal_commit" \
+  > "$hpu_seal_rotate_source/HOST_ORACLE.log"
+
+python3 "$script_dir/import-hpu-seal-rotate.py" \
+  --source "$hpu_seal_rotate_source" \
+  --destination "$hpu_seal_rotate_import" \
+  --producer-commit "$hpu_seal_commit" \
+  --encoder "$hpu_seal_encoder"
+
+echo "[hputest] adding upstream CKKS applications at $hpu_seal_commit"
+cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
+  hpu_ckks_polynomial_example hpu_ckks_composed_application_example
 for profile in polynomial composed; do
   ckks_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/$profile"
   mkdir -p "$ckks_source"
@@ -259,8 +298,8 @@ for profile in polynomial composed; do
     > "$ckks_source/HOST_ORACLE.log"
   python3 "$script_dir/import-ckks-data.py" --source "$ckks_source" \
     --destination "$generated_root/ckks-data/$profile" --profile "$profile" \
-    --encoder "$hpu_seal_tool_root/verify-ckks-encoding" \
+    --encoder "$hpu_seal_encoder" \
     --producer-commit "$hpu_seal_commit"
 done
 
-echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD/HMUL/CKKS semantic import PASS'
+echo '[hputest] inline-asm and HPU_SEAL HADD/HMUL/Reline/Rotate/CKKS semantic import PASS'

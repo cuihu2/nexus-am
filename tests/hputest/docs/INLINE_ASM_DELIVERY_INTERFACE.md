@@ -113,6 +113,19 @@ HPU_SEAL software executor逐系数对拍。交付含8025条指令、3177条reso
 行掩码。CMB_010据此比较2×Q4 golden，只要求workspace/output可写，同时保护输入、密钥、
 常量和64-line尾部guard。
 
+`tools/hpu-seal-cmb014`使用同一固定main提交生成N4096/Q4 BFV
+`BfvOperationPlan::append_rotate_rows(x,+1)`交付。固定seed保证输入、Galois key、窗口和
+SEAL golden可复现；生成器先验证槽位左旋、modified-SEAL全密文系数和HPU_SEAL软件执行器。
+接收端再用producer assembler核对2593条指令、997条resolved DMA、Galois绑定twiddle、
+逐line写权限和固定payload哈希，发布到`HPU_GENERATED_ROOT/rotate-data`。
+
+`tools/hpu-seal-cmb012`使用同一固定main提交的CKKS
+`CkksOperationPlan::append_relinearize`，直接接收N4096/Q4\|P1、canonical-NTT
+的三分量乘积密文。交付程序只含Reline，不包含Multiply/Rescale；主机端用
+SEAL `Evaluator::relinearize_inplace`和HPU-SEAL software executor精确对拍，固定2753条指令、
+1055条resolved DMA和11458-line初始镜像。AM追加64-line guard，按真实DSTORE标记
+三分量输入转换区、scratch及二分量输出为可写，其余密钥/常量/twiddle不可写。
+
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
 - `N=4096`；
@@ -377,7 +390,7 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
 两种构建复用；artifact保留7天，包含：
 
 - 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节35组workload，
-  每项同时提供普通和`_silent`文件；另16个未就绪项只列原因；
+  每项同时提供普通和`_silent`文件；另14个未就绪项只列原因；
 - 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，
@@ -386,6 +399,10 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
   固定producer commit及接收摘要。
 - `provenance/hmul-data/`：HPU_SEAL生成的融合HMUL/relinearize程序、resolved DMA、
   allocation/可写行掩码、窗口、golden、固定producer commit及接收摘要。
+- `provenance/ckks-data/reline/`：HPU_SEAL生成的独立Reline程序、resolved DMA、
+  可写掩码、三分量输入、二分量golden及固定producer commit。
+- `provenance/rotate-data/`：HPU_SEAL生成的RotateRows程序、Galois key/twiddle绑定、
+  resolved DMA、逐line写权限、窗口、SEAL golden及host oracle日志。
 
 生成物不进入 Git history。
 
@@ -412,7 +429,7 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
 `legacy-main` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
 迁移 IT 中的基础
 CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
-program/data/golden/relocation 契约的 24 个测试点被标成
+program/data/golden/relocation 契约的 16 个测试点被标成
 `blocked-not-issued`，不发明指令并固定返回 1。GitHub Actions 的绿色结果也只证明
 生成、导入、编译和静态产物校验通过，不等于外部 IT/VCS 仿真已经 PASS。VCS
 失败记录应保留为外部证据，不在 Nexus-AM 或 RTL 中猜测修复。

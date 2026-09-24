@@ -14,7 +14,9 @@ PROFILES = {
     "polynomial": ("ckks_polynomial_x2_plus_one", 65536, 3,
                    "output/x_squared_plus_one/q3/", 4388, 1652),
     "composed": ("ckks_composed_application", 128, 2,
-                 "output/y/next/", 4411, 1774),
+                  "output/y/next/", 4411, 1774),
+    "reline": ("ckks_reline", 4096, 4,
+                "output/relinearized/", 2753, 1055),
 }
 
 
@@ -35,7 +37,7 @@ def safe_file(root, relative):
     return path
 
 
-def validate(source, profile, encoder):
+def validate(source, profile, encoder, producer_commit=None):
     stem, n, q_count, prefix, instructions, dma_count = PROFILES[profile]
     hardware = source / "test_data/hardware"
     config = json.loads((hardware / "hpu_mem_config.json").read_text())
@@ -98,6 +100,39 @@ def validate(source, profile, encoder):
         if entry["direction"] == "dstore":
             require(allocation["read_only"] == "0", "DSTORE into readonly allocation")
             writable.update(range(first, first + count))
+    if profile == "reline":
+        metadata = json.loads((source / "CMB012_METADATA.json").read_text())
+        expected = {
+            "format_version": 1,
+            "case_id": "HPU_IT_DIR_CMB_012",
+            "scheme": "CKKS",
+            "api": "hpu::seal_adapter::CkksOperationPlan::append_relinearize",
+            "poly_modulus_degree": 4096,
+            "q_count": 4,
+            "special_modulus_count": 1,
+            "input_component_count": 3,
+            "output_component_count": 2,
+            "domain": "canonical_ntt_physical",
+            "instruction_count": instructions,
+            "dma_count": dma_count,
+            "image_used_lines": used,
+            "guard_lines": 64,
+        }
+        for key, value in expected.items():
+            require(metadata.get(key) == value, f"unexpected CMB012 metadata {key}")
+        commit = metadata.get("producer_commit", "")
+        require(re.fullmatch(r"[0-9a-f]{40}", commit),
+                "invalid CMB012 producer commit")
+        if producer_commit is not None:
+            require(commit == producer_commit, "CMB012 producer commit mismatch")
+        require({entry["operation_id"] for entry in dma}
+                <= {"$application", "relinearize"},
+                "CMB012 delivery contains a non-Reline operation")
+        tensor_names = [f"input/tensor/c{c}/mod{q}"
+                        for c in range(3) for q in range(q_count)]
+        require(all(name in by_id and by_id[name]["read_only"] == "0"
+                    and first_access.get(name) == "dload" for name in tensor_names),
+                "CMB012 writable tensor input is missing or not read first")
     outputs = {r["allocation_id"]: r for r in rows(hardware / "expected_outputs.csv")}
     final_names = [f"{prefix}c{c}/mod{q}" for c in range(2) for q in range(q_count)]
     require(sorted(k for k in by_id if k.startswith(prefix)) == sorted(final_names),
@@ -132,7 +167,8 @@ def main():
     parser.add_argument("--producer-commit", required=True)
     args = parser.parse_args()
     require(re.fullmatch(r"[0-9a-f]{40}", args.producer_commit), "invalid producer commit")
-    config, image, golden, mask, spans = validate(args.source, args.profile, args.encoder)
+    config, image, golden, mask, spans = validate(
+        args.source, args.profile, args.encoder, args.producer_commit)
     root = args.destination
     require(not root.resolve().is_relative_to(args.source.resolve()) and
             not args.source.resolve().is_relative_to(root.resolve()), "overlapping import")
@@ -144,6 +180,8 @@ def main():
     for name in ("line_map.csv", "expected_outputs.csv", "hpu_mem_config.json"):
         shutil.copy2(args.source / "test_data/hardware" / name, root)
     shutil.copy2(args.source / "dma_relocation_manifest.csv", root)
+    if args.profile == "reline":
+        shutil.copy2(args.source / "CMB012_METADATA.json", root)
     (root / "ckks_window.u32.bin").write_bytes(image)
     (root / "ckks_golden.u32.bin").write_bytes(golden)
     (root / "ckks_writable.u8.bin").write_bytes(mask)

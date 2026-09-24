@@ -6,7 +6,7 @@ IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续49项中33项有软件自检，16项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续51项中37项有软件自检，14项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -71,7 +71,9 @@ build/                          # ignored: generated outputs only
     ├── keyswitch-data/         # validated KeySwitch window, DMA plan and provenance
     ├── auto-data/              # validated NTT+Auto window, resolved plan and golden
     ├── hadd-data/              # validated HPU_SEAL BFV HADD program/window/golden
-    └── hmul-data/              # validated HPU_SEAL BFV HMUL program/window/golden
+    ├── hmul-data/              # validated HPU_SEAL BFV HMUL program/window/golden
+    ├── rotate-data/            # validated BFV RotateRows key/twiddle/program/golden
+    └── ckks-data/              # validated CKKS Reline/application programs and goldens
 ```
 
 Each source has its own readable `main()`.  The MMIO register setup, data preparation,
@@ -197,7 +199,9 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 `third_party/hpu-seal` 独立固定同仓库当前 `main` 分支提交
 `b5398a3cbe6dbd3a5a0d9abbef06425b0107f300`，仅用于正式算法库接口用例；CMB_009/010
 分别通过 BFV `BfvOperationPlan::append_add` 和 `append_multiply` 生成程序、resolved DMA、
-输入、密钥、常量和SEAL golden，APP_002/003则接收上游CKKS应用交付。
+输入、密钥、常量和SEAL golden；CMB_012通过CKKS `CkksOperationPlan::append_relinearize`
+生成独立Reline程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
+上游CKKS应用交付。
 两条固定gitlink分别校验，不用当前main编码替换legacy-main编码。
 
 上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
@@ -302,7 +306,7 @@ Planning rows must carry the exact `case_id` from `cases.tsv`; a parallel set
 of informal testcase numbers is not authoritative.
 
 基础用例使用producer的两组不可变一RNS输入 `RNS_A/RNS_B`，各4096个32位系数。
-整体NTT/INTT/BConv/KeySwitch/Auto/HADD/HMUL改用各自的完整数据、常量和golden交付，不用MM输入冒充算子数据。
+整体NTT/INTT/BConv/KeySwitch/Auto/HADD/HMUL/Reline/Rotate改用各自的完整数据、常量和golden交付，不用MM输入冒充算子数据。
 未接入用例不再为了凑数据而强制保留无关fixture。
 
 | Group | Contents |
@@ -311,11 +315,12 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-35个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
-KeySwitch、Auto、BFV HADD和融合HMUL/relinearize已接入完整producer序列及golden，但仅覆盖各自固定基础组合。
-其它16项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
-也有AM接收工作未实现，不能笼统归因于上游“没有数据”。CMB_009/010验收固定
-HPU_SEAL API；基础PADD/PMUL覆盖仍保留在03-001/003。
+37个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
+KeySwitch、Auto、BFV HADD、融合HMUL/relinearize、CKKS Reline和BFV RotateRows已接入完整
+producer序列及golden，但仅覆盖各自固定基础组合。其它14项仍未接入，原因逐项记录于
+[blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
+上游“没有数据”。CMB_009/010/012/014均验收固定main分支的HPU-SEAL API；基础
+PADD/PMUL覆盖仍保留在03-001/003。
 
 未接入源码仍交叉编译以检查接口，执行只报具体原因并return 1。
 `CASE_MANIFEST.tsv`/`NOT_QUALIFIED.tsv`标记它们，但下载包不再包含这些占位ELF/BIN/TXT。
@@ -381,7 +386,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共72个测试身份、144组ELF/BIN/TXT；16项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共76个已发布测试身份、152组ELF/BIN/TXT；14项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary
