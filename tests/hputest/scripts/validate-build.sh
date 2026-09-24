@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
-      $roster_migrated_software -ne 35 || $roster_migrated_blocked -ne 16 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 43 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 16 || \
+      $roster_migrated_software -ne 36 || $roster_migrated_blocked -ne 15 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 44 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 15 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -436,6 +436,22 @@ for required in hadd.c hadd.h hadd.asm hadd.inst32 hadd.cmd26 \
                 DELIVERY_SUMMARY.md; do
   if [[ ! -s $hadd_artifact/$required ]]; then
     printf 'ERROR: selected HPU_SEAL HADD provenance omits %s\n' "$required" >&2
+    exit 2
+  fi
+done
+rotate_artifact="$artifact_root/provenance/rotate-data"
+if [[ ! -s $rotate_artifact/producer_commit.txt ]] || \
+   [[ $manifest_hpu_seal != "$(<"$rotate_artifact/producer_commit.txt")" ]]; then
+  printf 'ERROR: selected HPU_SEAL Rotate provenance is incomplete\n' >&2
+  exit 2
+fi
+for required in rotate.c rotate.h rotate.asm rotate.inst32 rotate.cmd26 \
+                resolved_dma.csv allocations.csv metadata.json \
+                window.u32.bin golden.u32.bin input_slots.u64.bin \
+                expected_slots.u64.bin rotate_writable.u8.bin HOST_ORACLE.log \
+                rotate_layout.h rotate_delivery.h DELIVERY_SUMMARY.md; do
+  if [[ ! -s $rotate_artifact/$required ]]; then
+    printf 'ERROR: selected HPU_SEAL Rotate provenance omits %s\n' "$required" >&2
     exit 2
   fi
 done
@@ -925,7 +941,9 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_003 && \
             $name != HPU_IT_DIR_CMB_004 && \
             $name != HPU_IT_DIR_CMB_005 && \
-            $name != HPU_IT_DIR_CMB_009 && $name != HPU_IT_DIR_CMB_012 && \
+            $name != HPU_IT_DIR_CMB_009 && \
+            $name != HPU_IT_DIR_CMB_012 && \
+            $name != HPU_IT_DIR_CMB_014 && \
             $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 ]]; then
         require_rns_fixture "$elf"
       fi
@@ -986,6 +1004,10 @@ for elf in "${elfs[@]}"; do
       [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
       python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
         --elf "$elf" --disassembly "$txt" --operator ckks_reline ;;
+    HPU_IT_DIR_CMB_014)
+      python3 "$script_dir/verify-operator-elf.py" \
+        --delivery "$artifact_root/provenance/rotate-data" \
+        --elf "$elf" --disassembly "$txt" --operator rotate ;;
     HPU_IT_DIR_APP_002|HPU_IT_DIR_APP_003)
       profile=polynomial
       operator=ckks_polynomial_x2_plus_one

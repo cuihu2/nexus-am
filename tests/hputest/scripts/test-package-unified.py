@@ -133,7 +133,7 @@ class UnifiedPackageTests(unittest.TestCase):
     def test_one_tree_contains_normal_and_silent_and_replaces_03_parents(self):
         release = self.package()
         package = release / "hputest"
-        self.assertEqual(len(list(package.rglob("*.elf"))), 148)
+        self.assertEqual(len(list(package.rglob("*.elf"))), 150)
         normal = package / "01_configuration/01_hpu_register_access/HPU_IT_DIR_CFG_001.elf"
         silent = normal.with_name("HPU_IT_DIR_CFG_001_silent.elf")
         self.assertTrue(normal.is_file())
@@ -144,9 +144,9 @@ class UnifiedPackageTests(unittest.TestCase):
         self.assertTrue((package / "03_compute_instructions" / f"{subtest}.elf").is_file())
         self.assertTrue((package / "03_compute_instructions" / f"{subtest}_silent.elf").is_file())
         rows = PACKAGER.read_tsv(package / "INDEX.tsv", PACKAGER.INDEX_FIELDS)
-        self.assertEqual(len(rows), 164)
-        self.assertEqual(sum(bool(row["elf"]) for row in rows), 148)
-        self.assertEqual(sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in rows), 16)
+        self.assertEqual(len(rows), 165)
+        self.assertEqual(sum(bool(row["elf"]) for row in rows), 150)
+        self.assertEqual(sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in rows), 15)
         self.assertEqual({row["variant"] for row in rows if row["elf"]}, {"normal", "silent"})
         normal_cases = RUNNER.read_index(package, "normal")
         silent_cases = RUNNER.read_index(package, "silent")

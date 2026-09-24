@@ -2,7 +2,6 @@ case_id	reason
 HPU_IT_DIR_CMB_010	缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。
 HPU_IT_DIR_CMB_011	缺 encode 库接口版本、编码参数、精度和可独立校验的数据。
 HPU_IT_DIR_CMB_013	缺库接口版本、输入 level/scale、输出精度与 rescale golden 契约。
-HPU_IT_DIR_CMB_014	缺算法库 rotate 接口、旋转索引/密钥绑定和接口级 golden；裸 Auto 不等同库接口。
 HPU_IT_DIR_CMB_015	缺库版本、bootstrapping 完整输入/评估数据、精度与可执行入口。
 HPU_IT_STING_CMB_007	缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。
 HPU_IT_DIR_STR_003	缺项目异常/特权入口与提交 monitor，无法用普通顺序 C 承诺错误路径 HPU 命令无副作用。

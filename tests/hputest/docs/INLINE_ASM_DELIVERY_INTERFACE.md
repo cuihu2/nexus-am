@@ -103,6 +103,12 @@ workspace保持唯一可写区，窗口尾追加64-line guard。`HPU_IT_DIR_CMB_
 密文，使用同上下文SEAL `Evaluator::add`和HPU-SEAL software executor双重核对，然后
 导出59条指令、25条resolved DMA、1601-line窗口及golden。接收脚本用HPU-SEAL自己的
 assembler重新生成HADD所需编码表，逐指令核对后发布到`HPU_GENERATED_ROOT/hadd-data`。
+
+`tools/hpu-seal-cmb014`使用同一固定main提交生成N4096/Q4 BFV
+`BfvOperationPlan::append_rotate_rows(x,+1)`交付。固定seed保证输入、Galois key、窗口和
+SEAL golden可复现；生成器先验证槽位左旋、modified-SEAL全密文系数和HPU_SEAL软件执行器。
+接收端再用producer assembler核对2593条指令、997条resolved DMA、Galois绑定twiddle、
+逐line写权限和固定payload哈希，发布到`HPU_GENERATED_ROOT/rotate-data`。
 `HPU_IT_DIR_CMB_009`执行该程序并检查2×Q4输出、输入、模数表和尾部guard。
 
 `tools/hpu-seal-cmb012`使用同一固定main提交的CKKS
@@ -385,6 +391,8 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
   固定producer commit及接收摘要。
 - `provenance/ckks-data/reline/`：HPU_SEAL生成的独立Reline程序、resolved DMA、
   可写掩码、三分量输入、二分量golden及固定producer commit。
+- `provenance/rotate-data/`：HPU_SEAL生成的RotateRows程序、Galois key/twiddle绑定、
+  resolved DMA、逐line写权限、窗口、SEAL golden及host oracle日志。
 
 生成物不进入 Git history。
 

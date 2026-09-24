@@ -76,6 +76,10 @@ def verify(delivery, elf, disassembly, operator):
     if operator == "hadd":
         fixtures = [("hadd_window", "window.u32.bin"),
                     ("hadd_golden", "golden.u32.bin")]
+    if operator == "rotate":
+        fixtures = [("rotate_window", "window.u32.bin"),
+                    ("rotate_golden", "golden.u32.bin"),
+                    ("rotate_writable", "rotate_writable.u8.bin")]
     if operator.startswith("ckks_"):
         fixtures = [("ckks_window", "ckks_window.u32.bin"),
                     ("ckks_golden", "ckks_golden.u32.bin"),
@@ -99,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--disassembly", required=True, type=Path)
     parser.add_argument("--operator", required=True,
                         choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
-                                 "ckks_reline", "ckks_polynomial_x2_plus_one",
+                                 "rotate", "ckks_reline", "ckks_polynomial_x2_plus_one",
                                  "ckks_composed_application"))
     args = parser.parse_args()
     verify(args.delivery, args.elf, args.disassembly, args.operator)

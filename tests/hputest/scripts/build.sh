@@ -118,7 +118,7 @@ done < "$roster"
 if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
-      $roster_migrated_software -ne 35 || $roster_migrated_blocked -ne 16 ]]; then
+      $roster_migrated_software -ne 36 || $roster_migrated_blocked -ne 15 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -167,7 +167,8 @@ else
       if [[ $source_case_id =~ ^HPU_IT_DIR_INS_C0_00[1-9]$ || \
             $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
             $source_case_id == HPU_IT_DIR_CMB_009 || \
-            $source_case_id == HPU_IT_DIR_CMB_012 ]]; then
+            $source_case_id == HPU_IT_DIR_CMB_012 || \
+            $source_case_id == HPU_IT_DIR_CMB_014 ]]; then
         if [[ ${roster_qualifier[$source_case_id]} != software-self-check ]]; then
           printf 'ERROR: diagnostic testcase is not qualified: %s\n' "$source_case_id" >&2
           exit 2
@@ -291,6 +292,8 @@ test -s "$generated_root/auto-data/producer_commit.txt"
 cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
 test -s "$generated_root/hadd-data/producer_commit.txt"
 cp -a "$generated_root/hadd-data" "$artifact_root/provenance/hadd-data"
+test -s "$generated_root/rotate-data/producer_commit.txt"
+cp -a "$generated_root/rotate-data" "$artifact_root/provenance/rotate-data"
 for profile in reline polynomial composed; do
   test -s "$generated_root/ckks-data/$profile/producer_commit.txt"
 done
@@ -315,7 +318,7 @@ else
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=15 ;;
-    diagnostic) expected_cases=15 ;;
+    diagnostic) expected_cases=17 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then

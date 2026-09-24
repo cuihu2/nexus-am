@@ -29,7 +29,7 @@ if [[ -z $expected_commit || $actual_commit != "$expected_commit" ]]; then
   echo "actual:   $actual_commit" >&2
   exit 2
 fi
-if ! git -C "$inline_asm_root" diff --quiet -- || \
+if ! git -C "$inline_asm_root" diff --ignore-space-at-eol --quiet -- || \
    ! git -C "$inline_asm_root" diff --cached --quiet --; then
   echo 'ERROR: inline-asm submodule contains tracked modifications' >&2
   exit 2

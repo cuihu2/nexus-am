@@ -1,8 +1,8 @@
 # v2 测试点落实范围与运行说明
 
 依据 `HPU-IT测试点分解v2.xlsx` 的原用例 ID，以及本轮提供的功能、边界、性能、CPU 回归要求更新。
-**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，33 个具备真实软件自检；
-16 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
+**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，34 个具备真实软件自检；
+15 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改。既有生产者仍为
 inline-asm legacy-main `6903096`，算法库用例使用当前main `b5398a3`，两套编码不混用。
@@ -69,10 +69,12 @@ inline-asm legacy-main `6903096`，算法库用例使用当前main `b5398a3`，�
 | CMB_009 | HPU_SEAL BFV `BfvOperationPlan::append_add`；N4096/Q4/2 components、coefficient domain；59指令/25DMA；SEAL golden及只读/guard检查 | CKKS HADD、其它参数/level/密文大小、边界数据和真实IT/VCS运行 |
 | CMB_010..011 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
 | CMB_012 | HPU_SEAL CKKS `CkksOperationPlan::append_relinearize`；N4096/Q4\|P1、3→2 components、canonical NTT；2753指令/1055DMA；SEAL精确密文golden及只读/guard检查 | 其它参数/level/密文大小、边界数据和真实IT/VCS运行 |
-| CMB_013..015 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
+| CMB_013 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
+| CMB_014 | HPU_SEAL BFV `BfvOperationPlan::append_rotate_rows`；N4096/Q4、步长+1/g=3；2593指令/997DMA；固定seed下槽位语义、全RNS密文SEAL golden、逐line只读/guard检查 | RotateColumns、负/其它步长、其它参数/level和真实IT/VCS运行 |
+| CMB_015 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
 | STING_CMB_007 | 未接入随机长链 | STING入口、seed重放、对象分配与逐阶段golden |
 
-整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard；HADD用1601line窗口；Reline用11522line窗口。
+整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard；HADD用1601line窗口；Reline用11522line窗口；Rotate用20162line窗口。
 输入/常量从producer交付接收，输出区填poison，golden位于只读ELF中而不预填到HPU输出区。
 NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式复核，不错误替换为精确CRT还原。
 每次DLOAD/DSTORE的序号、对象、line及来源记录在 `resolved_dma.tsv`；原C/ASM/inst32/cmd26及表格均保留。
@@ -81,6 +83,9 @@ NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式
 原CMB_009把单条PADD称作Poseidon HADD，不符合“以算法库接口为边界”的要求。
 现已改为固定main分支的HPU-SEAL BFV planner API；接收端同时复算模加、核对producer编码和resolved DMA。
 PADD功能仍由03-001保留。encode/bootstrapping是原表条目，保留ID，不能静默删除。
+CMB_014不把CMB_005裸Auto重命名为库Rotate：它从固定seed的BFV明文槽、Galois key和
+步长+1开始，经算法库planner生成完整Auto+Galois KeySwitch，并同时通过手工槽位公式、
+modified-SEAL密文oracle和HPU_SEAL software executor三重host检查。
 
 ## 4. 配置、地址、资源和数据边界
 
@@ -118,7 +123,7 @@ PADD功能仍由03-001保留。encode/bootstrapping是原表条目，保留ID，
 
 GitHub Actions的唯一HPU产物名为`nexus-am-hpu-tests`，内部是00至07章节目录和`INDEX.tsv`。
 03用37个独立subtest替换九个串行整例，其余章节保留33组非占位workload；每项同时提供普通和
-`_silent`版本，共142组ELF/BIN/反汇编。17项未就绪只列原因，不夹在可运行列表中。
+`_silent`版本，共150组ELF/BIN/反汇编。15项未就绪只列原因，不夹在可运行列表中。
 `provenance/`保留固定producer版本、实际指令、DMA/数据布局和本说明。
 新用例需要更多初始化、逐项golden和guard扫描，不承诺100万cycle一定足够；由IT测定预算并保存原始超时日志。
 失败回传至少包含case ID、AM/producer/RTL/simv版本、cycle-limit、最后阶段、首错日志和对应波形。
