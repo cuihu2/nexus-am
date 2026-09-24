@@ -89,14 +89,17 @@ auto_import_root="$generated_root/auto-data"
 generated_header="$generated_root/include/hpu/inline_asm_mm_delivery.h"
 tool_root="$output_root/inline-asm-tools"
 encoding_tsv="$tool_root/encoder_words.tsv"
-hpu_seal_build="$output_root/hpu-seal-cmb009-cmake/$hpu_seal_commit"
+hpu_seal_build="$output_root/hpu-seal-operators-cmake/$hpu_seal_commit"
 hpu_seal_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hadd"
 hpu_seal_import="$generated_root/hadd-data"
 hpu_seal_tool_root="$output_root/hpu-seal-tools/$hpu_seal_commit"
 hpu_seal_encodings="$hpu_seal_tool_root/hadd_encoder_words.tsv"
+hmul_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hmul"
+hmul_import="$generated_root/hmul-data"
+hmul_encodings="$hpu_seal_tool_root/hmul_encoder_words.tsv"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
-  "$hpu_seal_build" "$hpu_seal_source" "$hpu_seal_tool_root"
+  "$hpu_seal_build" "$hpu_seal_source" "$hmul_source" "$hpu_seal_tool_root"
 required_outputs=(
   "$producer_mm/mm.c"
   "$producer_mm/mm.h"
@@ -191,10 +194,11 @@ python3 "$script_dir/import-auto-data.py" \
   --encodings "$encoding_tsv"
 
 echo "[hputest] generating HPU_SEAL BFV HADD at $hpu_seal_commit"
-cmake -S "$test_root/tools/hpu-seal-cmb009" -B "$hpu_seal_build" \
+cmake -S "$test_root/tools/hpu-seal-operators" -B "$hpu_seal_build" \
   -DINLINE_ASM_ROOT="$hpu_seal_root" \
   -DCMAKE_BUILD_TYPE=Release
-cmake --build "$hpu_seal_build" --parallel "$jobs" --target hpu_seal_cmb009_generator
+cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
+  hpu_seal_cmb009_generator hpu_seal_cmb010_generator
 "$hpu_seal_build/hpu_seal_cmb009_generator" "$hpu_seal_source" "$hpu_seal_commit"
 
 "${CXX:-c++}" \
@@ -213,6 +217,27 @@ python3 "$script_dir/import-hpu-seal-hadd.py" \
   --destination "$hpu_seal_import" \
   --producer-commit "$hpu_seal_commit" \
   --encodings "$hpu_seal_encodings"
+
+echo "[hputest] generating HPU_SEAL BFV HMUL at $hpu_seal_commit"
+"$hpu_seal_build/hpu_seal_cmb010_generator" "$hmul_source" "$hpu_seal_commit"
+
+"${CXX:-c++}" \
+  -std=c++17 -Wall -Wextra -Werror \
+  -I"$hpu_seal_root/encode/include" \
+  "$script_dir/generate-hpu-seal-hmul-encodings.cpp" \
+  "$hpu_seal_root/encode/src/instruction.cpp" \
+  "$hpu_seal_root/encode/src/parser.cpp" \
+  "$hpu_seal_root/encode/src/encoder.cpp" \
+  "$hpu_seal_root/encode/src/assembler.cpp" \
+  -o "$hpu_seal_tool_root/generate-hpu-seal-hmul-encodings"
+"$hpu_seal_tool_root/generate-hpu-seal-hmul-encodings" \
+  "$hmul_source/hmul.asm" "$hmul_encodings"
+
+python3 "$script_dir/import-hpu-seal-hmul.py" \
+  --source "$hmul_source" \
+  --destination "$hmul_import" \
+  --producer-commit "$hpu_seal_commit" \
+  --encodings "$hmul_encodings"
 
 echo "[hputest] adding upstream CKKS applications at $hpu_seal_commit"
 cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
@@ -238,4 +263,4 @@ for profile in polynomial composed; do
     --producer-commit "$hpu_seal_commit"
 done
 
-echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD semantic import PASS'
+echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD/HMUL/CKKS semantic import PASS'
