@@ -1,5 +1,4 @@
 case_id	reason
-HPU_IT_DIR_CMB_010	缺库版本、HMUL 入口、密文输入/评估数据、DDR 绑定和接口级 golden。
 HPU_IT_DIR_CMB_011	缺 encode 库接口版本、编码参数、精度和可独立校验的数据。
 HPU_IT_DIR_CMB_012	缺 reline 库入口及独立密钥/常量/scratch 绑定；不能以 PMAC 代替。
 HPU_IT_DIR_CMB_013	缺库接口版本、输入 level/scale、输出精度与 rescale golden 契约。

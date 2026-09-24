@@ -98,12 +98,20 @@ workspace保持唯一可写区，窗口尾追加64-line guard。`HPU_IT_DIR_CMB_
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
 当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
 
-`prepare-inline-asm-mm.sh`还单独构建`tools/hpu-seal-cmb009`。该工具使用固定HPU_SEAL
-中的BFV `BfvOperationPlan::append_add`，构造N4096/Q4、2-component、coefficient-domain
-密文，使用同上下文SEAL `Evaluator::add`和HPU_SEAL software executor双重核对，然后
-导出59条指令、25条resolved DMA、1601-line窗口及golden。接收脚本用HPU_SEAL自己的
-assembler重新生成HADD所需编码表，逐指令核对后发布到`HPU_GENERATED_ROOT/hadd-data`。
-`HPU_IT_DIR_CMB_009`执行该程序并检查2×Q4输出、输入、模数表和尾部guard。
+`prepare-inline-asm-mm.sh`还通过`tools/hpu-seal-operators`一次构建CMB_009/010生成器。
+CMB_009使用固定HPU_SEAL BFV `BfvOperationPlan::append_add`，构造N4096/Q4、
+2-component、coefficient-domain密文，使用同上下文SEAL `Evaluator::add`和HPU_SEAL
+software executor双重核对，然后导出59条指令、25条resolved DMA、1601-line窗口及golden。
+接收脚本用HPU_SEAL自己的assembler重新生成HADD所需编码表，逐指令核对后发布到
+`HPU_GENERATED_ROOT/hadd-data`；CMB_009检查2×Q4输出、输入、模数表和尾部guard。
+
+CMB_010使用`BfvOperationPlan::append_multiply`生成融合BFV Multiply+Relinearize，固定
+N4096/Q4、2-component和coefficient domain。生成器以固定seed产生密钥和密文，准备canonical
+twiddle、relinearization key、KeySwitch及BEHZ常量，并以modified-SEAL `Evaluator`和
+HPU_SEAL software executor逐系数对拍。交付含8025条指令、3177条resolved DMA及32899-line
+窗口；importer逐指令重编码、检查全部DMA位于命名allocation内，并生成可写workspace/output
+行掩码。CMB_010据此比较2×Q4 golden，只要求workspace/output可写，同时保护输入、密钥、
+常量和64-line尾部guard。
 
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
@@ -368,14 +376,16 @@ producer instruction/data generation stages
 GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只运行一批，由普通和静默
 两种构建复用；artifact保留7天，包含：
 
-- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节34组workload，
-  每项同时提供普通和`_silent`文件；另17个未就绪项只列原因；
+- 章节目录中的ELF/BIN/TXT：03的37个独立subtest替换九个整例，其余章节35组workload，
+  每项同时提供普通和`_silent`文件；另16个未就绪项只列原因；
 - 统一的`MANIFEST.txt`与`INDEX.tsv`，以及`provenance/build-manifests/`中的四份输入构建清单；
 - `provenance/inline-asm-mm/`：选中的 bin/readable/table、目标 mm.c/mm.inst32、
   mm.h/mm.asm、producer commit、resolved spans、summary、`opcode_map.csv`，
   以及 `upstream/` 中保留的原始程序与编码表。
 - `provenance/hadd-data/`：HPU_SEAL生成的HADD程序、resolved DMA、窗口、golden、
   固定producer commit及接收摘要。
+- `provenance/hmul-data/`：HPU_SEAL生成的融合HMUL/relinearize程序、resolved DMA、
+  allocation/可写行掩码、窗口、golden、固定producer commit及接收摘要。
 
 生成物不进入 Git history。
 

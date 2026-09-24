@@ -25,7 +25,7 @@ minimal/silent不再采样阶段cycle或写`mcounteren.CY`，也不计算只用�
 
 GitHub Actions只发布一个`nexus-am-hpu-tests`。普通minimal版本保留原文件名，真正无printf的
 版本在扩展名前加`_silent`，例如`foo.elf`和`foo_silent.elf`。03只发布37个独立子项，
-不发布原九个串行整例；其它章节使用原workload。17项未接入用例仍不发布占位二进制。
+不发布原九个串行整例；其它章节使用原workload。16项未接入用例仍不发布占位二进制。
 
 `INDEX.tsv`记录每个文件的`variant/log_mode/uart_results`。各模式仍先在独立构建目录完成
 静态验证，再由组包器核对revision、producer、清单和文件集合后合并，防止混用。
