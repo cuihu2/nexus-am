@@ -118,7 +118,7 @@ done < "$roster"
 if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
-      $roster_migrated_software -ne 34 || $roster_migrated_blocked -ne 17 ]]; then
+      $roster_migrated_software -ne 35 || $roster_migrated_blocked -ne 16 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
