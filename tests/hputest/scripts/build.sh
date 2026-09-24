@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 60 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 13 || $roster_migrated -ne 49 || \
-      $roster_migrated_software -ne 32 || $roster_migrated_blocked -ne 17 ]]; then
+      ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
+      $roster_migrated_software -ne 34 || $roster_migrated_blocked -ne 17 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -290,11 +290,17 @@ test -s "$generated_root/auto-data/producer_commit.txt"
 cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
 test -s "$generated_root/hadd-data/producer_commit.txt"
 cp -a "$generated_root/hadd-data" "$artifact_root/provenance/hadd-data"
+for profile in polynomial composed; do
+  test -s "$generated_root/ckks-data/$profile/producer_commit.txt"
+done
+cp -a "$generated_root/ckks-data" "$artifact_root/provenance/ckks-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/LOG_MODES.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/INLINE_MAIN_6903096.md" "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/CKKS_APPLICATIONS.md" "$test_root/docs/CMB001_RUNTIME_NOTES.md" \
+  "$artifact_root/provenance/testplan/docs/"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
 cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$artifact_root/provenance/testplan/"
@@ -304,10 +310,10 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=60 ;;
+    all) expected_cases=62 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=13 ;;
+    fhe) expected_cases=15 ;;
     diagnostic) expected_cases=15 ;;
   esac
 fi

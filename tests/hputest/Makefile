@@ -139,6 +139,10 @@ verify-inline-asm: prepare-inline-asm-mm
 	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hadd" \
 	  --encodings "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hadd_encoder_words.tsv" \
 	  --producer-commit "$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)"
+	@python3 scripts/test-ckks-delivery.py \
+	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/ckks" \
+	  --generated "$(HPU_GENERATED_ROOT)" \
+	  --encoder "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/verify-ckks-encoding"
 	@python3 scripts/test-stage-keyswitch-package.py
 
 validate:

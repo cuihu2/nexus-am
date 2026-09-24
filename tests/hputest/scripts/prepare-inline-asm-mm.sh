@@ -214,4 +214,28 @@ python3 "$script_dir/import-hpu-seal-hadd.py" \
   --producer-commit "$hpu_seal_commit" \
   --encodings "$hpu_seal_encodings"
 
+echo "[hputest] adding upstream CKKS applications at $hpu_seal_commit"
+cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
+  hpu_ckks_polynomial_example hpu_ckks_composed_application_example
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+  -I"$hpu_seal_root/encode/include" "$script_dir/verify-ckks-encoding.cpp" \
+  "$hpu_seal_root/encode/src/instruction.cpp" \
+  "$hpu_seal_root/encode/src/parser.cpp" \
+  "$hpu_seal_root/encode/src/encoder.cpp" \
+  "$hpu_seal_root/encode/src/assembler.cpp" \
+  -o "$hpu_seal_tool_root/verify-ckks-encoding"
+for profile in polynomial composed; do
+  ckks_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/$profile"
+  mkdir -p "$ckks_source"
+  target=hpu_ckks_polynomial_example
+  [[ $profile != composed ]] || target=hpu_ckks_composed_application_example
+  # upstream 主机端先通过 SEAL 精确密文/解密误差检查，才导出交付包。
+  "$hpu_seal_build/inline-asm/$target" --emit-dir "$ckks_source" \
+    > "$ckks_source/HOST_ORACLE.log"
+  python3 "$script_dir/import-ckks-data.py" --source "$ckks_source" \
+    --destination "$generated_root/ckks-data/$profile" --profile "$profile" \
+    --encoder "$hpu_seal_tool_root/verify-ckks-encoding" \
+    --producer-commit "$hpu_seal_commit"
+done
+
 echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD semantic import PASS'

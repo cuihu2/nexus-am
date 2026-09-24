@@ -127,6 +127,26 @@ SRCS += $(TEST_ROOT)/src/common/it_hadd_fixture.S
 SRCS += $(HPU_GENERATED_ROOT)/hadd-data/hadd.c
 INC_DIR += $(HPU_GENERATED_ROOT)/hadd-data
 endif
+ifneq ($(filter HPU_IT_DIR_APP_002 HPU_IT_DIR_APP_003,$(CASE_ID)),)
+ifeq ($(CASE_ID),HPU_IT_DIR_APP_002)
+CKKS_PROFILE := polynomial
+CKKS_STEM := ckks_polynomial_x2_plus_one
+else
+CKKS_PROFILE := composed
+CKKS_STEM := ckks_composed_application
+endif
+CKKS_DATA := $(HPU_GENERATED_ROOT)/ckks-data/$(CKKS_PROFILE)
+ifeq ($(wildcard $(CKKS_DATA)/ckks_layout.h),)
+$(error missing CKKS application delivery; run 'make prepare-inline-asm-mm')
+endif
+SRCS += $(TEST_ROOT)/src/common/it_ckks.c
+SRCS += $(TEST_ROOT)/src/common/it_ckks_fixture.S
+SRCS += $(CKKS_DATA)/$(CKKS_STEM).c
+INC_DIR += $(CKKS_DATA)
+ASFLAGS += -Wa,-I$(CKKS_DATA)
+$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_ckks_fixture.o: \
+  $(addprefix $(CKKS_DATA)/,ckks_window.u32.bin ckks_golden.u32.bin ckks_writable.u8.bin)
+endif
 endif
 ifeq ($(HPU_LOG_LEVEL),0)
 # 不改共享 AM/klib。封住初始化和字符出口，启动路径也不能等待 UART。

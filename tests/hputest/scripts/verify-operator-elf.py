@@ -76,6 +76,16 @@ def verify(delivery, elf, disassembly, operator):
     if operator == "hadd":
         fixtures = [("hadd_window", "window.u32.bin"),
                     ("hadd_golden", "golden.u32.bin")]
+    if operator.startswith("ckks_"):
+        fixtures = [("ckks_window", "ckks_window.u32.bin"),
+                    ("ckks_golden", "ckks_golden.u32.bin"),
+                    ("ckks_writable", "ckks_writable.u8.bin")]
+        # ELF 装载区不能覆盖测试运行时写入的 DDR 窗口。
+        listing = subprocess.check_output(
+            [os.environ.get("CROSS_COMPILE", "riscv64-linux-gnu-") + "nm", str(elf)], text=True)
+        end = re.search(r"^([0-9a-fA-F]+)\s+\w\s+_end$", listing, re.M)
+        if not end or int(end[1], 16) >= 0x87000000:
+            raise ValueError("CKKS ELF/heap start overlaps the HPU DDR window")
     for symbol, filename in fixtures:
         if symbol_bytes(elf, symbol) != (delivery / filename).read_bytes():
             raise ValueError(f"{operator}: linked {symbol} differs from validated delivery")
@@ -88,6 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--elf", required=True, type=Path)
     parser.add_argument("--disassembly", required=True, type=Path)
     parser.add_argument("--operator", required=True,
-                        choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd"))
+                        choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
+                                 "ckks_polynomial_x2_plus_one", "ckks_composed_application"))
     args = parser.parse_args()
     verify(args.delivery, args.elf, args.disassembly, args.operator)
