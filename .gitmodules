@@ -1,8 +1,8 @@
 [submodule "tests/hputest/third_party/inline-asm"]
 	path = tests/hputest/third_party/inline-asm
 	url = https://github.com/cuihu2/inline-asm.git
-	branch = main
+	branch = legacy-main
 [submodule "tests/hputest/third_party/hpu-seal"]
 	path = tests/hputest/third_party/hpu-seal
 	url = https://github.com/cuihu2/inline-asm.git
-	branch = HPU_SEAL
+	branch = main

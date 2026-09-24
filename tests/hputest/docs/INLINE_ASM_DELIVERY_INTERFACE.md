@@ -10,23 +10,23 @@
 
 ```text
 tests/hputest/third_party/inline-asm
-branch main
+branch legacy-main
 commit 69030963e71dbcf32897e8ae08695cfa2e65d79a
 
 tests/hputest/third_party/hpu-seal
-branch HPU_SEAL
+branch main
 commit 8ac575158d28c07e2741da2101296a4eb31e5916
 ```
 
 `.gitmodules` 中的分支名记录上游来源；本地构建和 CI 均使用 Nexus-AM 提交中
 固定的 gitlink，不自动追踪远端分支最新提交。
 
-当前引用上游 `main` 的上述固定提交，接收其 STG 与 DMA 编码、生成程序和
+旧生产者路径引用上游 `legacy-main` 的上述固定提交，接收其 STG 与 DMA 编码、生成程序和
 编程约定更新；规范来源为该提交中的 `doc/HPU_PROGRAMMING_MANUAL.md`，
 不能仅用仍标作 v0.4 的文档标题判断内容相同。
 AM 不再引用 `HPU_SEAL_manual_0905` 试验分支。开发者确认后，正式算法库接口改从
-独立固定的 `HPU_SEAL` gitlink 接收；既有MM、stage、transform、BConv、KeySwitch和
-Auto仍从main接收。两者不能相互替换，因为当前STG语法和部分对象编码不同。
+独立固定的当前 `main` gitlink 接收；既有MM、stage、transform、BConv、KeySwitch和
+Auto仍从legacy-main接收。两者不能相互替换，因为当前STG语法和部分对象编码不同。
 
 上述上游原生使用HPU主opcode `0x5B`，AM验证后原样接收，旧`0x0B`指令拒绝。
 本次更新固定gitlink，不修改上游源码。STG变为三对象，数据变为物理域布局，见
@@ -96,12 +96,12 @@ workspace保持唯一可写区，窗口尾追加64-line guard。`HPU_IT_DIR_CMB_
 输出、只读输入/密钥/常量和guard。其它Galois element与旋转步仍未覆盖。
 构建配置显式关闭 `HPU_ENABLE_SEAL_DIFFERENTIAL_ORACLE` 及其兼容别名
 `HPU_ENABLE_SEAL_BFV_ORACLE`；差分 oracle 不属于本次 MM 数据生成依赖。
-当前 `main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
+`legacy-main` 已无原 SEAL integration 和 legacy profile 开关，接收端不再传入它们。
 
-`prepare-inline-asm-mm.sh`还单独构建`tools/hpu-seal-cmb009`。该工具使用固定HPU_SEAL
+`prepare-inline-asm-mm.sh`还单独构建`tools/hpu-seal-cmb009`。该工具使用固定main分支
 中的BFV `BfvOperationPlan::append_add`，构造N4096/Q4、2-component、coefficient-domain
-密文，使用同上下文SEAL `Evaluator::add`和HPU_SEAL software executor双重核对，然后
-导出59条指令、25条resolved DMA、1601-line窗口及golden。接收脚本用HPU_SEAL自己的
+密文，使用同上下文SEAL `Evaluator::add`和HPU-SEAL software executor双重核对，然后
+导出59条指令、25条resolved DMA、1601-line窗口及golden。接收脚本用HPU-SEAL自己的
 assembler重新生成HADD所需编码表，逐指令核对后发布到`HPU_GENERATED_ROOT/hadd-data`。
 `HPU_IT_DIR_CMB_009`执行该程序并检查2×Q4输出、输入、模数表和尾部guard。
 
@@ -116,7 +116,7 @@ assembler重新生成HADD所需编码表，逐指令核对后发布到`HPU_GENER
 
 生产者还会生成其他算子和 twiddle。Nexus-AM 不把整个大镜像链接进
 ELF，只严格选择 MM 冒烟所需的四个数据文件和一个程序。
-引用 `main` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
+引用 `legacy-main` 不等于启用完整 SEAL/CKKS 应用；当前接入仍限于上述固定
 4096 系数、1 RNS 分量的 MM 路径。
 
 ## 3. 数据文件和人工可读表格
@@ -282,7 +282,7 @@ GPR[x11] = line_count
 `dma_relocation_manifest.csv` 必须逐条写明 custom1 的 instruction index、DMA
 index、方向、对象、word、`rs1=x10` 和 `rs2=x11`。当前 MM 有四条 DMA。
 
-当前 `main` 的 32-bit DMA 字段是：
+当前 `legacy-main` 的 32-bit DMA 字段是：
 
 ```text
 inst32 = (obj << 25) | (rs2 << 20) | (rs1 << 15)
@@ -399,7 +399,7 @@ GitHub Actions全量构建并发布一个`nexus-am-hpu-tests`。生成数据只�
 ## 10. 当前边界
 
 当前 Nexus-AM 接收的完整程序闭环只覆盖 `MM/PMUL, N=4096, Q=1`，不代表
-`main` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
+`legacy-main` 分支只支持这一种程序，也不代表其完整 SEAL/CKKS 流程已经接入。
 迁移 IT 中的基础
 CSR、DMA 和算术用例使用同一 producer 的 A/B 与编码器输出。缺完整 N=4096
 program/data/golden/relocation 契约的 24 个测试点被标成

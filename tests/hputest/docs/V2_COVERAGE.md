@@ -5,7 +5,7 @@
 17 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改。既有生产者仍为
-inline-asm main `6903096`，CMB_009另用固定HPU_SEAL `8ac5751`，两套编码不混用。
+inline-asm legacy-main `6903096`，CMB_009使用当前main `8ac5751`，两套编码不混用。
 本版同步说明见 [inline-main更新](INLINE_MAIN_6903096.md)。
 
 耗时优化、可选单子项执行、阶段cycle与全量UART结果导出见
@@ -77,7 +77,7 @@ NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式
 接收前还使用固定inline-asm源码本次重新生成的编码表逐条核对机器码，防止几个旧文件彼此一致却都编码错误。
 
 原CMB_009把单条PADD称作Poseidon HADD，不符合“以算法库接口为边界”的要求。
-现已改为固定HPU_SEAL BFV planner API；接收端同时复算模加、核对producer编码和resolved DMA。
+现已改为固定main分支的HPU-SEAL BFV planner API；接收端同时复算模加、核对producer编码和resolved DMA。
 PADD功能仍由03-001保留。encode/bootstrapping是原表条目，保留ID，不能静默删除。
 
 ## 4. 配置、地址、资源和数据边界

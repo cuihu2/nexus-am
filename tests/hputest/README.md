@@ -59,8 +59,8 @@ runtime/                       # mechanical helpers, never whole scenarios
 └── it_compute.c               # coefficient-wise C reference comparisons
 
 third_party/
-├── inline-asm/                 # pinned main branch, existing producer contract
-└── hpu-seal/                   # pinned HPU_SEAL branch, algorithm-library API
+├── inline-asm/                 # pinned legacy-main branch, existing producer contract
+└── hpu-seal/                   # pinned main branch, algorithm-library API
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
@@ -183,14 +183,14 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 
 ## HPU instruction source
 
-`third_party/inline-asm` 固定引用 [cuihu2/inline-asm main](https://github.com/cuihu2/inline-asm/tree/main)
+`third_party/inline-asm` 固定引用 [cuihu2/inline-asm legacy-main](https://github.com/cuihu2/inline-asm/tree/legacy-main)
 的提交 `69030963e71dbcf32897e8ae08695cfa2e65d79a`。正常构建使用固定gitlink，
 不是每次自动取远端HEAD；本次未修改上游源码或RTL。
 同步差异和新旧包的使用边界见 [main更新说明](docs/INLINE_MAIN_6903096.md)。
-`third_party/hpu-seal` 独立固定同仓库 `HPU_SEAL` 分支提交
+`third_party/hpu-seal` 独立固定同仓库当前 `main` 分支提交
 `8ac575158d28c07e2741da2101296a4eb31e5916`，仅用于正式算法库接口用例；CMB_009
 通过 BFV `BfvOperationPlan::append_add` 生成程序、resolved DMA、输入和SEAL golden。
-两条固定gitlink分别校验，不用HPU_SEAL编码替换既有main编码。
+两条固定gitlink分别校验，不用当前main编码替换legacy-main编码。
 
 上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
 AM只校验并原样接收，不再执行 `0x0B→0x5B` 转换。旧HPU `0x0B` 文件直接拒绝。
@@ -307,7 +307,7 @@ of informal testcase numbers is not authoritative.
 KeySwitch、Auto和BFV HADD已接入完整producer序列及golden，但仅覆盖各自固定基础组合。
 其它17项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
 也有AM接收工作未实现，不能笼统归因于上游“没有数据”。CMB_009不再使用原单条PADD
-替身，而是验收固定HPU_SEAL API；基础PADD覆盖仍保留在03-001。
+替身，而是验收固定main分支的HPU-SEAL API；基础PADD覆盖仍保留在03-001。
 
 未接入源码仍交叉编译以检查接口，执行只报具体原因并return 1。
 `CASE_MANIFEST.tsv`/`NOT_QUALIFIED.tsv`标记它们，但下载包不再包含这些占位ELF/BIN/TXT。
