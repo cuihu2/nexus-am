@@ -92,11 +92,14 @@ encoding_tsv="$tool_root/encoder_words.tsv"
 hpu_seal_build="$output_root/hpu-seal-cmb009-cmake/$hpu_seal_commit"
 hpu_seal_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hadd"
 hpu_seal_import="$generated_root/hadd-data"
+hpu_reline_build="$output_root/hpu-seal-cmb012-cmake/$hpu_seal_commit"
+hpu_reline_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/reline"
 hpu_seal_tool_root="$output_root/hpu-seal-tools/$hpu_seal_commit"
 hpu_seal_encodings="$hpu_seal_tool_root/hadd_encoder_words.tsv"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
-  "$hpu_seal_build" "$hpu_seal_source" "$hpu_seal_tool_root"
+  "$hpu_seal_build" "$hpu_seal_source" "$hpu_reline_build" \
+  "$hpu_reline_source" "$hpu_seal_tool_root"
 required_outputs=(
   "$producer_mm/mm.c"
   "$producer_mm/mm.h"
@@ -214,6 +217,16 @@ python3 "$script_dir/import-hpu-seal-hadd.py" \
   --producer-commit "$hpu_seal_commit" \
   --encodings "$hpu_seal_encodings"
 
+echo "[hputest] generating HPU_SEAL CKKS Reline at $hpu_seal_commit"
+cmake -S "$test_root/tools/hpu-seal-cmb012" -B "$hpu_reline_build" \
+  -DINLINE_ASM_ROOT="$hpu_seal_root" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$hpu_reline_build" --parallel "$jobs" \
+  --target hpu_seal_cmb012_generator
+"$hpu_reline_build/hpu_seal_cmb012_generator" \
+  "$hpu_reline_source" "$hpu_seal_commit" \
+  > "$hpu_reline_source/HOST_ORACLE.log"
+
 echo "[hputest] adding upstream CKKS applications at $hpu_seal_commit"
 cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
   hpu_ckks_polynomial_example hpu_ckks_composed_application_example
@@ -224,6 +237,10 @@ cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
   "$hpu_seal_root/encode/src/encoder.cpp" \
   "$hpu_seal_root/encode/src/assembler.cpp" \
   -o "$hpu_seal_tool_root/verify-ckks-encoding"
+python3 "$script_dir/import-ckks-data.py" --source "$hpu_reline_source" \
+  --destination "$generated_root/ckks-data/reline" --profile reline \
+  --encoder "$hpu_seal_tool_root/verify-ckks-encoding" \
+  --producer-commit "$hpu_seal_commit"
 for profile in polynomial composed; do
   ckks_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/$profile"
   mkdir -p "$ckks_source"
@@ -238,4 +255,4 @@ for profile in polynomial composed; do
     --producer-commit "$hpu_seal_commit"
 done
 
-echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD semantic import PASS'
+echo '[hputest] inline-asm MM/stage/transform, KeySwitch, Auto and HPU_SEAL HADD/Reline semantic import PASS'

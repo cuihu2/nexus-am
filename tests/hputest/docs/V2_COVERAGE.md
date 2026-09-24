@@ -1,11 +1,11 @@
 # v2 测试点落实范围与运行说明
 
 依据 `HPU-IT测试点分解v2.xlsx` 的原用例 ID，以及本轮提供的功能、边界、性能、CPU 回归要求更新。
-**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，32 个具备真实软件自检；
-17 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
+**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 49 个后续用例中，33 个具备真实软件自检；
+16 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改。既有生产者仍为
-inline-asm legacy-main `6903096`，CMB_009使用当前main `8ac5751`，两套编码不混用。
+inline-asm legacy-main `6903096`，算法库用例使用当前main `b5398a3`，两套编码不混用。
 本版同步说明见 [inline-main更新](INLINE_MAIN_6903096.md)。
 
 耗时优化、可选单子项执行、阶段cycle与全量UART结果导出见
@@ -67,10 +67,12 @@ inline-asm legacy-main `6903096`，CMB_009使用当前main `8ac5751`，两套编
 | CMB_004 | Q4/P3/D2 KeySwitch，N4096；2167指令/716DMA；2×Q4输出、只读区及guard逐项检查 | 其它参数、边界数据和真实IT/VCS运行 |
 | CMB_005 | N4096/Q4/P3/D2，g=3；标准NTT+modified-root融合Auto INTT+Galois KeySwitch；3009指令/941DMA；2×Q4输出、只读区及guard逐项检查 | 其它Galois element/旋转步、参数、边界数据和真实IT/VCS运行 |
 | CMB_009 | HPU_SEAL BFV `BfvOperationPlan::append_add`；N4096/Q4/2 components、coefficient domain；59指令/25DMA；SEAL golden及只读/guard检查 | CKKS HADD、其它参数/level/密文大小、边界数据和真实IT/VCS运行 |
-| CMB_010..015 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
+| CMB_010..011 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
+| CMB_012 | HPU_SEAL CKKS `CkksOperationPlan::append_relinearize`；N4096/Q4\|P1、3→2 components、canonical NTT；2753指令/1055DMA；SEAL精确密文golden及只读/guard检查 | 其它参数/level/密文大小、边界数据和真实IT/VCS运行 |
+| CMB_013..015 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
 | STING_CMB_007 | 未接入随机长链 | STING入口、seed重放、对象分配与逐阶段golden |
 
-整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard；HADD用1601line窗口。
+整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard；HADD用1601line窗口；Reline用11522line窗口。
 输入/常量从producer交付接收，输出区填poison，golden位于只读ELF中而不预填到HPU输出区。
 NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式复核，不错误替换为精确CRT还原。
 每次DLOAD/DSTORE的序号、对象、line及来源记录在 `resolved_dma.tsv`；原C/ASM/inst32/cmd26及表格均保留。

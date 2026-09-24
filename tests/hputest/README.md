@@ -70,7 +70,8 @@ build/                          # ignored: generated outputs only
     ├── keyswitch-source/       # structurally checked raw producer package
     ├── keyswitch-data/         # validated KeySwitch window, DMA plan and provenance
     ├── auto-data/              # validated NTT+Auto window, resolved plan and golden
-    └── hadd-data/              # validated HPU_SEAL BFV HADD program/window/golden
+    ├── hadd-data/              # validated HPU_SEAL BFV HADD program/window/golden
+    └── ckks-data/              # validated CKKS Reline/application programs and goldens
 ```
 
 Each source has its own readable `main()`.  The MMIO register setup, data preparation,
@@ -194,8 +195,9 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 不是每次自动取远端HEAD；本次未修改上游源码或RTL。
 同步差异和新旧包的使用边界见 [main更新说明](docs/INLINE_MAIN_6903096.md)。
 `third_party/hpu-seal` 独立固定同仓库当前 `main` 分支提交
-`8ac575158d28c07e2741da2101296a4eb31e5916`，仅用于正式算法库接口用例；CMB_009
-通过 BFV `BfvOperationPlan::append_add` 生成程序、resolved DMA、输入和SEAL golden。
+`b5398a3cbe6dbd3a5a0d9abbef06425b0107f300`，仅用于正式算法库接口用例；CMB_009
+通过 BFV `BfvOperationPlan::append_add` 生成程序，CMB_012 通过 CKKS
+`CkksOperationPlan::append_relinearize` 生成独立Reline程序及精确SEAL golden。
 两条固定gitlink分别校验，不用当前main编码替换legacy-main编码。
 
 上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
@@ -309,9 +311,9 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-32个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
-KeySwitch、Auto和BFV HADD已接入完整producer序列及golden，但仅覆盖各自固定基础组合。
-其它17项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
+33个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
+KeySwitch、Auto、BFV HADD和CKKS Reline已接入完整producer序列及golden，但仅覆盖各自固定基础组合。
+其它16项仍未接入，原因逐项记录于 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，
 也有AM接收工作未实现，不能笼统归因于上游“没有数据”。CMB_009不再使用原单条PADD
 替身，而是验收固定main分支的HPU-SEAL API；基础PADD覆盖仍保留在03-001。
 

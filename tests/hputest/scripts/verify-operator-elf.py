@@ -99,6 +99,7 @@ if __name__ == "__main__":
     parser.add_argument("--disassembly", required=True, type=Path)
     parser.add_argument("--operator", required=True,
                         choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
-                                 "ckks_polynomial_x2_plus_one", "ckks_composed_application"))
+                                 "ckks_reline", "ckks_polynomial_x2_plus_one",
+                                 "ckks_composed_application"))
     args = parser.parse_args()
     verify(args.delivery, args.elf, args.disassembly, args.operator)
