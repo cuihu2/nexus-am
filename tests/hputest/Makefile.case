@@ -147,10 +147,13 @@ SRCS += $(TEST_ROOT)/src/common/it_rotate_fixture.S
 SRCS += $(HPU_GENERATED_ROOT)/rotate-data/rotate.c
 INC_DIR += $(HPU_GENERATED_ROOT)/rotate-data
 endif
-ifneq ($(filter HPU_IT_DIR_CMB_012 HPU_IT_DIR_APP_002 HPU_IT_DIR_APP_003,$(CASE_ID)),)
+ifneq ($(filter HPU_IT_DIR_CMB_012 HPU_IT_DIR_CMB_013 HPU_IT_DIR_APP_002 HPU_IT_DIR_APP_003,$(CASE_ID)),)
 ifeq ($(CASE_ID),HPU_IT_DIR_CMB_012)
 CKKS_PROFILE := reline
 CKKS_STEM := ckks_reline
+else ifeq ($(CASE_ID),HPU_IT_DIR_CMB_013)
+CKKS_PROFILE := rescale
+CKKS_STEM := ckks_rescale
 else ifeq ($(CASE_ID),HPU_IT_DIR_APP_002)
 CKKS_PROFILE := polynomial
 CKKS_STEM := ckks_polynomial_x2_plus_one

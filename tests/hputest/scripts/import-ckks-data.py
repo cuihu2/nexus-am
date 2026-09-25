@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""接收 main 的两个 CKKS 完整应用；保留 producer C/编码/布局，不合并成多轮测试。"""
+"""接收 main 的 CKKS 应用/独立算子；保留 producer C/编码/布局。"""
 import argparse
 import csv
 import json
@@ -17,6 +17,8 @@ PROFILES = {
                   "output/y/next/", 4411, 1774),
     "reline": ("ckks_reline", 4096, 4,
                 "output/relinearized/", 2753, 1055),
+    "rescale": ("ckks_rescale", 4096, 3,
+                 "output/rescaled/", 747, 283),
 }
 
 
@@ -133,6 +135,54 @@ def validate(source, profile, encoder, producer_commit=None):
         require(all(name in by_id and by_id[name]["read_only"] == "0"
                     and first_access.get(name) == "dload" for name in tensor_names),
                 "CMB012 writable tensor input is missing or not read first")
+    if profile == "rescale":
+        metadata = json.loads((source / "CMB013_METADATA.json").read_text())
+        expected = {
+            "format_version": 1,
+            "case_id": "HPU_IT_DIR_CMB_013",
+            "scheme": "CKKS",
+            "api": "hpu::seal_adapter::CkksOperationPlan::append_rescale",
+            "poly_modulus_degree": 4096,
+            "input_q_count": 4,
+            "output_q_count": 3,
+            "special_modulus_count": 1,
+            "input_component_count": 2,
+            "output_component_count": 2,
+            "input_chain_index": 3,
+            "output_chain_index": 2,
+            "input_scale": 2 ** 50,
+            "dropped_modulus": 134111233,
+            "semantic_tolerance": 0.005,
+            "domain": "canonical_ntt_physical",
+            "instruction_count": instructions,
+            "dma_count": dma_count,
+            "image_used_lines": used,
+            "guard_lines": 64,
+        }
+        for key, value in expected.items():
+            require(metadata.get(key) == value, f"unexpected CMB013 metadata {key}")
+        commit = metadata.get("producer_commit", "")
+        require(re.fullmatch(r"[0-9a-f]{40}", commit),
+                "invalid CMB013 producer commit")
+        if producer_commit is not None:
+            require(commit == producer_commit, "CMB013 producer commit mismatch")
+        output_scale = metadata.get("output_scale", 0)
+        require(output_scale > 0 and abs(
+                    output_scale * metadata["dropped_modulus"]
+                    - metadata["input_scale"])
+                <= metadata["input_scale"] * 1e-12,
+                "CMB013 output scale does not equal input_scale/q_last")
+        semantic_error = metadata.get("semantic_error", float("inf"))
+        require(0 <= semantic_error <= metadata["semantic_tolerance"],
+                "CMB013 semantic oracle exceeded tolerance")
+        require({entry["operation_id"] for entry in dma}
+                <= {"$application", "rescale"},
+                "CMB013 delivery contains a non-Rescale operation")
+        input_names = [f"input/ciphertext/c{c}/mod{q}"
+                       for c in range(2) for q in range(4)]
+        require(all(name in by_id and by_id[name]["read_only"] == "0"
+                    and first_access.get(name) == "dload" for name in input_names),
+                "CMB013 writable input is missing or not read first")
     outputs = {r["allocation_id"]: r for r in rows(hardware / "expected_outputs.csv")}
     final_names = [f"{prefix}c{c}/mod{q}" for c in range(2) for q in range(q_count)]
     require(sorted(k for k in by_id if k.startswith(prefix)) == sorted(final_names),
@@ -182,6 +232,8 @@ def main():
     shutil.copy2(args.source / "dma_relocation_manifest.csv", root)
     if args.profile == "reline":
         shutil.copy2(args.source / "CMB012_METADATA.json", root)
+    elif args.profile == "rescale":
+        shutil.copy2(args.source / "CMB013_METADATA.json", root)
     (root / "ckks_window.u32.bin").write_bytes(image)
     (root / "ckks_golden.u32.bin").write_bytes(golden)
     (root / "ckks_writable.u8.bin").write_bytes(mask)

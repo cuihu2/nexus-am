@@ -94,6 +94,8 @@ hpu_seal_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hadd"
 hpu_seal_import="$generated_root/hadd-data"
 hpu_reline_build="$output_root/hpu-seal-cmb012-cmake/$hpu_seal_commit"
 hpu_reline_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/reline"
+hpu_rescale_build="$output_root/hpu-seal-cmb013-cmake/$hpu_seal_commit"
+hpu_rescale_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/rescale"
 hpu_seal_rotate_build="$output_root/hpu-seal-cmb014-cmake/$hpu_seal_commit"
 hpu_seal_rotate_source="$output_root/hpu-seal-producer/$hpu_seal_commit/rotate"
 hpu_seal_rotate_import="$generated_root/rotate-data"
@@ -106,7 +108,8 @@ hpu_seal_encoder="$hpu_seal_tool_root/verify-ckks-encoding"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
   "$hpu_seal_build" "$hpu_seal_source" "$hmul_source" "$hpu_reline_build" \
-  "$hpu_reline_source" "$hpu_seal_rotate_build" \
+  "$hpu_reline_source" "$hpu_rescale_build" "$hpu_rescale_source" \
+  "$hpu_seal_rotate_build" \
   "$hpu_seal_rotate_source" "$hpu_seal_tool_root"
 required_outputs=(
   "$producer_mm/mm.c"
@@ -269,6 +272,20 @@ python3 "$script_dir/import-ckks-data.py" --source "$hpu_reline_source" \
   --encoder "$hpu_seal_encoder" \
   --producer-commit "$hpu_seal_commit"
 
+echo "[hputest] generating HPU_SEAL CKKS Rescale at $hpu_seal_commit"
+cmake -S "$test_root/tools/hpu-seal-cmb013" -B "$hpu_rescale_build" \
+  -DINLINE_ASM_ROOT="$hpu_seal_root" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$hpu_rescale_build" --parallel "$jobs" \
+  --target hpu_seal_cmb013_generator
+"$hpu_rescale_build/hpu_seal_cmb013_generator" \
+  "$hpu_rescale_source" "$hpu_seal_commit" \
+  > "$hpu_rescale_source/HOST_ORACLE.log"
+python3 "$script_dir/import-ckks-data.py" --source "$hpu_rescale_source" \
+  --destination "$generated_root/ckks-data/rescale" --profile rescale \
+  --encoder "$hpu_seal_encoder" \
+  --producer-commit "$hpu_seal_commit"
+
 echo "[hputest] generating HPU_SEAL BFV RotateRows at $hpu_seal_commit"
 cmake -S "$test_root/tools/hpu-seal-cmb014" -B "$hpu_seal_rotate_build" \
   -DINLINE_ASM_ROOT="$hpu_seal_root" \
@@ -302,4 +319,4 @@ for profile in polynomial composed; do
     --producer-commit "$hpu_seal_commit"
 done
 
-echo '[hputest] inline-asm and HPU_SEAL HADD/HMUL/Reline/Rotate/CKKS semantic import PASS'
+echo '[hputest] inline-asm and HPU_SEAL HADD/HMUL/Reline/Rescale/Rotate/CKKS semantic import PASS'
