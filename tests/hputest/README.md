@@ -6,7 +6,7 @@ IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续51项中37项有软件自检，14项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续51项中38项有软件自检，13项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -199,8 +199,8 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 `third_party/hpu-seal` 独立固定同仓库当前 `main` 分支提交
 `b5398a3cbe6dbd3a5a0d9abbef06425b0107f300`，仅用于正式算法库接口用例；CMB_009/010
 分别通过 BFV `BfvOperationPlan::append_add` 和 `append_multiply` 生成程序、resolved DMA、
-输入、密钥、常量和SEAL golden；CMB_012通过CKKS `CkksOperationPlan::append_relinearize`
-生成独立Reline程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
+输入、密钥、常量和SEAL golden；CMB_012/013通过CKKS `CkksOperationPlan`分别生成独立
+Reline/Rescale程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
 上游CKKS应用交付。
 两条固定gitlink分别校验，不用当前main编码替换legacy-main编码。
 
@@ -315,11 +315,11 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-37个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
-KeySwitch、Auto、BFV HADD、融合HMUL/relinearize、CKKS Reline和BFV RotateRows已接入完整
-producer序列及golden，但仅覆盖各自固定基础组合。其它14项仍未接入，原因逐项记录于
+38个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
+KeySwitch、Auto、BFV HADD、融合HMUL/relinearize、CKKS Reline/Rescale和BFV RotateRows已接入完整
+producer序列及golden，但仅覆盖各自固定基础组合。其它13项仍未接入，原因逐项记录于
 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
-上游“没有数据”。CMB_009/010/012/014均验收固定main分支的HPU-SEAL API；基础
+上游“没有数据”。CMB_009/010/012/013/014均验收固定main分支的HPU-SEAL API；基础
 PADD/PMUL覆盖仍保留在03-001/003。
 
 未接入源码仍交叉编译以检查接口，执行只报具体原因并return 1。
@@ -386,7 +386,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共76个已发布测试身份、152组ELF/BIN/TXT；14项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共77个已发布测试身份、154组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

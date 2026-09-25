@@ -107,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--disassembly", required=True, type=Path)
     parser.add_argument("--operator", required=True,
                         choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
-                                 "hmul", "rotate", "ckks_reline",
+                                 "hmul", "rotate", "ckks_reline", "ckks_rescale",
                                  "ckks_polynomial_x2_plus_one",
                                  "ckks_composed_application"))
     args = parser.parse_args()

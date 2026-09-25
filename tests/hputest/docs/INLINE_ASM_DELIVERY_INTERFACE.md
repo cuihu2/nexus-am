@@ -126,6 +126,14 @@ SEAL `Evaluator::relinearize_inplace`和HPU-SEAL software executor精确对拍�
 1055条resolved DMA和11458-line初始镜像。AM追加64-line guard，按真实DSTORE标记
 三分量输入转换区、scratch及二分量输出为可写，其余密钥/常量/twiddle不可写。
 
+`tools/hpu-seal-cmb013`使用同一固定main提交的CKKS
+`CkksOperationPlan::append_rescale`，直接接收N4096/Q4、canonical-NTT的两分量密文。
+该输入由主机端SEAL先执行Multiply+Relinearize形成，scale固定为2^50；交付程序只含
+Q4→Q3 rounded Rescale。主机端以`Evaluator::rescale_to_next_inplace`和HPU-SEAL软件
+执行器逐字对拍，并解密确认误差不超过5e-3。交付固定747条指令、283条resolved DMA和
+6850-line初始镜像；AM追加64-line guard，并按真实DSTORE仅放行输入转换区、scratch和
+Q3输出，Rescale常量/twiddle及guard保持只读。
+
 当前 Nexus-AM 选择 `outputs/mm`，因为它同时满足：
 
 - `N=4096`；

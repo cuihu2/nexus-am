@@ -70,12 +70,12 @@ inline-asm legacy-main `6903096`，算法库用例使用当前main `b5398a3`，�
 | CMB_010 | HPU_SEAL BFV `BfvOperationPlan::append_multiply`；融合Multiply+Relinearize；N4096/Q4/2 components、coefficient domain；8025指令/3177DMA；modified-SEAL golden、可写workspace掩码及只读/guard检查 | CKKS HMUL、其它参数/level/密文大小、边界数据和真实IT/VCS运行 |
 | CMB_011 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
 | CMB_012 | HPU_SEAL CKKS `CkksOperationPlan::append_relinearize`；N4096/Q4\|P1、3→2 components、canonical NTT；2753指令/1055DMA；SEAL精确密文golden及只读/guard检查 | 其它参数/level/密文大小、边界数据和真实IT/VCS运行 |
-| CMB_013 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
+| CMB_013 | HPU_SEAL CKKS `CkksOperationPlan::append_rescale`；N4096/Q4→Q3、2 components、canonical NTT、scale 2^50→约2^23；747指令/283DMA；SEAL精确密文golden、解密误差≤5e-3及只读/guard检查 | 其它参数/level/scale、边界数据和真实IT/VCS运行 |
 | CMB_014 | HPU_SEAL BFV `BfvOperationPlan::append_rotate_rows`；N4096/Q4、步长+1/g=3；2593指令/997DMA；固定seed下槽位语义、全RNS密文SEAL golden、逐line只读/guard检查 | RotateColumns、负/其它步长、其它参数/level和真实IT/VCS运行 |
 | CMB_015 | 未接入真实算法库API | 需固定接口、参数、密钥、数据、精度和golden |
 | STING_CMB_007 | 未接入随机长链 | STING入口、seed重放、对象分配与逐阶段golden |
 
-整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard；HADD/HMUL分别用1601/32899line窗口；Reline用11522line窗口；Rotate用20162line窗口。
+整体NTT/INTT独立用640line窗口；BConv用2048line窗口；KeySwitch用14721line窗口；Auto保留producer完整窗口并添加64-line尾部guard；HADD/HMUL分别用1601/32899line窗口；Reline/Rescale分别用11522/6914line窗口；Rotate用20162line窗口。
 输入/常量从producer交付接收，输出区填poison，golden位于只读ELF中而不预填到HPU输出区。
 NTT/INTT golden在构建时用独立数学变换复算；BConv按FastBConv公式复核，不错误替换为精确CRT还原。
 每次DLOAD/DSTORE的序号、对象、line及来源记录在 `resolved_dma.tsv`；原C/ASM/inst32/cmd26及表格均保留。
@@ -127,7 +127,7 @@ modified-SEAL密文oracle和HPU_SEAL software executor三重host检查。
 
 GitHub Actions的唯一HPU产物名为`nexus-am-hpu-tests`，内部是00至07章节目录和`INDEX.tsv`。
 03用37个独立subtest替换九个串行整例，其余章节保留39组非占位workload；每项同时提供普通和
-`_silent`版本，共152组ELF/BIN/反汇编。14项未就绪只列原因，不夹在可运行列表中。
+`_silent`版本，共154组ELF/BIN/反汇编。13项未就绪只列原因，不夹在可运行列表中。
 `provenance/`保留固定producer版本、实际指令、DMA/数据布局和本说明。
 新用例需要更多初始化、逐项golden和guard扫描，不承诺100万cycle一定足够；由IT测定预算并保存原始超时日志。
 失败回传至少包含case ID、AM/producer/RTL/simv版本、cycle-limit、最后阶段、首错日志和对应波形。
