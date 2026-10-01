@@ -119,6 +119,11 @@ def compare_metadata(manifests):
                        for name in ("workloads", "silent-workloads")}
     if None in hpu_seal_values or len(hpu_seal_values) != 1:
         raise ValueError(f"workload packages disagree on hpu_seal_commit: {hpu_seal_values}")
+    hpu_application_values = {manifests[name].get("hpu_applications_commit")
+                              for name in ("workloads", "silent-workloads")}
+    if None in hpu_application_values or len(hpu_application_values) != 1:
+        raise ValueError("workload packages disagree on hpu_applications_commit: "
+                         f"{hpu_application_values}")
 
 
 def compare_trees(left, right, label):
@@ -133,8 +138,8 @@ def compare_trees(left, right, label):
 
 def workload_rows(release, mode):
     rows = read_tsv(release / "INDEX.tsv", WORKLOAD_FIELDS)
-    if len(rows) != 62:
-        raise ValueError(f"{mode} workloads must describe 62 canonical cases")
+    if len(rows) != 63:
+        raise ValueError(f"{mode} workloads must describe 63 canonical cases")
     seen = set()
     for row in rows:
         identity = row["case_id"]
@@ -152,8 +157,8 @@ def workload_rows(release, mode):
                     raise ValueError(f"wrong {field} extension for workload: {identity}")
     blocked = sum(row["qualifier"] == "blocked-not-issued" for row in rows)
     published = sum(bool(row["elf"]) for row in rows)
-    if (published, blocked) != (49, 13):
-        raise ValueError(f"{mode} workloads require 49 published and 13 blocked cases")
+    if (published, blocked) != (50, 13):
+        raise ValueError(f"{mode} workloads require 50 published and 13 blocked cases")
     instruction = {row["case_id"] for row in rows
                    if row["chapter"] == "03_compute_instructions" and row["elf"]}
     if instruction != INSTRUCTION_IDS:
@@ -415,7 +420,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
 
         published = sum(bool(row["elf"]) for row in indexes)
         blocked = sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in indexes)
-        if (published, blocked, len(indexes)) != (154, 13, 167):
+        if (published, blocked, len(indexes)) != (156, 13, 169):
             raise ValueError(f"unexpected unified counts: published={published} blocked={blocked} rows={len(indexes)}")
         metadata = manifests["workloads"]
         (package_root / "MANIFEST.txt").write_text(
@@ -423,9 +428,10 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             f"revision={metadata['revision']}\narch={metadata['arch']}\n"
             f"inline_asm_commit={metadata['inline_asm_commit']}\n"
             f"hpu_seal_commit={metadata['hpu_seal_commit']}\n"
+            f"hpu_applications_commit={metadata['hpu_applications_commit']}\n"
             "variants=normal,silent\nnormal_log_mode=minimal\nsilent_log_mode=silent\n"
             "parent_instruction_cases_replaced=9\nsubtests=37\n"
-            "published_test_identities=77\npublished_variant_sets=154\n"
+            "published_test_identities=78\npublished_variant_sets=156\n"
             "blocked_index_only=13\nqualification=BUILD_READY_NOT_IT_PASS\n",
             encoding="utf-8")
         (package_root / "README.md").write_text(
@@ -451,7 +457,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             shutil.rmtree(staging)
         raise
     print(f"Unified HPU package: {output / 'release' / 'hputest'}; "
-          "77 tests x 2 variants, 13 blocked index-only")
+          "78 tests x 2 variants, 13 blocked index-only")
     return output / "release"
 
 

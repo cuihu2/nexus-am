@@ -6,3 +6,7 @@
 	path = tests/hputest/third_party/hpu-seal
 	url = https://github.com/cuihu2/inline-asm.git
 	branch = main
+[submodule "tests/hputest/third_party/hpu-applications"]
+	path = tests/hputest/third_party/hpu-applications
+	url = https://github.com/cuihu2/inline-asm.git
+	branch = main

@@ -5,6 +5,7 @@ OUTPUT_ROOT ?= $(CURDIR)/build
 JOBS ?= 4
 INLINE_ASM_ROOT ?= $(CURDIR)/third_party/inline-asm
 HPU_SEAL_ROOT ?= $(CURDIR)/third_party/hpu-seal
+HPU_APPLICATIONS_ROOT ?= $(CURDIR)/third_party/hpu-applications
 HPU_GENERATED_ROOT ?= $(OUTPUT_ROOT)/generated
 export mainargs
 HPU_DUMP_RESULTS ?= 0
@@ -92,7 +93,8 @@ silent-subtests:
 
 prepare-inline-asm-mm:
 	@scripts/prepare-inline-asm-mm.sh \
-	  "$(INLINE_ASM_ROOT)" "$(OUTPUT_ROOT)" "$(JOBS)" "$(HPU_SEAL_ROOT)"
+	  "$(INLINE_ASM_ROOT)" "$(OUTPUT_ROOT)" "$(JOBS)" "$(HPU_SEAL_ROOT)" \
+	  "$(HPU_APPLICATIONS_ROOT)"
 
 verify-inline-asm: prepare-inline-asm-mm
 	@HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
@@ -147,6 +149,11 @@ verify-inline-asm: prepare-inline-asm-mm
 	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/ckks" \
 	  --generated "$(HPU_GENERATED_ROOT)" \
 	  --encoder "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/verify-ckks-encoding"
+	@python3 scripts/test-application-delivery.py \
+	  --source "$(HPU_GENERATED_ROOT)/application-data/bgv_plain_chain/upstream" \
+	  --generated "$(HPU_GENERATED_ROOT)/application-data/bgv_plain_chain" \
+	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
+	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
 	@python3 scripts/test-hpu-seal-hmul-delivery.py \
 	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hmul" \
 	  --encodings "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hmul_encoder_words.tsv" \

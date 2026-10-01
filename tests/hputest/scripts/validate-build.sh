@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 63 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
-      $roster_migrated_software -ne 38 || $roster_migrated_blocked -ne 13 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 46 || \
+      ${roster_group_counts[fhe]} -ne 16 || $roster_migrated -ne 52 || \
+      $roster_migrated_software -ne 39 || $roster_migrated_blocked -ne 13 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 47 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 13 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
@@ -221,6 +221,7 @@ manifest_value() {
 manifest_cases=$(manifest_value case_count)
 manifest_inline_asm=$(manifest_value inline_asm_commit)
 manifest_hpu_seal=$(manifest_value hpu_seal_commit)
+manifest_hpu_applications=$(manifest_value hpu_applications_commit)
 manifest_selection=$(manifest_value selection)
 manifest_core=$(manifest_value core_count)
 manifest_transform=$(manifest_value transform_count)
@@ -470,6 +471,29 @@ for required in rotate.c rotate.h rotate.asm rotate.inst32 rotate.cmd26 \
                 rotate_layout.h rotate_delivery.h DELIVERY_SUMMARY.md; do
   if [[ ! -s $rotate_artifact/$required ]]; then
     printf 'ERROR: selected HPU_SEAL Rotate provenance omits %s\n' "$required" >&2
+    exit 2
+  fi
+done
+application_artifact="$artifact_root/provenance/application-data/bgv_plain_chain"
+application_build="$application_artifact/upstream/provenance/build.json"
+if [[ ! $manifest_hpu_applications =~ ^[0-9a-f]{40}$ ]] || \
+   [[ ! -s $application_artifact/producer_commit.txt ]] || \
+   [[ $manifest_hpu_applications != \
+      "$(<"$application_artifact/producer_commit.txt")" ]] || \
+   [[ ! -s $application_build ]] || \
+   [[ $(sed -n 's/.*"commit": "\([0-9a-f]\{40\}\)".*/\1/p' \
+      "$application_build") != "$manifest_hpu_applications" ]] || \
+   ! grep -Fq '"worktree_state": "clean-at-configure"' "$application_build"; then
+  printf 'ERROR: selected HPU application provenance is incomplete\n' >&2
+  exit 2
+fi
+for required in bgv_plain_chain.c bgv_plain_chain.h bgv_plain_chain.asm \
+                bgv_plain_chain.inst32 bgv_plain_chain.cmd26 application_layout.h \
+                application_window.u32.bin application_golden.u32.bin \
+                application_writable.u8.bin upstream/package.json \
+                upstream/oracle/report.json upstream/golden/golden_manifest.csv; do
+  if [[ ! -s $application_artifact/$required ]]; then
+    printf 'ERROR: selected HPU application provenance omits %s\n' "$required" >&2
     exit 2
   fi
 done
@@ -964,7 +988,8 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_012 && \
             $name != HPU_IT_DIR_CMB_013 && \
             $name != HPU_IT_DIR_CMB_014 && \
-            $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 ]]; then
+            $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 && \
+            $name != HPU_IT_DIR_APP_006 ]]; then
         require_rns_fixture "$elf"
       fi
       reject_mm_only_fixture "$elf" ;;
@@ -1048,6 +1073,11 @@ for elf in "${elfs[@]}"; do
       [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
       python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
         --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
+    HPU_IT_DIR_APP_006)
+      delivery="$artifact_root/provenance/application-data/bgv_plain_chain"
+      [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_applications" ]] || exit 2
+      python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
+        --elf "$elf" --disassembly "$txt" --operator bgv_plain_chain ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)

@@ -7,6 +7,7 @@ inline_asm_root=${1:-"$test_root/third_party/inline-asm"}
 output_root=${2:-"$test_root/build"}
 jobs=${3:-${JOBS:-4}}
 hpu_seal_root=${4:-"$test_root/third_party/hpu-seal"}
+hpu_applications_root=${5:-"$test_root/third_party/hpu-applications"}
 
 if [[ $inline_asm_root != /* ]]; then
   inline_asm_root=$(cd -- "$test_root" && realpath -m -- "$inline_asm_root")
@@ -16,6 +17,9 @@ if [[ $output_root != /* ]]; then
 fi
 if [[ $hpu_seal_root != /* ]]; then
   hpu_seal_root=$(cd -- "$test_root" && realpath -m -- "$hpu_seal_root")
+fi
+if [[ $hpu_applications_root != /* ]]; then
+  hpu_applications_root=$(cd -- "$test_root" && realpath -m -- "$hpu_applications_root")
 fi
 if [[ ! $jobs =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: JOBS must be a positive integer: $jobs" >&2
@@ -69,6 +73,28 @@ if [[ -z $hpu_seal_gitlink || $hpu_seal_commit != "$hpu_seal_gitlink" ]]; then
   echo "checkout: $hpu_seal_commit" >&2
   exit 2
 fi
+if [[ ! -f $hpu_applications_root/CMakeLists.txt ]] || \
+   ! git -C "$hpu_applications_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo 'ERROR: HPU applications submodule is not initialized' >&2
+  echo 'run: git submodule update --init --recursive tests/hputest/third_party/hpu-applications' >&2
+  exit 2
+fi
+if ! git -C "$hpu_applications_root" diff --ignore-space-at-eol --quiet -- || \
+   ! git -C "$hpu_applications_root" diff --cached --quiet --; then
+  echo 'ERROR: HPU applications submodule contains tracked modifications' >&2
+  exit 2
+fi
+hpu_applications_path=${hpu_applications_root#"$repository_root/"}
+hpu_applications_gitlink=$(git -C "$repository_root" ls-files -s -- "$hpu_applications_path" |
+  awk '$1 == "160000" { print $2 }')
+hpu_applications_commit=$(git -C "$hpu_applications_root" rev-parse HEAD)
+if [[ -z $hpu_applications_gitlink || \
+      $hpu_applications_commit != "$hpu_applications_gitlink" ]]; then
+  echo 'ERROR: HPU applications checkout does not match the Nexus-AM gitlink' >&2
+  echo "gitlink:  $hpu_applications_gitlink" >&2
+  echo "checkout: $hpu_applications_commit" >&2
+  exit 2
+fi
 for tool in cmake python3 "${CXX:-c++}"; do
   command -v "$tool" >/dev/null || {
     echo "ERROR: missing build tool: $tool" >&2
@@ -105,12 +131,17 @@ hmul_source="$output_root/hpu-seal-producer/$hpu_seal_commit/hmul"
 hmul_import="$generated_root/hmul-data"
 hmul_encodings="$hpu_seal_tool_root/hmul_encoder_words.tsv"
 hpu_seal_encoder="$hpu_seal_tool_root/verify-ckks-encoding"
+hpu_applications_build="$output_root/app006-applications-cmake/$hpu_applications_commit"
+hpu_applications_posix_root=${HPU_APPLICATION_POSIX_ROOT:-${XDG_CACHE_HOME:-"$HOME/.cache"}/nexus-am-hputest/hpu-applications/$hpu_applications_commit/outputs}
+hpu_application_source="$hpu_applications_posix_root/bgv_plain_chain"
+hpu_application_import="$generated_root/application-data/bgv_plain_chain"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
   "$hpu_seal_build" "$hpu_seal_source" "$hmul_source" "$hpu_reline_build" \
   "$hpu_reline_source" "$hpu_rescale_build" "$hpu_rescale_source" \
   "$hpu_seal_rotate_build" \
   "$hpu_seal_rotate_source" "$hpu_seal_tool_root"
+mkdir -p -- "$hpu_applications_build" "$hpu_applications_posix_root"
 required_outputs=(
   "$producer_mm/mm.c"
   "$producer_mm/mm.h"
@@ -153,6 +184,29 @@ for path in "${required_outputs[@]}"; do
     exit 2
   fi
 done
+
+echo "[hputest] generating BGV plain-chain application at $hpu_applications_commit"
+# The upstream publisher uses an atomic directory rename.  Keep its output on
+# the WSL POSIX filesystem (DrvFS returns EINVAL for that rename), then import
+# the validated package into the workspace build tree.
+cmake -S "$hpu_applications_root" -B "$hpu_applications_build" \
+  -DHPU_ENABLE_SEAL_INTEGRATION=ON \
+  -DBUILD_TESTING=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DSEAL_USE_MSGSL=OFF \
+  -DSEAL_USE_ZLIB=OFF \
+  -DSEAL_USE_ZSTD=OFF \
+  -DHPU_APPLICATION_OUTPUT_ROOT="$hpu_applications_posix_root"
+HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
+HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
+  cmake --build "$hpu_applications_build" --parallel "$jobs" \
+    --target bgv_plain_chain_delivery
+"$hpu_applications_build/hpu_validate_package" "$hpu_application_source"
+python3 "$script_dir/import-application-package.py" \
+  --source "$hpu_application_source" \
+  --destination "$hpu_application_import" \
+  --validator "$hpu_applications_build/hpu_validate_package" \
+  --producer-commit "$hpu_applications_commit"
 
 "${CXX:-c++}" \
   -std=c++17 -Wall -Wextra -Werror \
@@ -319,4 +373,4 @@ for profile in polynomial composed; do
     --producer-commit "$hpu_seal_commit"
 done
 
-echo '[hputest] inline-asm and HPU_SEAL HADD/HMUL/Reline/Rescale/Rotate/CKKS semantic import PASS'
+echo '[hputest] inline-asm, HPU_SEAL operators/CKKS, and BGV application import PASS'

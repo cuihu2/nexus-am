@@ -1,12 +1,12 @@
 # HPU tests for Nexus-AM
 
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
-testcases.  It contains the eleven bring-up/return probes plus the 49 migrated
+testcases.  It contains the eleven bring-up/return probes plus the 52 migrated
 IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续51项中38项有软件自检，13项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续52项中39项有软件自检，13项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -50,7 +50,7 @@ src/03_compute_instructions/   # 9 migrated IT cases
 src/04_composite_instruction_sequences/ # 13 migrated IT cases
 src/05_cpu_hpu_structural_connectivity/  # 7 migrated IT cases
 src/06_performance/            # 6 migrated IT cases
-src/07_full_application/       # 1 migrated IT case
+src/07_full_application/       # 4 migrated IT cases (3 active, 1 blocked)
 
 include/hpu/steps.h            # short, one-step public testcase API
 include/hpu/result.h           # UART START/PASS/FAIL reporting helpers
@@ -60,7 +60,8 @@ runtime/                       # mechanical helpers, never whole scenarios
 
 third_party/
 ├── inline-asm/                 # pinned legacy-main branch, existing producer contract
-└── hpu-seal/                   # pinned main branch, algorithm-library API
+├── hpu-seal/                   # pinned older main, existing algorithm-library API
+└── hpu-applications/           # pinned current main, application package v1
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
@@ -73,7 +74,8 @@ build/                          # ignored: generated outputs only
     ├── hadd-data/              # validated HPU_SEAL BFV HADD program/window/golden
     ├── hmul-data/              # validated HPU_SEAL BFV HMUL program/window/golden
     ├── rotate-data/            # validated BFV RotateRows key/twiddle/program/golden
-    └── ckks-data/              # validated CKKS Reline/application programs and goldens
+    ├── ckks-data/              # validated CKKS Reline/application programs and goldens
+    └── application-data/       # validated BGV package, program, image and all step goldens
 ```
 
 Each source has its own readable `main()`.  The MMIO register setup, data preparation,
@@ -202,7 +204,9 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 输入、密钥、常量和SEAL golden；CMB_012/013通过CKKS `CkksOperationPlan`分别生成独立
 Reline/Rescale程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
 上游CKKS应用交付。
-两条固定gitlink分别校验，不用当前main编码替换legacy-main编码。
+`third_party/hpu-applications`固定较新的main提交，使用application package v1接收APP006
+BGV三步应用；生成阶段要求SEAL与`BgvSoftwareExecutor`逐字一致。三条固定gitlink分别校验，
+不用当前main编码替换legacy-main或旧算法库编码。
 
 上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
 AM只校验并原样接收，不再执行 `0x0B→0x5B` 转换。旧HPU `0x0B` 文件直接拒绝。
@@ -367,7 +371,7 @@ make -C tests/hputest group GROUP=fhe
 ```
 
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-60 ELF/BIN/TXT sets partitioned below `artifact/core/`,
+63 ELF/BIN/TXT sets partitioned below `artifact/core/`,
 `artifact/transform/`, and `artifact/fhe/`.  It also produces
 `MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, and a compact
 `provenance/inline-asm-mm/` directory containing the selected producer
@@ -386,7 +390,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共77个已发布测试身份、154组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共78个已发布测试身份、156组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

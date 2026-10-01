@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 62 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 63 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 15 || $roster_migrated -ne 51 || \
-      $roster_migrated_software -ne 38 || $roster_migrated_blocked -ne 13 ]]; then
+      ${roster_group_counts[fhe]} -ne 16 || $roster_migrated -ne 52 || \
+      $roster_migrated_software -ne 39 || $roster_migrated_blocked -ne 13 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -302,6 +302,8 @@ done
 cp -a "$generated_root/ckks-data" "$artifact_root/provenance/ckks-data"
 test -s "$generated_root/hmul-data/producer_commit.txt"
 cp -a "$generated_root/hmul-data" "$artifact_root/provenance/hmul-data"
+test -s "$generated_root/application-data/bgv_plain_chain/producer_commit.txt"
+cp -a "$generated_root/application-data" "$artifact_root/provenance/application-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
@@ -309,6 +311,7 @@ cp "$test_root/docs/LOG_MODES.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/INLINE_MAIN_6903096.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/CKKS_APPLICATIONS.md" "$test_root/docs/CMB001_RUNTIME_NOTES.md" \
   "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/BGV_APPLICATIONS.md" "$artifact_root/provenance/testplan/docs/"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
 cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$artifact_root/provenance/testplan/"
@@ -318,10 +321,10 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=62 ;;
+    all) expected_cases=63 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=15 ;;
+    fhe) expected_cases=16 ;;
     diagnostic) expected_cases=19 ;;
   esac
 fi
@@ -348,6 +351,8 @@ fi
   printf 'not_qualified_count=%u\n' "$not_qualified_count"
   printf 'inline_asm_commit=%s\n' "$(<"$mm_delivery_source/PRODUCER_COMMIT")"
   printf 'hpu_seal_commit=%s\n' "$(<"$generated_root/hadd-data/producer_commit.txt")"
+  printf 'hpu_applications_commit=%s\n' \
+    "$(<"$generated_root/application-data/bgv_plain_chain/producer_commit.txt")"
 } > "$artifact_root/MANIFEST.txt"
 
 EXPECTED_CASES=$expected_cases CROSS_COMPILE="$cross_compile" \
