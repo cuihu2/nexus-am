@@ -34,9 +34,14 @@ constexpr std::size_t kDegree = 4096;
 constexpr std::size_t kExpectedQ = 4;
 constexpr std::size_t kInputComponents = 3;
 constexpr std::size_t kOutputComponents = 2;
-constexpr double kSemanticTolerance = 7e-3;
+constexpr double kSemanticTolerance = 2e-3;
 constexpr std::uint64_t kGuardLines = 64;
 constexpr std::uint64_t kCapacityLines = 65536;
+const ::seal::prng_seed_type kPrngSeed{
+    UINT64_C(0x434D42303132434B), UINT64_C(0x4B5352454C494E45),
+    UINT64_C(0x0000000000000001), UINT64_C(0x0000000000000002),
+    UINT64_C(0x0000000000000003), UINT64_C(0x0000000000000004),
+    UINT64_C(0x0000000000000005), UINT64_C(0x0000000000000006)};
 
 void require(bool condition, const std::string& message)
 {
@@ -84,23 +89,30 @@ int main(int argc, char** argv)
                         }),
                 "producer commit must be a full lowercase SHA-1");
 
-        hpu::seal_adapter::CkksContextSpec spec;
-        spec.poly_modulus_degree = kDegree;
-        spec.coeff_modulus_bits = {27, 27, 27, 27, 27};
-        const auto bundle = hpu::seal_adapter::create_ckks_context(spec);
-        const hpu::seal_adapter::CkksLevelChain level_chain(*bundle.context);
+        ::seal::EncryptionParameters parameters(::seal::scheme_type::ckks);
+        parameters.set_poly_modulus_degree(kDegree);
+        parameters.set_coeff_modulus(
+            ::seal::CoeffModulus::Create(kDegree, {27, 27, 27, 27, 27}));
+        parameters.set_random_generator(
+            std::make_shared<::seal::Blake2xbPRNGFactory>(kPrngSeed));
+        auto context = std::make_shared<::seal::SEALContext>(
+            std::move(parameters), true, ::seal::sec_level_type::none);
+        require(context->parameters_set(),
+                std::string("SEAL rejected deterministic CMB012 CKKS parameters: ")
+                    + context->parameter_error_message());
+        const hpu::seal_adapter::CkksLevelChain level_chain(*context);
         const auto& top = level_chain.top();
         require(top.q_moduli.size() == kExpectedQ
                     && top.special_moduli.size() == 1,
                 "CKKS context differs from the fixed CMB012 Q4|P1 contract");
 
-        ::seal::KeyGenerator key_generator(*bundle.context);
+        ::seal::KeyGenerator key_generator(*context);
         ::seal::PublicKey public_key;
         ::seal::RelinKeys relinearization_keys;
         key_generator.create_public_key(public_key);
         key_generator.create_relin_keys(relinearization_keys);
 
-        ::seal::CKKSEncoder encoder(*bundle.context);
+        ::seal::CKKSEncoder encoder(*context);
         const std::vector<double> left_values{0.25, -1.5, 2.0, -0.75};
         const std::vector<double> right_values{4.0, 0.5, -1.25, -2.0};
         constexpr double scale = 1048576.0; // 2^20
@@ -108,13 +120,13 @@ int main(int argc, char** argv)
         ::seal::Plaintext right_plaintext;
         encoder.encode(left_values, scale, left_plaintext);
         encoder.encode(right_values, scale, right_plaintext);
-        ::seal::Encryptor encryptor(*bundle.context, public_key);
+        ::seal::Encryptor encryptor(*context, public_key);
         ::seal::Ciphertext left;
         ::seal::Ciphertext right;
         encryptor.encrypt(left_plaintext, left);
         encryptor.encrypt(right_plaintext, right);
 
-        ::seal::Evaluator evaluator(*bundle.context);
+        ::seal::Evaluator evaluator(*context);
         ::seal::Ciphertext tensor;
         evaluator.multiply(left, right, tensor);
         require(tensor.size() == kInputComponents && tensor.is_ntt_form(),
@@ -124,7 +136,7 @@ int main(int argc, char** argv)
         require(expected.size() == kOutputComponents && expected.is_ntt_form(),
                 "SEAL Reline did not produce a two-component NTT ciphertext");
 
-        ::seal::Decryptor decryptor(*bundle.context, key_generator.secret_key());
+        ::seal::Decryptor decryptor(*context, key_generator.secret_key());
         ::seal::Plaintext decrypted;
         decryptor.decrypt(expected, decrypted);
         std::vector<double> decoded;
@@ -140,7 +152,7 @@ int main(int argc, char** argv)
                     + std::to_string(maximum_error));
 
         hpu::seal_adapter::CkksApplicationImageBuilder image_builder(
-            *bundle.context, kCapacityLines);
+            *context, kCapacityLines);
         image_builder.add_modulus_table();
         const auto canonical_twiddles = image_builder.add_canonical_twiddles();
         // Relinearize performs the input NTT->coefficient conversion in place.
@@ -176,7 +188,7 @@ int main(int argc, char** argv)
             image_builder.image().words());
         for (std::size_t component = 0; component < kInputComponents; ++component) {
             const auto polynomial = hpu::seal_adapter::ciphertext_component_to_hpu(
-                tensor, component, *bundle.context);
+                tensor, component, *context);
             require(polynomial.modulus_ids == prepared_tensor.components[component].modulus_ids,
                     "CMB012 tensor modulus order differs from the reserved input");
             for (std::size_t basis = 0; basis < polynomial.modulus_ids.size(); ++basis) {
@@ -193,14 +205,14 @@ int main(int argc, char** argv)
         }
 
         hpu::seal_adapter::CkksSoftwareExecutor software_executor(
-            *bundle.context, image_builder.image());
+            *context, image_builder.image());
         software_executor.relinearize(
             prepared_tensor, relinearization_key, keyswitch_constants,
             output, canonical_twiddles);
         for (std::size_t component = 0; component < kOutputComponents; ++component) {
             const auto seal_words = hpu::seal_adapter::hpu_to_seal_ntt(
                 software_executor.export_component(output, component),
-                output.parms_id, *bundle.context);
+                output.parms_id, *context);
             require(std::equal(
                         seal_words.begin(), seal_words.end(),
                         expected.data(component)),
@@ -208,12 +220,12 @@ int main(int argc, char** argv)
         }
 
         const auto lowered = hpu::seal_adapter::lower_ckks_operation_plan(
-            plan, *bundle.context);
+            plan, *context);
         require(lowered.operations.size() == 1
                     && count_token(lowered.body_asm, "psync") == 1,
                 "CMB012 lowering is not one standalone terminal program");
         const auto relocation = hpu::seal_adapter::build_ckks_relocation_schedule(
-            lowered, image_builder.image(), *bundle.context);
+            lowered, image_builder.image(), *context);
         require(relocation.complete()
                     && relocation.bindings.size() == relocation.expected_dma_count,
                 "CMB012 Reline DMA relocation is incomplete");
@@ -230,7 +242,8 @@ int main(int argc, char** argv)
             image_builder.image(), &expected_image);
 
         std::ostringstream metadata;
-        metadata << "{\n"
+        metadata << std::setprecision(17)
+                 << "{\n"
                  << "  \"format_version\": 1,\n"
                  << "  \"case_id\": \"HPU_IT_DIR_CMB_012\",\n"
                  << "  \"scheme\": \"CKKS\",\n"
@@ -242,6 +255,8 @@ int main(int argc, char** argv)
                  << top.special_moduli.size() << ",\n"
                  << "  \"input_component_count\": " << kInputComponents << ",\n"
                  << "  \"output_component_count\": " << kOutputComponents << ",\n"
+                 << "  \"semantic_tolerance\": " << kSemanticTolerance << ",\n"
+                 << "  \"semantic_error\": " << maximum_error << ",\n"
                  << "  \"domain\": \"canonical_ntt_physical\",\n"
                  << "  \"instruction_count\": " << runtime.instructions.size() << ",\n"
                  << "  \"dma_count\": " << runtime.dma.size() << ",\n"

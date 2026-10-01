@@ -114,6 +114,7 @@ def validate(source, profile, encoder, producer_commit=None):
             "special_modulus_count": 1,
             "input_component_count": 3,
             "output_component_count": 2,
+            "semantic_tolerance": 0.002,
             "domain": "canonical_ntt_physical",
             "instruction_count": instructions,
             "dma_count": dma_count,
@@ -127,6 +128,9 @@ def validate(source, profile, encoder, producer_commit=None):
                 "invalid CMB012 producer commit")
         if producer_commit is not None:
             require(commit == producer_commit, "CMB012 producer commit mismatch")
+        semantic_error = metadata.get("semantic_error", float("inf"))
+        require(0 <= semantic_error <= metadata["semantic_tolerance"],
+                "CMB012 semantic oracle exceeded tolerance")
         require({entry["operation_id"] for entry in dma}
                 <= {"$application", "relinearize"},
                 "CMB012 delivery contains a non-Reline operation")
