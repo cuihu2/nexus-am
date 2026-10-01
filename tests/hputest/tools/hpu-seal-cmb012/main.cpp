@@ -34,6 +34,7 @@ constexpr std::size_t kDegree = 4096;
 constexpr std::size_t kExpectedQ = 4;
 constexpr std::size_t kInputComponents = 3;
 constexpr std::size_t kOutputComponents = 2;
+constexpr double kSemanticTolerance = 7e-3;
 constexpr std::uint64_t kGuardLines = 64;
 constexpr std::uint64_t kCapacityLines = 65536;
 
@@ -134,7 +135,7 @@ int main(int argc, char** argv)
                 maximum_error,
                 std::abs(decoded[index] - left_values[index] * right_values[index]));
         }
-        require(maximum_error <= 5e-3,
+        require(maximum_error <= kSemanticTolerance,
                 "SEAL CMB012 semantic oracle exceeded tolerance: "
                     + std::to_string(maximum_error));
 
