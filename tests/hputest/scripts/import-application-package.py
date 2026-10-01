@@ -56,6 +56,18 @@ CASE_SPECS = {
         "golden_domain": "canonical_ntt_physical",
         "golden_moduli": [[2013265921, 1811939329, 469762049]] * 3,
     },
+    "bgv_rotate_chain": {
+        "label": "APP007", "scheme": "bgv", "model": "BgvSoftwareExecutor",
+        "plain_modulus": 65537,
+        "moduli": [2013265921, 1811939329, 469762049],
+        "key_moduli": [2013265921, 1811939329, 469762049, 1224736769],
+        "operation_ids": ["add_before", "rotate_left_1", "add_after"],
+        "operation_kinds": ["add_plain", "rotate_rows", "add_plain"],
+        "final_output": "output", "capacity_lines": 4096, "used_lines": 270,
+        "allocation_count": 174, "instruction_count": 1141, "dma_count": 433,
+        "golden_domain": "canonical_ntt_physical",
+        "golden_moduli": [[2013265921, 1811939329, 469762049]] * 3,
+    },
 }
 
 

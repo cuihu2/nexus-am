@@ -183,7 +183,7 @@ for path in "${required_outputs[@]}"; do
   fi
 done
 
-echo "[hputest] generating BFV multiply/modswitch, BFV rotation, and BGV plain-chain applications at $hpu_applications_commit"
+echo "[hputest] generating BFV and BGV application packages at $hpu_applications_commit"
 # The upstream publisher uses an atomic directory rename.  Keep its output on
 # the WSL POSIX filesystem (DrvFS returns EINVAL for that rename), then import
 # the validated package into the workspace build tree.
@@ -199,9 +199,11 @@ HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
 HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
   cmake --build "$hpu_applications_build" --parallel "$jobs" \
     --target bfv_multiply_modswitch_application_delivery \
-             bfv_rotation_application_delivery bgv_plain_chain_delivery
+             bfv_rotation_application_delivery bgv_plain_chain_delivery \
+             bgv_rotate_chain_delivery
 for application_case in bfv_multiply_modswitch_application \
-                        bfv_rotation_application bgv_plain_chain; do
+                        bfv_rotation_application bgv_plain_chain \
+                        bgv_rotate_chain; do
   "$hpu_applications_build/hpu_validate_package" \
     "$hpu_applications_posix_root/$application_case"
   python3 "$script_dir/import-application-package.py" \

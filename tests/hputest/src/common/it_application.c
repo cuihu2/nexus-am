@@ -15,9 +15,9 @@ int application_check_results(void) {
     for (unsigned index = 0; index < HPU_APPLICATION_GOLDEN_COUNT; ++index) {
         const struct hpu_application_output *output = &hpu_application_outputs[index];
         invalidate_lines(output->line, output->lines);
-        LOG_DEBUG("[HPU][APP006][OUTPUT] step=%u component=%u modulus=%u line=%u\n",
+        LOG_DEBUG("[HPU][APP][OUTPUT] step=%u component=%u modulus=%u line=%u\n",
                   output->step, output->component, output->modulus_id, output->line);
-        failed |= result_compare("bgv-chain", ddr_line(output->line),
+        failed |= result_compare("application", ddr_line(output->line),
                                  application_golden + output->golden_word,
                                  output->padded_words, output->modulus);
     }
@@ -34,7 +34,7 @@ int application_check_memory(void) {
             const uint32_t expected = application_window[line * WORDS_PER_LINE + lane];
             const uint32_t value = actual[lane];
             if (value != expected) {
-                LOG_ERROR("[HPU][APP006][FAIL] phase=readonly-guard line=%u lane=%u "
+                LOG_ERROR("[HPU][APP][FAIL] phase=readonly-guard line=%u lane=%u "
                           "actual=0x%x expected=0x%x\n",
                           line, lane, value, expected);
                 return 1;

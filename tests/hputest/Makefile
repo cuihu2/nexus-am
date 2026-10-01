@@ -164,6 +164,11 @@ verify-inline-asm: prepare-inline-asm-mm
 	  --generated "$(HPU_GENERATED_ROOT)/application-data/bgv_plain_chain" \
 	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
 	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
+	@python3 scripts/test-application-delivery.py \
+	  --source "$(HPU_GENERATED_ROOT)/application-data/bgv_rotate_chain/upstream" \
+	  --generated "$(HPU_GENERATED_ROOT)/application-data/bgv_rotate_chain" \
+	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
+	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
 	@python3 scripts/test-hpu-seal-hmul-delivery.py \
 	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hmul" \
 	  --encodings "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hmul_encoder_words.tsv" \

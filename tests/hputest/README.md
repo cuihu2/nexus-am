@@ -1,12 +1,12 @@
 # HPU tests for Nexus-AM
 
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
-testcases.  It contains the eleven bring-up/return probes plus the 54 migrated
+testcases.  It contains the eleven bring-up/return probes plus the 55 migrated
 IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续54项中41项有软件自检，13项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续55项中42项有软件自检，13项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -50,7 +50,7 @@ src/03_compute_instructions/   # 9 migrated IT cases
 src/04_composite_instruction_sequences/ # 13 migrated IT cases
 src/05_cpu_hpu_structural_connectivity/  # 7 migrated IT cases
 src/06_performance/            # 6 migrated IT cases
-src/07_full_application/       # 6 migrated IT cases (5 active, 1 blocked)
+src/07_full_application/       # 7 migrated IT cases (6 active, 1 blocked)
 
 include/hpu/steps.h            # short, one-step public testcase API
 include/hpu/result.h           # UART START/PASS/FAIL reporting helpers
@@ -205,7 +205,8 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 Reline/Rescale程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
 上游CKKS应用交付。
 `third_party/hpu-applications`固定较新的main提交，使用application package v1接收APP004
-BFV乘法/降层链、APP005 BFV旋转分支和APP006 BGV三步应用；生成阶段要求SEAL与对应software executor逐字一致。三条固定gitlink分别校验，
+BFV乘法/降层链、APP005 BFV旋转分支、APP006 BGV明文链和APP007 BGV旋转链；生成阶段要求
+SEAL与对应software executor逐字一致。三条固定gitlink分别校验，
 不用当前main编码替换legacy-main或旧算法库编码。
 
 上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
@@ -371,7 +372,7 @@ make -C tests/hputest group GROUP=fhe
 ```
 
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-65 ELF/BIN/TXT sets partitioned below `artifact/core/`,
+66 ELF/BIN/TXT sets partitioned below `artifact/core/`,
 `artifact/transform/`, and `artifact/fhe/`.  It also produces
 `MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, and a compact
 `provenance/inline-asm-mm/` directory containing the selected producer
@@ -390,7 +391,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共80个已发布测试身份、160组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共81个已发布测试身份、162组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary
