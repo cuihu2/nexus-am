@@ -79,7 +79,7 @@ SRCS += $(HPU_IT_RUNTIME_SRCS)
 # Most migrated finite cases consume the producer's two 4096-coefficient RNS
 # inputs. Application-package cases own complete images and must not link that
 # unrelated fixture.
-ifeq ($(filter HPU_IT_DIR_APP_004 HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006 HPU_IT_DIR_APP_007,$(CASE_ID)),)
+ifeq ($(filter HPU_IT_DIR_APP_004 HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006 HPU_IT_DIR_APP_007 HPU_IT_DIR_APP_008,$(CASE_ID)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
 ifneq ($(filter %/HPU_IT_DIR_INS_C0_005.c %/HPU_IT_DIR_INS_C0_006.c,$(CASE_SOURCE)),)
@@ -176,15 +176,17 @@ ASFLAGS += -Wa,-I$(CKKS_DATA)
 $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_ckks_fixture.o: \
   $(addprefix $(CKKS_DATA)/,ckks_window.u32.bin ckks_golden.u32.bin ckks_writable.u8.bin)
 endif
-ifneq ($(filter HPU_IT_DIR_APP_004 HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006 HPU_IT_DIR_APP_007,$(CASE_ID)),)
+ifneq ($(filter HPU_IT_DIR_APP_004 HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006 HPU_IT_DIR_APP_007 HPU_IT_DIR_APP_008,$(CASE_ID)),)
 ifeq ($(CASE_ID),HPU_IT_DIR_APP_004)
 APPLICATION_STEM := bfv_multiply_modswitch_application
 else ifeq ($(CASE_ID),HPU_IT_DIR_APP_005)
 APPLICATION_STEM := bfv_rotation_application
 else ifeq ($(CASE_ID),HPU_IT_DIR_APP_006)
 APPLICATION_STEM := bgv_plain_chain
-else
+else ifeq ($(CASE_ID),HPU_IT_DIR_APP_007)
 APPLICATION_STEM := bgv_rotate_chain
+else
+APPLICATION_STEM := bgv_multiply_chain
 endif
 APPLICATION_DATA := $(HPU_GENERATED_ROOT)/application-data/$(APPLICATION_STEM)
 ifeq ($(wildcard $(APPLICATION_DATA)/application_layout.h),)

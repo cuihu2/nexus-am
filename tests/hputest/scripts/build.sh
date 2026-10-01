@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 66 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 67 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 19 || $roster_migrated -ne 55 || \
-      $roster_migrated_software -ne 42 || $roster_migrated_blocked -ne 13 ]]; then
+      ${roster_group_counts[fhe]} -ne 20 || $roster_migrated -ne 56 || \
+      $roster_migrated_software -ne 43 || $roster_migrated_blocked -ne 13 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -306,7 +306,9 @@ test -s "$generated_root/application-data/bfv_multiply_modswitch_application/pro
 test -s "$generated_root/application-data/bfv_rotation_application/producer_commit.txt"
 test -s "$generated_root/application-data/bgv_plain_chain/producer_commit.txt"
 test -s "$generated_root/application-data/bgv_rotate_chain/producer_commit.txt"
-for application_case in bfv_rotation_application bgv_plain_chain bgv_rotate_chain; do
+test -s "$generated_root/application-data/bgv_multiply_chain/producer_commit.txt"
+for application_case in bfv_rotation_application bgv_plain_chain bgv_rotate_chain \
+                        bgv_multiply_chain; do
   cmp -s "$generated_root/application-data/bfv_multiply_modswitch_application/producer_commit.txt" \
     "$generated_root/application-data/$application_case/producer_commit.txt"
 done
@@ -329,11 +331,11 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=66 ;;
+    all) expected_cases=67 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=19 ;;
-    diagnostic) expected_cases=19 ;;
+    fhe) expected_cases=20 ;;
+    diagnostic) expected_cases=20 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then
