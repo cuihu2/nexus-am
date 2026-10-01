@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 64 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 65 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 17 || $roster_migrated -ne 53 || \
-      $roster_migrated_software -ne 40 || $roster_migrated_blocked -ne 13 ]]; then
+      ${roster_group_counts[fhe]} -ne 18 || $roster_migrated -ne 54 || \
+      $roster_migrated_software -ne 41 || $roster_migrated_blocked -ne 13 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -302,10 +302,13 @@ done
 cp -a "$generated_root/ckks-data" "$artifact_root/provenance/ckks-data"
 test -s "$generated_root/hmul-data/producer_commit.txt"
 cp -a "$generated_root/hmul-data" "$artifact_root/provenance/hmul-data"
+test -s "$generated_root/application-data/bfv_multiply_modswitch_application/producer_commit.txt"
 test -s "$generated_root/application-data/bfv_rotation_application/producer_commit.txt"
 test -s "$generated_root/application-data/bgv_plain_chain/producer_commit.txt"
-cmp -s "$generated_root/application-data/bfv_rotation_application/producer_commit.txt" \
-  "$generated_root/application-data/bgv_plain_chain/producer_commit.txt"
+for application_case in bfv_rotation_application bgv_plain_chain; do
+  cmp -s "$generated_root/application-data/bfv_multiply_modswitch_application/producer_commit.txt" \
+    "$generated_root/application-data/$application_case/producer_commit.txt"
+done
 cp -a "$generated_root/application-data" "$artifact_root/provenance/application-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
@@ -325,10 +328,10 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=64 ;;
+    all) expected_cases=65 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=17 ;;
+    fhe) expected_cases=18 ;;
     diagnostic) expected_cases=19 ;;
   esac
 fi

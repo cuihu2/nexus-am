@@ -15,6 +15,23 @@ import tempfile
 GUARD_LINES = 64
 WORDS_PER_LINE = 64
 CASE_SPECS = {
+    "bfv_multiply_modswitch_application": {
+        "label": "APP004", "scheme": "bfv", "model": "BfvSoftwareExecutor",
+        "plain_modulus": 130817,
+        "moduli": [1043201, 1043969, 1044737],
+        "key_moduli": [1043201, 1043969, 1044737, 1047041],
+        "operation_ids": ["multiply", "mod_switch", "add_bias"],
+        "operation_kinds": ["multiply", "mod_switch", "add_plain"],
+        "final_output": "output/y/next", "capacity_lines": 16384,
+        "used_lines": 692, "allocation_count": 411,
+        "instruction_count": 4434, "dma_count": 1835,
+        "golden_domain": "coefficient",
+        "golden_moduli": [
+            [1043201, 1043969, 1044737],
+            [1043201, 1043969],
+            [1043201, 1043969],
+        ],
+    },
     "bfv_rotation_application": {
         "label": "APP005", "scheme": "bfv", "model": "BfvSoftwareExecutor",
         "plain_modulus": 130817,
@@ -25,6 +42,7 @@ CASE_SPECS = {
         "final_output": "output/y", "capacity_lines": 8192, "used_lines": 464,
         "allocation_count": 317, "instruction_count": 2633, "dma_count": 1057,
         "golden_domain": "coefficient",
+        "golden_moduli": [[1043201, 1043969, 1044737]] * 3,
     },
     "bgv_plain_chain": {
         "label": "APP006", "scheme": "bgv", "model": "BgvSoftwareExecutor",
@@ -36,6 +54,7 @@ CASE_SPECS = {
         "final_output": "output", "capacity_lines": 512, "used_lines": 67,
         "allocation_count": 34, "instruction_count": 90, "dma_count": 46,
         "golden_domain": "canonical_ntt_physical",
+        "golden_moduli": [[2013265921, 1811939329, 469762049]] * 3,
     },
 }
 
@@ -101,13 +120,14 @@ def validate(source, validator, producer_commit=None):
             "application was not produced from a clean worktree")
 
     oracle = load_json(files["oracle_report"])
+    golden_count = sum(2 * len(moduli) for moduli in spec["golden_moduli"])
     require(oracle.get("overall_status") == "pass" and
             oracle.get("oracle_verified") is True and
             oracle.get("golden_matches_oracle") is True and
             oracle.get("model") == spec["model"] and
             oracle.get("model_verified") is True and
             oracle.get("raw_physical_words_equal") is True and
-            oracle.get("verified_limb_count") == 18,
+            oracle.get("verified_limb_count") == golden_count,
             "SEAL/software-model oracle did not pass")
     checks = {entry.get("name"): entry for entry in oracle.get("checks", [])}
     require(checks.get("seal_oracle_to_golden", {}).get("status") == "pass" and
@@ -217,8 +237,9 @@ def validate(source, validator, producer_commit=None):
     require(len(image) == config["used_lines"] * 256, "invalid initial image size")
     golden_rows = read_rows(files["golden_manifest"])
     expected_order = [(f"step_{step}", component, modulus_id)
-                      for step in range(3) for component in range(2)
-                      for modulus_id in range(3)]
+                      for step, moduli in enumerate(spec["golden_moduli"])
+                      for component in range(2)
+                      for modulus_id in range(len(moduli))]
     actual_order = [(row["object_id"], int(row["component"]), int(row["modulus_id"]))
                     for row in golden_rows]
     require(actual_order == expected_order, "unexpected golden object order/shape")
@@ -235,9 +256,11 @@ def validate(source, validator, producer_commit=None):
                 allocation["read_only"] == "false" and
                 first_access.get(allocation["allocation_id"]) == "dstore",
                 "golden span is not a write-first output")
+        step = int(row["object_id"].split("_")[1])
+        step_moduli = spec["golden_moduli"][step]
         require(row["domain"] == spec["golden_domain"] and
                 count == 2 and payload == 128 and padded == 128 and
-                modulus == spec["moduli"][int(row["modulus_id"])],
+                modulus == step_moduli[int(row["modulus_id"])],
                 "invalid golden limb dimensions/domain")
         data = safe_file(source, row["path"]).read_bytes()
         require(len(data) == padded * 4, "invalid golden limb length")
@@ -246,7 +269,7 @@ def validate(source, validator, producer_commit=None):
         offset = len(golden) // 4
         golden.extend(data)
         outputs.append((first, count, padded, offset, modulus,
-                        int(row["object_id"].split("_")[1]),
+                        step,
                         int(row["component"]), int(row["modulus_id"])))
         image[first * 256:(first + count) * 256] = \
             struct.pack("<I", 0xDEADBEEF) * (count * WORDS_PER_LINE)
