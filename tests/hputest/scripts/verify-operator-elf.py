@@ -94,7 +94,7 @@ def verify(delivery, elf, disassembly, operator):
         end = re.search(r"^([0-9a-fA-F]+)\s+\w\s+_end$", listing, re.M)
         if not end or int(end[1], 16) >= 0x87000000:
             raise ValueError("CKKS ELF/heap start overlaps the HPU DDR window")
-    if operator == "bgv_plain_chain":
+    if operator in ("bfv_rotation_application", "bgv_plain_chain"):
         fixtures = [("application_window", "application_window.u32.bin"),
                     ("application_golden", "application_golden.u32.bin"),
                     ("application_writable", "application_writable.u8.bin")]
@@ -118,6 +118,7 @@ if __name__ == "__main__":
                         choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
                                  "hmul", "rotate", "ckks_reline", "ckks_rescale",
                                  "ckks_polynomial_x2_plus_one",
-                                 "ckks_composed_application", "bgv_plain_chain"))
+                                 "ckks_composed_application",
+                                 "bfv_rotation_application", "bgv_plain_chain"))
     args = parser.parse_args()
     verify(args.delivery, args.elf, args.disassembly, args.operator)

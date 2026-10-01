@@ -77,9 +77,9 @@ $(error missing migrated HPU IT runtime sources under $(TEST_ROOT)/runtime)
 endif
 SRCS += $(HPU_IT_RUNTIME_SRCS)
 # Most migrated finite cases consume the producer's two 4096-coefficient RNS
-# inputs. APP006 owns a complete application image and must not link that
+# inputs. Application-package cases own complete images and must not link that
 # unrelated fixture.
-ifneq ($(CASE_ID),HPU_IT_DIR_APP_006)
+ifeq ($(filter HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006,$(CASE_ID)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
 ifneq ($(filter %/HPU_IT_DIR_INS_C0_005.c %/HPU_IT_DIR_INS_C0_006.c,$(CASE_SOURCE)),)
@@ -176,14 +176,15 @@ ASFLAGS += -Wa,-I$(CKKS_DATA)
 $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_ckks_fixture.o: \
   $(addprefix $(CKKS_DATA)/,ckks_window.u32.bin ckks_golden.u32.bin ckks_writable.u8.bin)
 endif
-ifeq ($(CASE_ID),HPU_IT_DIR_APP_006)
-APPLICATION_DATA := $(HPU_GENERATED_ROOT)/application-data/bgv_plain_chain
+ifneq ($(filter HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006,$(CASE_ID)),)
+APPLICATION_STEM := $(if $(filter HPU_IT_DIR_APP_005,$(CASE_ID)),bfv_rotation_application,bgv_plain_chain)
+APPLICATION_DATA := $(HPU_GENERATED_ROOT)/application-data/$(APPLICATION_STEM)
 ifeq ($(wildcard $(APPLICATION_DATA)/application_layout.h),)
-$(error missing APP006 application delivery; run 'make prepare-inline-asm-mm')
+$(error missing $(CASE_ID) application delivery; run 'make prepare-inline-asm-mm')
 endif
 SRCS += $(TEST_ROOT)/src/common/it_application.c
 SRCS += $(TEST_ROOT)/src/common/it_application_fixture.S
-SRCS += $(APPLICATION_DATA)/bgv_plain_chain.c
+SRCS += $(APPLICATION_DATA)/$(APPLICATION_STEM).c
 INC_DIR += $(APPLICATION_DATA)
 ASFLAGS += -Wa,-I$(APPLICATION_DATA)
 $(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_application_fixture.o: \

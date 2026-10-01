@@ -1,11 +1,11 @@
 # v2 测试点落实范围与运行说明
 
 依据 `HPU-IT测试点分解v2.xlsx` 的原用例 ID，以及本轮提供的功能、边界、性能、CPU 回归要求更新。
-**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 52 个后续用例中，39 个具备真实软件自检；
+**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 53 个后续用例中，40 个具备真实软件自检；
 13 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改。既有生产者仍为
-inline-asm legacy-main `6903096`，既有算法库用例使用固定main `b5398a3`，APP006使用
+inline-asm legacy-main `6903096`，既有算法库用例使用固定main `b5398a3`，APP005/006使用
 application package v1生产者 `6bd619c`；三套固定gitlink不混用。
 本版同步说明见 [inline-main更新](INLINE_MAIN_6903096.md)。
 
@@ -118,19 +118,20 @@ modified-SEAL密文oracle和HPU_SEAL software executor三重host检查。
 
 ## 6. 性能、完整应用、CPU回归
 
-性能与CPU回归仍未完成；完整应用已有APP002/003/006三个基础参数用例，但不等于该章节全部验收。
+性能与CPU回归仍未完成；完整应用已有APP002/003/005/006四个基础参数用例，但不等于该章节全部验收。
 
 - 性能6项：NTT、INTT、BConv、KeySwitch、密文乘法、RelinOnly保留原ID。需固定同输入/参数/精度、CPU基线、统一计数入口、纯计算/端到端边界及轮数；逐轮先验结果再报告cycle、均值/最小/最大/波动，按CPU/HPU计算speedup。CPU从发令到PSYNC的时间不能标成HPU纯计算时间。
 - APP001：当前表仅一个应用项，用户新增了A*B+C和向量规约两种要求；还需确认真实FHE密文语义及库接口/密钥/精度。当前两者均未实现，不能以普通整数乘加代替FHE应用。
 - APP002/003：分别执行CKKS多项式和组合应用，生成阶段由SEAL检查密文/解密语义，目标端精确比较最终物理RNS字并保护只读区/guard。
+- APP005：执行BFV `RotateRows(x,2)`与`RotateColumns(x)`双分支后相加，N=128、Q3、2 components；2633指令/1057 DMA。application package v1生成时要求modified-SEAL真值与`BfvSoftwareExecutor`的18个逐阶段limb完全一致；AM毒化全部输出并逐字检查两次Galois KeySwitch、最终相加、输入/密钥/常量和64-line guard。仍需真实IT/VCS运行和其它参数/旋转步长/边界组合。
 - APP006：执行BGV `add_plain -> multiply_plain -> subtract_plain`，N=128、Q3、2 components；90指令/46 DMA。application package v1生成时要求modified-SEAL真值与`BgvSoftwareExecutor`的18个逐阶段limb完全一致；AM毒化全部输出并逐字检查三步结果、输入/常量和64-line guard。仍需真实IT/VCS运行和其它参数/边界组合。
 - CPU回归：本次没有运行Difftest。现有CPU构建job保留不动；需集成前测试集/配置/参考模型/通过基线和运行入口。定向/随机/特权/异常/中断/访存/原子/系统工作负载均需真实执行并比较；新增失败归因，既有失败保留证据，经评审才豁免。
 
 ## 7. 下载和复验
 
 GitHub Actions的唯一HPU产物名为`nexus-am-hpu-tests`，内部是00至07章节目录和`INDEX.tsv`。
-03用37个独立subtest替换九个串行整例，其余章节保留40组非占位workload；每项同时提供普通和
-`_silent`版本，共156组ELF/BIN/反汇编。13项未就绪只列原因，不夹在可运行列表中。
+03用37个独立subtest替换九个串行整例，其余章节保留41组非占位workload；每项同时提供普通和
+`_silent`版本，共158组ELF/BIN/反汇编。13项未就绪只列原因，不夹在可运行列表中。
 `provenance/`保留固定producer版本、实际指令、DMA/数据布局和本说明。
 新用例需要更多初始化、逐项golden和guard扫描，不承诺100万cycle一定足够；由IT测定预算并保存原始超时日志。
 失败回传至少包含case ID、AM/producer/RTL/simv版本、cycle-limit、最后阶段、首错日志和对应波形。

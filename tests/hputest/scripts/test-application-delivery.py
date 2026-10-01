@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test APP006 package validation and the target-side result/guard checks."""
+"""Test application-package validation and target-side result/guard checks."""
 
 import argparse
 import importlib.util
@@ -61,15 +61,18 @@ class ApplicationDeliveryTests(unittest.TestCase):
     def test_real_package_and_oracles(self):
         commit, config, image, golden, mask, outputs = IMPORT.validate(
             ARGS.source, ARGS.validator, ARGS.producer_commit)
+        case = IMPORT.load_json(ARGS.source / "package.json")["case_name"]
+        spec = IMPORT.CASE_SPECS[case]
         self.assertEqual(commit, ARGS.producer_commit)
-        self.assertEqual(config, {"capacity_lines": 512, "used_lines": 67})
-        self.assertEqual(len(image), 131 * 256)
+        self.assertEqual(config, {"capacity_lines": spec["capacity_lines"],
+                                  "used_lines": spec["used_lines"]})
+        self.assertEqual(len(image), (spec["used_lines"] + IMPORT.GUARD_LINES) * 256)
         self.assertEqual(len(golden), 18 * 128 * 4)
-        self.assertEqual(len(mask), 131)
+        self.assertEqual(len(mask), spec["used_lines"] + IMPORT.GUARD_LINES)
         self.assertEqual(len(outputs), 18)
 
     def test_upstream_validator_rejects_corrupt_golden(self):
-        with tempfile.TemporaryDirectory(prefix="app006-corrupt-") as directory:
+        with tempfile.TemporaryDirectory(prefix="application-corrupt-") as directory:
             package = Path(directory) / "package"
             shutil.copytree(ARGS.source, package)
             golden = next((package / "golden/objects").rglob("*.u32.bin"))
@@ -81,7 +84,7 @@ class ApplicationDeliveryTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
 
     def test_runtime_rejects_missing_results_mismatch_and_memory_corruption(self):
-        with tempfile.TemporaryDirectory(prefix="app006-runtime-") as directory:
+        with tempfile.TemporaryDirectory(prefix="application-runtime-") as directory:
             root = Path(directory)
             (root / "hpu").mkdir()
             (root / "klib.h").write_text("#include <stdio.h>\n", encoding="utf-8")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and import the upstream APP006 BGV application package."""
+"""Validate and import supported upstream application-package-v1 cases."""
 
 import argparse
 import csv
@@ -12,10 +12,32 @@ import subprocess
 import tempfile
 
 
-CASE = "bgv_plain_chain"
 GUARD_LINES = 64
 WORDS_PER_LINE = 64
-EXPECTED_MODULI = [2013265921, 1811939329, 469762049]
+CASE_SPECS = {
+    "bfv_rotation_application": {
+        "label": "APP005", "scheme": "bfv", "model": "BfvSoftwareExecutor",
+        "plain_modulus": 130817,
+        "moduli": [1043201, 1043969, 1044737],
+        "key_moduli": [1043201, 1043969, 1044737, 1047041],
+        "operation_ids": ["rotate_rows_2", "rotate_columns", "add"],
+        "operation_kinds": ["rotate_rows", "rotate_columns", "add"],
+        "final_output": "output/y", "capacity_lines": 8192, "used_lines": 464,
+        "allocation_count": 317, "instruction_count": 2633, "dma_count": 1057,
+        "golden_domain": "coefficient",
+    },
+    "bgv_plain_chain": {
+        "label": "APP006", "scheme": "bgv", "model": "BgvSoftwareExecutor",
+        "plain_modulus": 65537,
+        "moduli": [2013265921, 1811939329, 469762049],
+        "key_moduli": [2013265921, 1811939329, 469762049, 1224736769],
+        "operation_ids": ["add_bias", "multiply_polynomial", "subtract_offset"],
+        "operation_kinds": ["add_plain", "multiply_plain", "subtract_plain"],
+        "final_output": "output", "capacity_lines": 512, "used_lines": 67,
+        "allocation_count": 34, "instruction_count": 90, "dma_count": 46,
+        "golden_domain": "canonical_ntt_physical",
+    },
+}
 
 
 def require(ok, message):
@@ -45,9 +67,12 @@ def load_json(path):
 def validate(source, validator, producer_commit=None):
     subprocess.run([str(validator), str(source)], check=True)
     package = load_json(source / "package.json")
+    case = package.get("case_name")
+    require(case in CASE_SPECS, f"unsupported application case: {case}")
+    spec = CASE_SPECS[case]
     expected_package = {
         "schema": "hpu-application-package", "schema_version": 1,
-        "scheme": "bgv", "case_name": CASE, "word_bits": 32,
+        "scheme": spec["scheme"], "case_name": case, "word_bits": 32,
         "line_words": WORDS_PER_LINE, "line_bytes": 256,
         "byte_order": "little-endian",
     }
@@ -79,7 +104,7 @@ def validate(source, validator, producer_commit=None):
     require(oracle.get("overall_status") == "pass" and
             oracle.get("oracle_verified") is True and
             oracle.get("golden_matches_oracle") is True and
-            oracle.get("model") == "BgvSoftwareExecutor" and
+            oracle.get("model") == spec["model"] and
             oracle.get("model_verified") is True and
             oracle.get("raw_physical_words_equal") is True and
             oracle.get("verified_limb_count") == 18,
@@ -90,38 +115,37 @@ def validate(source, validator, producer_commit=None):
             checks.get("host_software_model_to_oracle", {}).get("status") == "pass" and
             checks.get("host_software_model_to_oracle", {}).get("required") is True and
             checks.get("host_software_model_to_oracle", {}).get("model") ==
-            "BgvSoftwareExecutor", "required application oracle checks are missing")
+            spec["model"], "required application oracle checks are missing")
     require(oracle.get("instruction_execution_verified") is False and
             oracle.get("rtl_verified") is False and
             oracle.get("hardware_verified") is False,
             "package must not claim target/RTL execution")
 
     parameters = load_json(files["parameters"])
-    require(parameters.get("scheme") == "bgv" and
+    require(parameters.get("scheme") == spec["scheme"] and
             parameters.get("poly_modulus_degree") == 128 and
-            parameters.get("plain_modulus") == 65537 and
-            parameters.get("key_moduli") == EXPECTED_MODULI + [1224736769],
-            "unexpected BGV parameters")
+            parameters.get("plain_modulus") == spec["plain_modulus"] and
+            parameters.get("key_moduli") == spec["key_moduli"],
+            f"unexpected {spec['scheme'].upper()} parameters")
     levels = parameters.get("levels", [])
-    require(len(levels) == 3 and levels[0].get("moduli") == EXPECTED_MODULI,
-            "unexpected BGV modulus chain")
+    require(len(levels) == 3 and levels[0].get("moduli") == spec["moduli"],
+            f"unexpected {spec['scheme'].upper()} modulus chain")
     graph = load_json(files["operation_graph"])
     operations = graph.get("operations", [])
-    require(graph.get("final_output") == "output" and
-            [entry.get("id") for entry in operations] ==
-            ["add_bias", "multiply_polynomial", "subtract_offset"] and
-            [entry.get("kind") for entry in operations] ==
-            ["add_plain", "multiply_plain", "subtract_plain"] and
+    require(graph.get("final_output") == spec["final_output"] and
+            [entry.get("id") for entry in operations] == spec["operation_ids"] and
+            [entry.get("kind") for entry in operations] == spec["operation_kinds"] and
             all(entry.get("component_count") == 2 for entry in operations),
-            "unexpected APP006 operation graph")
+            f"unexpected {spec['label']} operation graph")
     semantic = load_json(files["semantic_report"])
     require(len(semantic.get("decoded", [])) == 128 and
-            all(isinstance(value, int) and 0 <= value < 65537
+            all(isinstance(value, int) and 0 <= value < spec["plain_modulus"]
                 for value in semantic["decoded"]), "invalid decoded semantic oracle")
 
     config = load_json(files["memory_config"])
-    require(config == {"capacity_lines": 512, "used_lines": 67},
-            "unexpected APP006 memory configuration")
+    require(config == {"capacity_lines": spec["capacity_lines"],
+                       "used_lines": spec["used_lines"]},
+            f"unexpected {spec['label']} memory configuration")
     abi = load_json(files["memory_abi"])
     for key, value in {"schema": "hpu-dma-abi", "schema_version": 1,
                        "rs1": "x10", "rs2": "x11", "word_bits": 32,
@@ -133,7 +157,8 @@ def validate(source, validator, producer_commit=None):
     code = files["program_source"].read_text(encoding="utf-8")
     c_words = [int(word, 16) for word in re.findall(
         r'\.word (0x[0-9A-Fa-f]+)', code)]
-    require(len(words) == 90 and c_words == words, "generated C instruction mismatch")
+    require(len(words) == spec["instruction_count"] and c_words == words,
+            "generated C instruction mismatch")
     require(words[-1] == 0x7000005B and words.count(0x7000005B) == 1,
             "one terminal PSYNC required")
     require(all(word & 0x7F in (0x2B, 0x5B) for word in words),
@@ -141,7 +166,8 @@ def validate(source, validator, producer_commit=None):
 
     allocations = read_rows(files["line_map"])
     manifest = read_rows(files["memory_manifest"])
-    require(len(allocations) == 34 and len(manifest) == len(allocations),
+    require(len(allocations) == spec["allocation_count"] and
+            len(manifest) == len(allocations),
             "unexpected allocation count")
     manifest_fields = ("allocation_id", "kind", "read_only", "line_offset",
                        "line_count", "payload_words", "padded_words", "initialization")
@@ -161,7 +187,7 @@ def validate(source, validator, producer_commit=None):
         previous = first + count
 
     dma = read_rows(files["dma_relocation_manifest"])
-    require(len(dma) == 46, "unexpected APP006 DMA count")
+    require(len(dma) == spec["dma_count"], f"unexpected {spec['label']} DMA count")
     spans = [(int(a), int(b)) for a, b in re.findall(
         r'\{ UINT32_C\((\d+)\), UINT32_C\((\d+)\) \}', code)]
     expected_spans = [(int(row["line_offset"]), int(row["line_count"])) for row in dma]
@@ -209,9 +235,9 @@ def validate(source, validator, producer_commit=None):
                 allocation["read_only"] == "false" and
                 first_access.get(allocation["allocation_id"]) == "dstore",
                 "golden span is not a write-first output")
-        require(row["domain"] == "canonical_ntt_physical" and
+        require(row["domain"] == spec["golden_domain"] and
                 count == 2 and payload == 128 and padded == 128 and
-                modulus == EXPECTED_MODULI[int(row["modulus_id"])],
+                modulus == spec["moduli"][int(row["modulus_id"])],
                 "invalid golden limb dimensions/domain")
         data = safe_file(source, row["path"]).read_bytes()
         require(len(data) == padded * 4, "invalid golden limb length")
@@ -233,12 +259,14 @@ def validate(source, validator, producer_commit=None):
 def import_package(source, destination, validator, producer_commit):
     commit, config, image, golden, mask, outputs = validate(
         source, validator, producer_commit)
+    case = load_json(source / "package.json")["case_name"]
+    spec = CASE_SPECS[case]
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{destination.name}-", dir=destination.parent) as tmp:
         root = Path(tmp) / destination.name
         root.mkdir()
         for key in ("c", "h", "asm", "inst32", "cmd26"):
-            shutil.copy2(source / "program" / f"{CASE}.{key}", root)
+            shutil.copy2(source / "program" / f"{case}.{key}", root)
         shutil.copytree(source, root / "upstream")
         (root / "application_window.u32.bin").write_bytes(image)
         (root / "application_golden.u32.bin").write_bytes(golden)
@@ -255,8 +283,8 @@ def import_package(source, destination, validator, producer_commit):
             f"       HPU_APPLICATION_LINES = {len(mask)}U,\n"
             f"       HPU_APPLICATION_GOLDEN_COUNT = {len(outputs)}U,\n"
             f"       HPU_APPLICATION_GOLDEN_WORDS = {len(golden) // 4}U,\n"
-            "       HPU_APPLICATION_INSTRUCTION_COUNT = 90U,\n"
-            "       HPU_APPLICATION_DMA_COUNT = 46U };\n"
+            f"       HPU_APPLICATION_INSTRUCTION_COUNT = {spec['instruction_count']}U,\n"
+            f"       HPU_APPLICATION_DMA_COUNT = {spec['dma_count']}U }};\n"
             "struct hpu_application_output {\n"
             "    unsigned line, lines, padded_words, golden_word, modulus;\n"
             "    unsigned step, component, modulus_id;\n};\n"
@@ -266,8 +294,9 @@ def import_package(source, destination, validator, producer_commit):
         if destination.exists():
             shutil.rmtree(destination)
         root.replace(destination)
-    print(f"APP006: lines={len(mask)}, golden_limbs={len(outputs)}, "
-          f"instructions=90, dma=46, commit={commit}")
+    print(f"{spec['label']}: lines={len(mask)}, golden_limbs={len(outputs)}, "
+          f"instructions={spec['instruction_count']}, dma={spec['dma_count']}, "
+          f"commit={commit}")
 
 
 def main():

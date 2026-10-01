@@ -133,8 +133,6 @@ hmul_encodings="$hpu_seal_tool_root/hmul_encoder_words.tsv"
 hpu_seal_encoder="$hpu_seal_tool_root/verify-ckks-encoding"
 hpu_applications_build="$output_root/app006-applications-cmake/$hpu_applications_commit"
 hpu_applications_posix_root=${HPU_APPLICATION_POSIX_ROOT:-${XDG_CACHE_HOME:-"$HOME/.cache"}/nexus-am-hputest/hpu-applications/$hpu_applications_commit/outputs}
-hpu_application_source="$hpu_applications_posix_root/bgv_plain_chain"
-hpu_application_import="$generated_root/application-data/bgv_plain_chain"
 
 mkdir -p -- "$cmake_build" "$tool_root" "$generated_root" "$producer_work" \
   "$hpu_seal_build" "$hpu_seal_source" "$hmul_source" "$hpu_reline_build" \
@@ -185,7 +183,7 @@ for path in "${required_outputs[@]}"; do
   fi
 done
 
-echo "[hputest] generating BGV plain-chain application at $hpu_applications_commit"
+echo "[hputest] generating BFV rotation and BGV plain-chain applications at $hpu_applications_commit"
 # The upstream publisher uses an atomic directory rename.  Keep its output on
 # the WSL POSIX filesystem (DrvFS returns EINVAL for that rename), then import
 # the validated package into the workspace build tree.
@@ -200,13 +198,16 @@ cmake -S "$hpu_applications_root" -B "$hpu_applications_build" \
 HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
 HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
   cmake --build "$hpu_applications_build" --parallel "$jobs" \
-    --target bgv_plain_chain_delivery
-"$hpu_applications_build/hpu_validate_package" "$hpu_application_source"
-python3 "$script_dir/import-application-package.py" \
-  --source "$hpu_application_source" \
-  --destination "$hpu_application_import" \
-  --validator "$hpu_applications_build/hpu_validate_package" \
-  --producer-commit "$hpu_applications_commit"
+    --target bfv_rotation_application_delivery bgv_plain_chain_delivery
+for application_case in bfv_rotation_application bgv_plain_chain; do
+  "$hpu_applications_build/hpu_validate_package" \
+    "$hpu_applications_posix_root/$application_case"
+  python3 "$script_dir/import-application-package.py" \
+    --source "$hpu_applications_posix_root/$application_case" \
+    --destination "$generated_root/application-data/$application_case" \
+    --validator "$hpu_applications_build/hpu_validate_package" \
+    --producer-commit "$hpu_applications_commit"
+done
 
 "${CXX:-c++}" \
   -std=c++17 -Wall -Wextra -Werror \
@@ -373,4 +374,4 @@ for profile in polynomial composed; do
     --producer-commit "$hpu_seal_commit"
 done
 
-echo '[hputest] inline-asm, HPU_SEAL operators/CKKS, and BGV application import PASS'
+echo '[hputest] inline-asm, HPU_SEAL operators/CKKS, and BFV/BGV application import PASS'

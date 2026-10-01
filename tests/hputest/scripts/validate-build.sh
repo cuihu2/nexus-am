@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 63 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 64 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 16 || $roster_migrated -ne 52 || \
-      $roster_migrated_software -ne 39 || $roster_migrated_blocked -ne 13 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 47 || \
+      ${roster_group_counts[fhe]} -ne 17 || $roster_migrated -ne 53 || \
+      $roster_migrated_software -ne 40 || $roster_migrated_blocked -ne 13 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 48 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 13 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
@@ -474,28 +474,36 @@ for required in rotate.c rotate.h rotate.asm rotate.inst32 rotate.cmd26 \
     exit 2
   fi
 done
-application_artifact="$artifact_root/provenance/application-data/bgv_plain_chain"
-application_build="$application_artifact/upstream/provenance/build.json"
-if [[ ! $manifest_hpu_applications =~ ^[0-9a-f]{40}$ ]] || \
-   [[ ! -s $application_artifact/producer_commit.txt ]] || \
-   [[ $manifest_hpu_applications != \
-      "$(<"$application_artifact/producer_commit.txt")" ]] || \
-   [[ ! -s $application_build ]] || \
-   [[ $(sed -n 's/.*"commit": "\([0-9a-f]\{40\}\)".*/\1/p' \
-      "$application_build") != "$manifest_hpu_applications" ]] || \
-   ! grep -Fq '"worktree_state": "clean-at-configure"' "$application_build"; then
-  printf 'ERROR: selected HPU application provenance is incomplete\n' >&2
+if [[ ! $manifest_hpu_applications =~ ^[0-9a-f]{40}$ ]]; then
+  printf 'ERROR: selected HPU application producer commit is invalid\n' >&2
   exit 2
 fi
-for required in bgv_plain_chain.c bgv_plain_chain.h bgv_plain_chain.asm \
-                bgv_plain_chain.inst32 bgv_plain_chain.cmd26 application_layout.h \
-                application_window.u32.bin application_golden.u32.bin \
-                application_writable.u8.bin upstream/package.json \
-                upstream/oracle/report.json upstream/golden/golden_manifest.csv; do
-  if [[ ! -s $application_artifact/$required ]]; then
-    printf 'ERROR: selected HPU application provenance omits %s\n' "$required" >&2
+for application_case in bfv_rotation_application bgv_plain_chain; do
+  application_artifact="$artifact_root/provenance/application-data/$application_case"
+  application_build="$application_artifact/upstream/provenance/build.json"
+  if [[ ! -s $application_artifact/producer_commit.txt ]] || \
+     [[ $manifest_hpu_applications != \
+        "$(<"$application_artifact/producer_commit.txt")" ]] || \
+     [[ ! -s $application_build ]] || \
+     [[ $(sed -n 's/.*"commit": "\([0-9a-f]\{40\}\)".*/\1/p' \
+        "$application_build") != "$manifest_hpu_applications" ]] || \
+     ! grep -Fq '"worktree_state": "clean-at-configure"' "$application_build"; then
+    printf 'ERROR: selected HPU application provenance is incomplete: %s\n' \
+      "$application_case" >&2
     exit 2
   fi
+  for required in "$application_case.c" "$application_case.h" \
+                  "$application_case.asm" "$application_case.inst32" \
+                  "$application_case.cmd26" application_layout.h \
+                  application_window.u32.bin application_golden.u32.bin \
+                  application_writable.u8.bin upstream/package.json \
+                  upstream/oracle/report.json upstream/golden/golden_manifest.csv; do
+    if [[ ! -s $application_artifact/$required ]]; then
+      printf 'ERROR: selected HPU application provenance omits %s/%s\n' \
+        "$application_case" "$required" >&2
+      exit 2
+    fi
+  done
 done
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
                 mm.c mm.h mm.asm mm.inst32 mm.cmd26 dma_relocation_manifest.csv \
@@ -989,7 +997,7 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_013 && \
             $name != HPU_IT_DIR_CMB_014 && \
             $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 && \
-            $name != HPU_IT_DIR_APP_006 ]]; then
+            $name != HPU_IT_DIR_APP_005 && $name != HPU_IT_DIR_APP_006 ]]; then
         require_rns_fixture "$elf"
       fi
       reject_mm_only_fixture "$elf" ;;
@@ -1073,11 +1081,13 @@ for elf in "${elfs[@]}"; do
       [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
       python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
         --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
-    HPU_IT_DIR_APP_006)
-      delivery="$artifact_root/provenance/application-data/bgv_plain_chain"
+    HPU_IT_DIR_APP_005|HPU_IT_DIR_APP_006)
+      operator=bfv_rotation_application
+      [[ $name == HPU_IT_DIR_APP_006 ]] && operator=bgv_plain_chain
+      delivery="$artifact_root/provenance/application-data/$operator"
       [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_applications" ]] || exit 2
       python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
-        --elf "$elf" --disassembly "$txt" --operator bgv_plain_chain ;;
+        --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)

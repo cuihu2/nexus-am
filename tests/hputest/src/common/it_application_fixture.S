@@ -1,4 +1,4 @@
-/* APP006 imports one validated image, all three step goldens and a write mask. */
+/* Application cases import one validated image, all step goldens and a write mask. */
     .section .rodata.application_window,"a",@progbits
     .balign 256
     .globl application_window

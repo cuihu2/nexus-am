@@ -138,8 +138,8 @@ def compare_trees(left, right, label):
 
 def workload_rows(release, mode):
     rows = read_tsv(release / "INDEX.tsv", WORKLOAD_FIELDS)
-    if len(rows) != 63:
-        raise ValueError(f"{mode} workloads must describe 63 canonical cases")
+    if len(rows) != 64:
+        raise ValueError(f"{mode} workloads must describe 64 canonical cases")
     seen = set()
     for row in rows:
         identity = row["case_id"]
@@ -157,8 +157,8 @@ def workload_rows(release, mode):
                     raise ValueError(f"wrong {field} extension for workload: {identity}")
     blocked = sum(row["qualifier"] == "blocked-not-issued" for row in rows)
     published = sum(bool(row["elf"]) for row in rows)
-    if (published, blocked) != (50, 13):
-        raise ValueError(f"{mode} workloads require 50 published and 13 blocked cases")
+    if (published, blocked) != (51, 13):
+        raise ValueError(f"{mode} workloads require 51 published and 13 blocked cases")
     instruction = {row["case_id"] for row in rows
                    if row["chapter"] == "03_compute_instructions" and row["elf"]}
     if instruction != INSTRUCTION_IDS:
@@ -420,7 +420,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
 
         published = sum(bool(row["elf"]) for row in indexes)
         blocked = sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in indexes)
-        if (published, blocked, len(indexes)) != (156, 13, 169):
+        if (published, blocked, len(indexes)) != (158, 13, 171):
             raise ValueError(f"unexpected unified counts: published={published} blocked={blocked} rows={len(indexes)}")
         metadata = manifests["workloads"]
         (package_root / "MANIFEST.txt").write_text(
@@ -431,7 +431,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             f"hpu_applications_commit={metadata['hpu_applications_commit']}\n"
             "variants=normal,silent\nnormal_log_mode=minimal\nsilent_log_mode=silent\n"
             "parent_instruction_cases_replaced=9\nsubtests=37\n"
-            "published_test_identities=78\npublished_variant_sets=156\n"
+            "published_test_identities=79\npublished_variant_sets=158\n"
             "blocked_index_only=13\nqualification=BUILD_READY_NOT_IT_PASS\n",
             encoding="utf-8")
         (package_root / "README.md").write_text(
@@ -457,7 +457,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             shutil.rmtree(staging)
         raise
     print(f"Unified HPU package: {output / 'release' / 'hputest'}; "
-          "78 tests x 2 variants, 13 blocked index-only")
+          "79 tests x 2 variants, 13 blocked index-only")
     return output / "release"
 
 
