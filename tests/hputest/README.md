@@ -205,7 +205,7 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 Reline/Rescale程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
 上游CKKS应用交付。
 `third_party/hpu-applications`固定较新的main提交，使用application package v1接收APP004
-BFV乘法/降层链、APP005 BFV旋转分支、APP006 BGV明文链和APP007 BGV旋转链；生成阶段要求
+BFV乘法/降层链、APP005 BFV旋转分支、APP006 BGV明文链、APP007 BGV旋转链和APP008 BGV乘法/降层链；生成阶段要求
 SEAL与对应software executor逐字一致。三条固定gitlink分别校验，
 不用当前main编码替换legacy-main或旧算法库编码。
 
@@ -372,7 +372,7 @@ make -C tests/hputest group GROUP=fhe
 ```
 
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-66 ELF/BIN/TXT sets partitioned below `artifact/core/`,
+67 ELF/BIN/TXT sets partitioned below `artifact/core/`,
 `artifact/transform/`, and `artifact/fhe/`.  It also produces
 `MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, and a compact
 `provenance/inline-asm-mm/` directory containing the selected producer
@@ -391,7 +391,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共81个已发布测试身份、162组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共82个已发布测试身份、164组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

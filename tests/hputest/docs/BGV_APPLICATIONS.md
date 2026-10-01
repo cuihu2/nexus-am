@@ -1,6 +1,7 @@
-# BGV application packages: APP006 and APP007
+# BGV application packages: APP006, APP007 and APP008
 
-APP006 and APP007 consume `bgv_plain_chain` and `bgv_rotate_chain` from the pinned `third_party/hpu-applications`
+APP006, APP007 and APP008 consume `bgv_plain_chain`, `bgv_rotate_chain` and
+`bgv_multiply_chain` from the pinned `third_party/hpu-applications`
 gitlink.  It does not reinterpret the older `hpu-seal` checkout and does not
 copy an unvalidated `outputs/` directory from a developer worktree.
 
@@ -19,13 +20,17 @@ modulus 65537, with active ciphertext basis Q3 using moduli 2013265921,
   46 DMA bindings and 67 used lines.
 - APP007: `add_plain(3)`, `rotate_rows(+1)`, then `add_plain(5)`; 1141
   instructions, 433 DMA bindings and 270 used lines.
-- Both cases retain two ciphertext components, three moduli, three checked
-  steps (18 limbs), one terminal PSYNC and a 64-line AM guard.
+- APP008: `add_plain(5)`, `multiply+relinearize`, `mod_switch`, then
+  `add_plain(7)`; 1124 instructions, 435 DMA bindings and 329 used lines.
+- All three cases retain two ciphertext components and one terminal PSYNC.
+  APP006/007 keep three moduli for three checked steps (18 limbs); APP008
+  checks two Q3 steps followed by two Q2 steps (20 limbs). Each AM import adds
+  a 64-line tail guard.
 
 Two independent producer checks are required before AM accepts the package:
 the modified-SEAL ciphertext is the golden source, and `BgvSoftwareExecutor`
 must reproduce all raw physical words.  The package explicitly does not claim
-instruction, RTL or hardware execution.  APP006 and APP007 supply that missing
+instruction, RTL or hardware execution.  APP006, APP007 and APP008 supply that missing
 execution step: each poisons all write-first output spans, runs the generated C program once,
 compares all intermediate and final canonical NTT/RNS words exactly, and checks
 that every non-DSTORE line and the tail guard remain unchanged.

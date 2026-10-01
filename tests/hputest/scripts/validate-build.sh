@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 66 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 67 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 19 || $roster_migrated -ne 55 || \
-      $roster_migrated_software -ne 42 || $roster_migrated_blocked -ne 13 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 50 || \
+      ${roster_group_counts[fhe]} -ne 20 || $roster_migrated -ne 56 || \
+      $roster_migrated_software -ne 43 || $roster_migrated_blocked -ne 13 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 51 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 13 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
@@ -480,7 +480,7 @@ if [[ ! $manifest_hpu_applications =~ ^[0-9a-f]{40}$ ]]; then
 fi
 for application_case in bfv_multiply_modswitch_application \
                         bfv_rotation_application bgv_plain_chain \
-                        bgv_rotate_chain; do
+                        bgv_rotate_chain bgv_multiply_chain; do
   application_artifact="$artifact_root/provenance/application-data/$application_case"
   application_build="$application_artifact/upstream/provenance/build.json"
   if [[ ! -s $application_artifact/producer_commit.txt ]] || \
@@ -1000,7 +1000,8 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_014 && \
             $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 && \
             $name != HPU_IT_DIR_APP_004 && $name != HPU_IT_DIR_APP_005 && \
-            $name != HPU_IT_DIR_APP_006 && $name != HPU_IT_DIR_APP_007 ]]; then
+            $name != HPU_IT_DIR_APP_006 && $name != HPU_IT_DIR_APP_007 && \
+            $name != HPU_IT_DIR_APP_008 ]]; then
         require_rns_fixture "$elf"
       fi
       reject_mm_only_fixture "$elf" ;;
@@ -1084,11 +1085,12 @@ for elf in "${elfs[@]}"; do
       [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
       python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
         --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
-    HPU_IT_DIR_APP_004|HPU_IT_DIR_APP_005|HPU_IT_DIR_APP_006|HPU_IT_DIR_APP_007)
+    HPU_IT_DIR_APP_004|HPU_IT_DIR_APP_005|HPU_IT_DIR_APP_006|HPU_IT_DIR_APP_007|HPU_IT_DIR_APP_008)
       operator=bfv_multiply_modswitch_application
       [[ $name == HPU_IT_DIR_APP_005 ]] && operator=bfv_rotation_application
       [[ $name == HPU_IT_DIR_APP_006 ]] && operator=bgv_plain_chain
       [[ $name == HPU_IT_DIR_APP_007 ]] && operator=bgv_rotate_chain
+      [[ $name == HPU_IT_DIR_APP_008 ]] && operator=bgv_multiply_chain
       delivery="$artifact_root/provenance/application-data/$operator"
       [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_applications" ]] || exit 2
       python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
