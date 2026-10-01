@@ -67,9 +67,10 @@ class ApplicationDeliveryTests(unittest.TestCase):
         self.assertEqual(config, {"capacity_lines": spec["capacity_lines"],
                                   "used_lines": spec["used_lines"]})
         self.assertEqual(len(image), (spec["used_lines"] + IMPORT.GUARD_LINES) * 256)
-        self.assertEqual(len(golden), 18 * 128 * 4)
+        golden_count = sum(2 * len(moduli) for moduli in spec["golden_moduli"])
+        self.assertEqual(len(golden), golden_count * 128 * 4)
         self.assertEqual(len(mask), spec["used_lines"] + IMPORT.GUARD_LINES)
-        self.assertEqual(len(outputs), 18)
+        self.assertEqual(len(outputs), golden_count)
 
     def test_upstream_validator_rejects_corrupt_golden(self):
         with tempfile.TemporaryDirectory(prefix="application-corrupt-") as directory:
