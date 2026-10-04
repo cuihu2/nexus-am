@@ -3,6 +3,7 @@
 *.elf
 *.bin
 *.txt
+!tools/hpu-scheme-cases/CMakeLists.txt
 *.o
 *.a
 *.map
