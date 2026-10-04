@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 67 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 83 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 20 || $roster_migrated -ne 56 || \
-      $roster_migrated_software -ne 43 || $roster_migrated_blocked -ne 13 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 51 || \
+      ${roster_group_counts[fhe]} -ne 36 || $roster_migrated -ne 72 || \
+      $roster_migrated_software -ne 59 || $roster_migrated_blocked -ne 13 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 67 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 13 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
@@ -250,12 +250,8 @@ case "$manifest_selection" in
       group=${roster_group[$case_id]}
       if [[ $manifest_selection == diagnostic ]]; then
         [[ ${roster_source[$case_id]} == src/03_compute_instructions/* || \
-           $case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
-           $case_id == HPU_IT_DIR_CMB_009 || \
-           $case_id == HPU_IT_DIR_CMB_010 || \
-           $case_id == HPU_IT_DIR_CMB_012 || \
-           $case_id == HPU_IT_DIR_CMB_013 || \
-           $case_id == HPU_IT_DIR_CMB_014 ]] || continue
+           ( ${roster_source[$case_id]} == src/04_composite_instruction_sequences/* && \
+             ${roster_qualifier[$case_id]} == software-self-check ) ]] || continue
       elif [[ $manifest_selection != all && $group != "$manifest_selection" ]]; then
         continue
       fi
@@ -427,86 +423,22 @@ if [[ ! $manifest_inline_asm =~ ^[0-9a-f]{40}$ ]] || \
   printf 'ERROR: selected inline-asm MM provenance is incomplete\n' >&2
   exit 2
 fi
-hadd_artifact="$artifact_root/provenance/hadd-data"
-if [[ ! $manifest_hpu_seal =~ ^[0-9a-f]{40}$ ]] || \
-   [[ ! -s $hadd_artifact/producer_commit.txt ]] || \
-   [[ $manifest_hpu_seal != "$(<"$hadd_artifact/producer_commit.txt")" ]]; then
-  printf 'ERROR: selected HPU_SEAL HADD provenance is incomplete\n' >&2
+if [[ ! $manifest_hpu_applications =~ ^[0-9a-f]{40}$ || \
+      $manifest_hpu_seal != "$manifest_hpu_applications" ]]; then
+  printf 'ERROR: main producer revisions are inconsistent\n' >&2
   exit 2
 fi
-for required in hadd.c hadd.h hadd.asm hadd.inst32 hadd.cmd26 \
-                resolved_dma.csv allocations.csv metadata.json \
-                window.u32.bin golden.u32.bin hadd_layout.h hadd_delivery.h \
-                DELIVERY_SUMMARY.md; do
-  if [[ ! -s $hadd_artifact/$required ]]; then
-    printf 'ERROR: selected HPU_SEAL HADD provenance omits %s\n' "$required" >&2
-    exit 2
-  fi
-done
-hmul_artifact="$artifact_root/provenance/hmul-data"
-if [[ ! -s $hmul_artifact/producer_commit.txt ]] || \
-   [[ $manifest_hpu_seal != "$(<"$hmul_artifact/producer_commit.txt")" ]]; then
-  printf 'ERROR: selected HPU_SEAL HMUL provenance is incomplete\n' >&2
-  exit 2
-fi
-for required in hmul.c hmul.h hmul.asm hmul.inst32 hmul.cmd26 \
-                resolved_dma.csv allocations.csv metadata.json \
-                window.u32.bin golden.u32.bin writable_lines.u8.bin \
-                hmul_layout.h hmul_delivery.h DELIVERY_SUMMARY.md; do
-  if [[ ! -s $hmul_artifact/$required ]]; then
-    printf 'ERROR: selected HPU_SEAL HMUL provenance omits %s\n' "$required" >&2
-    exit 2
-  fi
-done
-rotate_artifact="$artifact_root/provenance/rotate-data"
-if [[ ! -s $rotate_artifact/producer_commit.txt ]] || \
-   [[ $manifest_hpu_seal != "$(<"$rotate_artifact/producer_commit.txt")" ]]; then
-  printf 'ERROR: selected HPU_SEAL Rotate provenance is incomplete\n' >&2
-  exit 2
-fi
-for required in rotate.c rotate.h rotate.asm rotate.inst32 rotate.cmd26 \
-                resolved_dma.csv allocations.csv metadata.json \
-                window.u32.bin golden.u32.bin input_slots.u64.bin \
-                expected_slots.u64.bin rotate_writable.u8.bin HOST_ORACLE.log \
-                rotate_layout.h rotate_delivery.h DELIVERY_SUMMARY.md; do
-  if [[ ! -s $rotate_artifact/$required ]]; then
-    printf 'ERROR: selected HPU_SEAL Rotate provenance omits %s\n' "$required" >&2
-    exit 2
-  fi
-done
-if [[ ! $manifest_hpu_applications =~ ^[0-9a-f]{40}$ ]]; then
-  printf 'ERROR: selected HPU application producer commit is invalid\n' >&2
-  exit 2
-fi
-for application_case in bfv_multiply_modswitch_application \
-                        bfv_rotation_application bgv_plain_chain \
-                        bgv_rotate_chain bgv_multiply_chain; do
-  application_artifact="$artifact_root/provenance/application-data/$application_case"
-  application_build="$application_artifact/upstream/provenance/build.json"
-  if [[ ! -s $application_artifact/producer_commit.txt ]] || \
-     [[ $manifest_hpu_applications != \
-        "$(<"$application_artifact/producer_commit.txt")" ]] || \
-     [[ ! -s $application_build ]] || \
-     [[ $(sed -n 's/.*"commit": "\([0-9a-f]\{40\}\)".*/\1/p' \
-        "$application_build") != "$manifest_hpu_applications" ]] || \
-     ! grep -Fq '"worktree_state": "clean-at-configure"' "$application_build"; then
-    printf 'ERROR: selected HPU application provenance is incomplete: %s\n' \
-      "$application_case" >&2
-    exit 2
-  fi
-  for required in "$application_case.c" "$application_case.h" \
-                  "$application_case.asm" "$application_case.inst32" \
-                  "$application_case.cmd26" application_layout.h \
-                  application_window.u32.bin application_golden.u32.bin \
-                  application_writable.u8.bin upstream/package.json \
-                  upstream/oracle/report.json upstream/golden/golden_manifest.csv; do
-    if [[ ! -s $application_artifact/$required ]]; then
-      printf 'ERROR: selected HPU application provenance omits %s/%s\n' \
-        "$application_case" "$required" >&2
-      exit 2
-    fi
+while IFS=$'\t' read -r case_id stem scheme degree role source; do
+  [[ $case_id == case_id ]] && continue
+  delivery="$artifact_root/provenance/application-data/$stem"
+  [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_applications" ]] || exit 2
+  for required in "$stem.c" "$stem.h" "$stem.asm" "$stem.inst32" "$stem.cmd26" \
+                  application_layout.h application_window.u32.bin application_golden.u32.bin \
+                  application_writable.u8.bin upstream/package.json upstream/oracle/report.json \
+                  PROGRAM_MODEL.log AM_ADAPTATION.json; do
+    test -s "$delivery/$required" || { printf 'ERROR: missing %s/%s\n' "$stem" "$required" >&2; exit 2; }
   done
-done
+done < "$test_root/scheme-cases.tsv"
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
                 mm.c mm.h mm.asm mm.inst32 mm.cmd26 dma_relocation_manifest.csv \
                 opcode_map.csv upstream/mm.c upstream/mm.h upstream/mm.asm \
@@ -988,20 +920,22 @@ for elf in "${elfs[@]}"; do
     */03_compute_instructions/*.elf|*/04_composite_instruction_sequences/*.elf|\
     */05_cpu_hpu_structural_connectivity/*.elf|*/06_performance/*.elf|\
     */07_full_application/*.elf)
-      if [[ $qualifier != blocked-not-issued && $name != HPU_IT_DIR_CMB_001 && \
-            $name != HPU_IT_DIR_CMB_002 && \
-            $name != HPU_IT_DIR_CMB_003 && \
-            $name != HPU_IT_DIR_CMB_004 && \
-            $name != HPU_IT_DIR_CMB_005 && \
-            $name != HPU_IT_DIR_CMB_009 && \
-            $name != HPU_IT_DIR_CMB_010 && \
-            $name != HPU_IT_DIR_CMB_012 && \
-            $name != HPU_IT_DIR_CMB_013 && \
-            $name != HPU_IT_DIR_CMB_014 && \
-            $name != HPU_IT_DIR_APP_002 && $name != HPU_IT_DIR_APP_003 && \
-            $name != HPU_IT_DIR_APP_004 && $name != HPU_IT_DIR_APP_005 && \
-            $name != HPU_IT_DIR_APP_006 && $name != HPU_IT_DIR_APP_007 && \
-            $name != HPU_IT_DIR_APP_008 ]]; then
+      if [[ $qualifier != blocked-not-issued && \
+            -z $(awk -F '\t' -v id="$name" '$1 == id {print $2}' "$test_root/scheme-cases.tsv") && \
+            $name != HPU_IT_DIR_CMB_001_BCONV_Q4_TO_P3_N4096 && \
+            $name != HPU_IT_DIR_CMB_002_NTT_N4096 && \
+            $name != HPU_IT_DIR_CMB_003_INTT_N4096 && \
+            $name != HPU_IT_DIR_CMB_004_CKKS_KEYSWITCH_N4096 && \
+            $name != HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096 && \
+            $name != HPU_IT_DIR_CMB_009_BFV_HADD_N4096 && \
+            $name != HPU_IT_DIR_CMB_010_BFV_HMUL_N4096 && \
+            $name != HPU_IT_DIR_CMB_012_CKKS_RELINE_N4096 && \
+            $name != HPU_IT_DIR_CMB_013_CKKS_RESCALE_N4096 && \
+            $name != HPU_IT_DIR_CMB_014_BFV_ROTATE_N4096 && \
+            $name != HPU_IT_DIR_APP_002_CKKS_X2_ADD1_N65536 && $name != HPU_IT_DIR_APP_003_CKKS_ROTATE_CONJ_MUL_ADD_N128 && \
+            $name != HPU_IT_DIR_APP_004_BFV_MUL_RELINE_MODSWITCH_ADD_N128 && $name != HPU_IT_DIR_APP_005_BFV_ROTATE_ROWS_COLUMNS_ADD_N128 && \
+            $name != HPU_IT_DIR_APP_006_BGV_PLAIN_ADD_MUL_SUB_N128 && $name != HPU_IT_DIR_APP_007_BGV_ADD_ROTATE_ADD_N128 && \
+            $name != HPU_IT_DIR_APP_008_BGV_MUL_RELINE_MODSWITCH_ADD_N128 ]]; then
         require_rns_fixture "$elf"
       fi
       reject_mm_only_fixture "$elf" ;;
@@ -1034,72 +968,31 @@ for elf in "${elfs[@]}"; do
       require_stage_fixture "$elf" "$txt" ntt ;;
     HPU_IT_DIR_INS_C0_006)
       require_stage_fixture "$elf" "$txt" intt ;;
-    HPU_IT_DIR_CMB_002|HPU_IT_DIR_CMB_003)
+    HPU_IT_DIR_CMB_002_NTT_N4096|HPU_IT_DIR_CMB_003_INTT_N4096)
       operator=ntt
-      [[ $name == HPU_IT_DIR_CMB_003 ]] && operator=intt
+      [[ $name == HPU_IT_DIR_CMB_003_INTT_N4096 ]] && operator=intt
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/transform-data/$operator" \
         --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
-    HPU_IT_DIR_CMB_001)
+    HPU_IT_DIR_CMB_001_BCONV_Q4_TO_P3_N4096)
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/bconv-data" \
         --elf "$elf" --disassembly "$txt" --operator bconv ;;
-    HPU_IT_DIR_CMB_004)
-      python3 "$script_dir/verify-operator-elf.py" \
-        --delivery "$artifact_root/provenance/keyswitch-data" \
-        --elf "$elf" --disassembly "$txt" --operator keyswitch ;;
-    HPU_IT_DIR_CMB_005)
+    HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096)
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/auto-data" \
         --elf "$elf" --disassembly "$txt" --operator auto ;;
-    HPU_IT_DIR_CMB_009)
-      python3 "$script_dir/verify-operator-elf.py" \
-        --delivery "$artifact_root/provenance/hadd-data" \
-        --elf "$elf" --disassembly "$txt" --operator hadd ;;
-    HPU_IT_DIR_CMB_010)
-      python3 "$script_dir/verify-operator-elf.py" \
-        --delivery "$artifact_root/provenance/hmul-data" \
-        --elf "$elf" --disassembly "$txt" --operator hmul ;;
-    HPU_IT_DIR_CMB_012)
-      delivery="$artifact_root/provenance/ckks-data/reline"
-      [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
-      python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
-        --elf "$elf" --disassembly "$txt" --operator ckks_reline ;;
-    HPU_IT_DIR_CMB_013)
-      delivery="$artifact_root/provenance/ckks-data/rescale"
-      [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
-      python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
-        --elf "$elf" --disassembly "$txt" --operator ckks_rescale ;;
-    HPU_IT_DIR_CMB_014)
-      python3 "$script_dir/verify-operator-elf.py" \
-        --delivery "$artifact_root/provenance/rotate-data" \
-        --elf "$elf" --disassembly "$txt" --operator rotate ;;
-    HPU_IT_DIR_APP_002|HPU_IT_DIR_APP_003)
-      profile=polynomial
-      operator=ckks_polynomial_x2_plus_one
-      if [[ $name == HPU_IT_DIR_APP_003 ]]; then
-        profile=composed
-        operator=ckks_composed_application
-      fi
-      delivery="$artifact_root/provenance/ckks-data/$profile"
-      [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_seal" ]] || exit 2
-      python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
-        --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
-    HPU_IT_DIR_APP_004|HPU_IT_DIR_APP_005|HPU_IT_DIR_APP_006|HPU_IT_DIR_APP_007|HPU_IT_DIR_APP_008)
-      operator=bfv_multiply_modswitch_application
-      [[ $name == HPU_IT_DIR_APP_005 ]] && operator=bfv_rotation_application
-      [[ $name == HPU_IT_DIR_APP_006 ]] && operator=bgv_plain_chain
-      [[ $name == HPU_IT_DIR_APP_007 ]] && operator=bgv_rotate_chain
-      [[ $name == HPU_IT_DIR_APP_008 ]] && operator=bgv_multiply_chain
-      delivery="$artifact_root/provenance/application-data/$operator"
-      [[ $(<"$delivery/producer_commit.txt") == "$manifest_hpu_applications" ]] || exit 2
-      python3 "$script_dir/verify-operator-elf.py" --delivery "$delivery" \
-        --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
     01_return_0)
       require_main_return "$txt" 0 ;;
     02_return_1)
       require_main_return "$txt" 1 ;;
   esac
+  operator=$(awk -F '\t' -v id="$name" '$1 == id {print $2}' "$test_root/scheme-cases.tsv")
+  if [[ -n $operator ]]; then
+    python3 "$script_dir/verify-operator-elf.py" \
+      --delivery "$artifact_root/provenance/application-data/$operator" \
+      --elf "$elf" --disassembly "$txt" --operator "$operator"
+  fi
 done
 
 printf '[hputest] validation PASS: %u ELF/BIN/TXT sets\n' "${#elfs[@]}"

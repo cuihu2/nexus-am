@@ -21,12 +21,12 @@ CHAPTERS = {
     "03_compute_instructions", "04_composite_instruction_sequences",
     "05_cpu_hpu_structural_connectivity", "06_performance", "07_full_application",
 }
-DIAGNOSTIC_IDS = (
-    {f"HPU_IT_DIR_INS_C0_{index:03d}" for index in range(1, 10)} |
-    {f"HPU_IT_DIR_CMB_{index:03d}" for index in range(1, 6)} |
-    {"HPU_IT_DIR_CMB_009", "HPU_IT_DIR_CMB_010",
-     "HPU_IT_DIR_CMB_012", "HPU_IT_DIR_CMB_013", "HPU_IT_DIR_CMB_014"}
-)
+with (Path(__file__).resolve().parents[1] / "cases.tsv").open() as stream:
+    DIAGNOSTIC_IDS = {row["case_id"] for row in csv.DictReader(stream, delimiter="\t")
+                      if row["qualifier"] == "software-self-check" and
+                      row["source"].startswith(("src/03_compute_instructions/",
+                                                "src/04_composite_instruction_sequences/"))}
+
 EXTENSIONS = (".elf", ".bin", ".txt")
 MANIFESTS = ("MANIFEST.txt", "CASE_MANIFEST.tsv", "NOT_QUALIFIED.tsv")
 MARKER = ".hpu-chapter-package"
@@ -194,7 +194,7 @@ def package(artifact, require_all=False, require_diagnostic=False, require_silen
                     "03_compute_instructions" if "_INS_" in row["case_id"]
                     else "04_composite_instruction_sequences")
                 for row in indexes):
-            raise ValueError("diagnostic package must contain exactly the nineteen ready 03/04 cases")
+            raise ValueError("diagnostic package must contain exactly the 34 ready 03/04 cases")
     if require_all or require_silent:
         instruction_ids = {
             row["case_id"] for row in indexes

@@ -2,11 +2,15 @@
 """核对算子 ELF 的实际指令流和只读数据，防止源码更新但仍发布旧镜像。"""
 
 import argparse
+import csv
 import os
 from pathlib import Path
 import re
 import struct
 import subprocess
+
+with (Path(__file__).resolve().parents[1] / "scheme-cases.tsv").open() as stream:
+    SCHEME_PROGRAMS = {row["program_stem"] for row in csv.DictReader(stream, delimiter="\t")}
 
 
 def symbol_bytes(elf, symbol):
@@ -94,9 +98,7 @@ def verify(delivery, elf, disassembly, operator):
         end = re.search(r"^([0-9a-fA-F]+)\s+\w\s+_end$", listing, re.M)
         if not end or int(end[1], 16) >= 0x87000000:
             raise ValueError("CKKS ELF/heap start overlaps the HPU DDR window")
-    if operator in ("bfv_multiply_modswitch_application",
-                    "bfv_rotation_application", "bgv_plain_chain",
-                    "bgv_rotate_chain", "bgv_multiply_chain"):
+    if operator in SCHEME_PROGRAMS:
         fixtures = [("application_window", "application_window.u32.bin"),
                     ("application_golden", "application_golden.u32.bin"),
                     ("application_writable", "application_writable.u8.bin")]
@@ -117,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--elf", required=True, type=Path)
     parser.add_argument("--disassembly", required=True, type=Path)
     parser.add_argument("--operator", required=True,
-                        choices=("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
+                        choices=tuple(SCHEME_PROGRAMS) + ("ntt", "intt", "bconv", "keyswitch", "auto", "hadd",
                                  "hmul", "rotate", "ckks_reline", "ckks_rescale",
                                  "ckks_polynomial_x2_plus_one",
                                  "ckks_composed_application",

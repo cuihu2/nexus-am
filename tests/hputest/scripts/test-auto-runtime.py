@@ -95,12 +95,12 @@ class AutoRuntimeTests(unittest.TestCase):
                 CC, "-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
                 "-DHPU_LOG_LEVEL=0", f"-I{include}", f"-I{ROOT / 'include'}",
                 f"-I{self.delivery}",
-                str(ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_005.c"),
+                str(ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096.c"),
                 str(self.delivery / "auto.c"),
             ], check=True)
 
     def test_main_keeps_fault_irq_completion_and_result_checks_visible(self):
-        case = ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_005.c"
+        case = ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096.c"
         source = case.read_text(encoding="utf-8")
         ordered = (
             "auto_prepare()", "csr_write(CSR_FAULT, FAULT_VALID)",

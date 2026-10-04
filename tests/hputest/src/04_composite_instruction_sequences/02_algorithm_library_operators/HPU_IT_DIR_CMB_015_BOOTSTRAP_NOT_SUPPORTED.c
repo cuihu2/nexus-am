@@ -9,7 +9,7 @@
  */
 int main(void) {
     case_start(__FILE__);
-    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_015\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_015_BOOTSTRAP_NOT_SUPPORTED\n");
     LOG_ERROR("缺库版本、bootstrapping 完整输入/评估数据、精度与可执行入口。\n");
     LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);

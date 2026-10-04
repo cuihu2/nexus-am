@@ -137,47 +137,14 @@ verify-inline-asm: prepare-inline-asm-mm
 	  --encodings "$(OUTPUT_ROOT)/inline-asm-tools/encoder_words.tsv"
 	@python3 scripts/test-auto-runtime.py \
 	  --delivery "$(HPU_GENERATED_ROOT)/auto-data"
-	@python3 scripts/test-hpu-seal-hadd-delivery.py \
-	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hadd" \
-	  --encodings "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hadd_encoder_words.tsv" \
-	  --producer-commit "$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-hpu-seal-rotate-delivery.py \
-	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/rotate" \
-	  --encoder "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/verify-ckks-encoding" \
-	  --producer-commit "$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-ckks-delivery.py \
-	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/ckks" \
-	  --generated "$(HPU_GENERATED_ROOT)" \
-	  --encoder "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/verify-ckks-encoding"
 	@python3 scripts/test-application-delivery.py \
 	  --source "$(HPU_GENERATED_ROOT)/application-data/bfv_multiply_modswitch_application/upstream" \
 	  --generated "$(HPU_GENERATED_ROOT)/application-data/bfv_multiply_modswitch_application" \
-	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
+	  --validator "$(OUTPUT_ROOT)/hpu-main-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/inline-asm/hpu_validate_package" \
 	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-application-delivery.py \
-	  --source "$(HPU_GENERATED_ROOT)/application-data/bfv_rotation_application/upstream" \
-	  --generated "$(HPU_GENERATED_ROOT)/application-data/bfv_rotation_application" \
-	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
-	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-application-delivery.py \
-	  --source "$(HPU_GENERATED_ROOT)/application-data/bgv_plain_chain/upstream" \
-	  --generated "$(HPU_GENERATED_ROOT)/application-data/bgv_plain_chain" \
-	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
-	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-application-delivery.py \
-	  --source "$(HPU_GENERATED_ROOT)/application-data/bgv_rotate_chain/upstream" \
-	  --generated "$(HPU_GENERATED_ROOT)/application-data/bgv_rotate_chain" \
-	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
-	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-application-delivery.py \
-	  --source "$(HPU_GENERATED_ROOT)/application-data/bgv_multiply_chain/upstream" \
-	  --generated "$(HPU_GENERATED_ROOT)/application-data/bgv_multiply_chain" \
-	  --validator "$(OUTPUT_ROOT)/app006-applications-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_validate_package" \
-	  --producer-commit "$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)"
-	@python3 scripts/test-hpu-seal-hmul-delivery.py \
-	  --source "$(OUTPUT_ROOT)/hpu-seal-producer/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hmul" \
-	  --encodings "$(OUTPUT_ROOT)/hpu-seal-tools/$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)/hmul_encoder_words.tsv" \
-	  --producer-commit "$$(git -C "$(HPU_SEAL_ROOT)" rev-parse HEAD)"
+	@python3 scripts/test-scheme-adaptation.py \
+	  --generated "$(HPU_GENERATED_ROOT)/application-data" \
+	  --model "$(OUTPUT_ROOT)/hpu-main-cmake/$$(git -C "$(HPU_APPLICATIONS_ROOT)" rev-parse HEAD)/hpu_program_model"
 	@python3 scripts/test-stage-keyswitch-package.py
 
 validate:

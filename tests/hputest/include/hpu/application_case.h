@@ -10,5 +10,7 @@ extern const uint8_t application_writable[HPU_APPLICATION_LINES];
 int application_prepare(void);
 int application_check_results(void);
 int application_check_memory(void);
+/* 按模拟 cycle 限制完成轮询，不把 TIMEOUT 次 MMIO 当作 TIMEOUT 个 cycle。 */
+int application_wait(void);
 
 #endif

@@ -1,5 +1,10 @@
 # inline-asm 到 Nexus-AM 的 HPU 用例接口
 
+2026-10-04：三算法/应用接口已统一到main `c11dfe2`的application package v1。
+具体接收顺序、golden来源、物理布局与rounded-P适配见
+[SCHEME_DELIVERY_V1.md](SCHEME_DELIVERY_V1.md)。下文MM/旧flat-profile部分继续作为
+00/03等既有回归接口说明，不应作为当前KeySwitch/Reline应用包格式。
+
 本文说明 [`cuihu2/inline-asm`](https://github.com/cuihu2/inline-asm)
 如何生成数据、表格和指令，以及 Nexus-AM `tests/hputest` 如何实际接收并链接
 这些内容。这里描述的是当前已经接通的 MM 冒烟路径，不是未来接口草案。

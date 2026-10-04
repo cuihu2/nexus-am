@@ -103,19 +103,18 @@ class KeySwitchRuntimeTests(unittest.TestCase):
                 CC, "-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
                 "-DHPU_LOG_LEVEL=0", f"-I{include}", f"-I{ROOT / 'include'}",
                 f"-I{self.delivery}",
-                str(ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_004.c"),
                 str(self.delivery / "keyswitch.c"),
             ], check=True)
 
     def test_main_keeps_fault_irq_completion_and_result_checks_visible(self):
-        case = ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_004.c"
+        case = ROOT / "src/04_composite_instruction_sequences/01_composite_operators/HPU_IT_DIR_CMB_004_CKKS_KEYSWITCH_N4096.c"
         source = case.read_text(encoding="utf-8")
         ordered = (
-            "keyswitch_prepare()", "csr_write(CSR_FAULT, FAULT_VALID)",
+            "application_prepare()", "csr_write(CSR_FAULT, FAULT_VALID)",
             "csr_write(CSR_IRQ, IRQ_LEVEL)", "csr_write(CSR_COMMIT, COMMIT)",
-            "hpu_program_keyswitch(keyswitch_spans, HPU_KEYSWITCH_DMA_COUNT)",
-            "wait_irq()", "completion_clear() != 0 || check_status() != 0",
-            "keyswitch_check_results()", "keyswitch_check_memory()",
+            "hpu_run_ckks_keyswitch_n4096()",
+            "application_wait()", "completion_clear() != 0 || check_status() != 0",
+            "application_check_results()", "application_check_memory()",
         )
         positions = [source.index(fragment) for fragment in ordered]
         self.assertEqual(positions, sorted(positions))

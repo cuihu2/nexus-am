@@ -183,36 +183,6 @@ for path in "${required_outputs[@]}"; do
   fi
 done
 
-echo "[hputest] generating BFV and BGV application packages at $hpu_applications_commit"
-# The upstream publisher uses an atomic directory rename.  Keep its output on
-# the WSL POSIX filesystem (DrvFS returns EINVAL for that rename), then import
-# the validated package into the workspace build tree.
-cmake -S "$hpu_applications_root" -B "$hpu_applications_build" \
-  -DHPU_ENABLE_SEAL_INTEGRATION=ON \
-  -DBUILD_TESTING=ON \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DSEAL_USE_MSGSL=OFF \
-  -DSEAL_USE_ZLIB=OFF \
-  -DSEAL_USE_ZSTD=OFF \
-  -DHPU_APPLICATION_OUTPUT_ROOT="$hpu_applications_posix_root"
-HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
-HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
-  cmake --build "$hpu_applications_build" --parallel "$jobs" \
-    --target bfv_multiply_modswitch_application_delivery \
-             bfv_rotation_application_delivery bgv_plain_chain_delivery \
-             bgv_rotate_chain_delivery bgv_multiply_chain_delivery
-for application_case in bfv_multiply_modswitch_application \
-                        bfv_rotation_application bgv_plain_chain \
-                        bgv_rotate_chain bgv_multiply_chain; do
-  "$hpu_applications_build/hpu_validate_package" \
-    "$hpu_applications_posix_root/$application_case"
-  python3 "$script_dir/import-application-package.py" \
-    --source "$hpu_applications_posix_root/$application_case" \
-    --destination "$generated_root/application-data/$application_case" \
-    --validator "$hpu_applications_build/hpu_validate_package" \
-    --producer-commit "$hpu_applications_commit"
-done
-
 "${CXX:-c++}" \
   -std=c++17 -Wall -Wextra -Werror \
   -I"$inline_asm_root/encode/include" \
@@ -263,119 +233,36 @@ python3 "$script_dir/import-auto-data.py" \
   --producer-commit "$producer_commit" \
   --encodings "$encoding_tsv"
 
-echo "[hputest] generating HPU_SEAL BFV HADD at $hpu_seal_commit"
-cmake -S "$test_root/tools/hpu-seal-operators" -B "$hpu_seal_build" \
-  -DINLINE_ASM_ROOT="$hpu_seal_root" \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
-  hpu_seal_cmb009_generator hpu_seal_cmb010_generator
-"$hpu_seal_build/hpu_seal_cmb009_generator" "$hpu_seal_source" "$hpu_seal_commit"
-
-"${CXX:-c++}" \
-  -std=c++17 -Wall -Wextra -Werror \
-  -I"$hpu_seal_root/encode/include" \
-  "$script_dir/generate-hpu-seal-hadd-encodings.cpp" \
-  "$hpu_seal_root/encode/src/instruction.cpp" \
-  "$hpu_seal_root/encode/src/parser.cpp" \
-  "$hpu_seal_root/encode/src/encoder.cpp" \
-  "$hpu_seal_root/encode/src/assembler.cpp" \
-  -o "$hpu_seal_tool_root/generate-hpu-seal-hadd-encodings"
-"$hpu_seal_tool_root/generate-hpu-seal-hadd-encodings" "$hpu_seal_encodings"
-
-python3 "$script_dir/import-hpu-seal-hadd.py" \
-  --source "$hpu_seal_source" \
-  --destination "$hpu_seal_import" \
-  --producer-commit "$hpu_seal_commit" \
-  --encodings "$hpu_seal_encodings"
-
-echo "[hputest] generating HPU_SEAL BFV HMUL at $hpu_seal_commit"
-"$hpu_seal_build/hpu_seal_cmb010_generator" "$hmul_source" "$hpu_seal_commit"
-
-"${CXX:-c++}" \
-  -std=c++17 -Wall -Wextra -Werror \
-  -I"$hpu_seal_root/encode/include" \
-  "$script_dir/generate-hpu-seal-hmul-encodings.cpp" \
-  "$hpu_seal_root/encode/src/instruction.cpp" \
-  "$hpu_seal_root/encode/src/parser.cpp" \
-  "$hpu_seal_root/encode/src/encoder.cpp" \
-  "$hpu_seal_root/encode/src/assembler.cpp" \
-  -o "$hpu_seal_tool_root/generate-hpu-seal-hmul-encodings"
-"$hpu_seal_tool_root/generate-hpu-seal-hmul-encodings" \
-  "$hmul_source/hmul.asm" "$hmul_encodings"
-
-python3 "$script_dir/import-hpu-seal-hmul.py" \
-  --source "$hmul_source" \
-  --destination "$hmul_import" \
-  --producer-commit "$hpu_seal_commit" \
-  --encodings "$hmul_encodings"
-
-echo "[hputest] generating HPU_SEAL CKKS Reline at $hpu_seal_commit"
-cmake -S "$test_root/tools/hpu-seal-cmb012" -B "$hpu_reline_build" \
-  -DINLINE_ASM_ROOT="$hpu_seal_root" \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build "$hpu_reline_build" --parallel "$jobs" \
-  --target hpu_seal_cmb012_generator
-"$hpu_reline_build/hpu_seal_cmb012_generator" \
-  "$hpu_reline_source" "$hpu_seal_commit" \
-  > "$hpu_reline_source/HOST_ORACLE.log"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-  -I"$hpu_seal_root/encode/include" "$script_dir/verify-ckks-encoding.cpp" \
-  "$hpu_seal_root/encode/src/instruction.cpp" \
-  "$hpu_seal_root/encode/src/parser.cpp" \
-  "$hpu_seal_root/encode/src/encoder.cpp" \
-  "$hpu_seal_root/encode/src/assembler.cpp" \
-  -o "$hpu_seal_encoder"
-python3 "$script_dir/import-ckks-data.py" --source "$hpu_reline_source" \
-  --destination "$generated_root/ckks-data/reline" --profile reline \
-  --encoder "$hpu_seal_encoder" \
-  --producer-commit "$hpu_seal_commit"
-
-echo "[hputest] generating HPU_SEAL CKKS Rescale at $hpu_seal_commit"
-cmake -S "$test_root/tools/hpu-seal-cmb013" -B "$hpu_rescale_build" \
-  -DINLINE_ASM_ROOT="$hpu_seal_root" \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build "$hpu_rescale_build" --parallel "$jobs" \
-  --target hpu_seal_cmb013_generator
-"$hpu_rescale_build/hpu_seal_cmb013_generator" \
-  "$hpu_rescale_source" "$hpu_seal_commit" \
-  > "$hpu_rescale_source/HOST_ORACLE.log"
-python3 "$script_dir/import-ckks-data.py" --source "$hpu_rescale_source" \
-  --destination "$generated_root/ckks-data/rescale" --profile rescale \
-  --encoder "$hpu_seal_encoder" \
-  --producer-commit "$hpu_seal_commit"
-
-echo "[hputest] generating HPU_SEAL BFV RotateRows at $hpu_seal_commit"
-cmake -S "$test_root/tools/hpu-seal-cmb014" -B "$hpu_seal_rotate_build" \
-  -DINLINE_ASM_ROOT="$hpu_seal_root" \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build "$hpu_seal_rotate_build" --parallel "$jobs" \
-  --target hpu_seal_cmb014_generator
-"$hpu_seal_rotate_build/hpu_seal_cmb014_generator" \
-  "$hpu_seal_rotate_source" "$hpu_seal_commit" \
-  > "$hpu_seal_rotate_source/HOST_ORACLE.log"
-
-python3 "$script_dir/import-hpu-seal-rotate.py" \
-  --source "$hpu_seal_rotate_source" \
-  --destination "$hpu_seal_rotate_import" \
-  --producer-commit "$hpu_seal_commit" \
-  --encoder "$hpu_seal_encoder"
-
-echo "[hputest] adding upstream CKKS applications at $hpu_seal_commit"
-cmake --build "$hpu_seal_build" --parallel "$jobs" --target \
-  hpu_ckks_polynomial_example hpu_ckks_composed_application_example
-for profile in polynomial composed; do
-  ckks_source="$output_root/hpu-seal-producer/$hpu_seal_commit/ckks/$profile"
-  mkdir -p "$ckks_source"
-  target=hpu_ckks_polynomial_example
-  [[ $profile != composed ]] || target=hpu_ckks_composed_application_example
-  # upstream 主机端先通过 SEAL 精确密文/解密误差检查，才导出交付包。
-  "$hpu_seal_build/inline-asm/$target" --emit-dir "$ckks_source" \
-    > "$ckks_source/HOST_ORACLE.log"
-  python3 "$script_dir/import-ckks-data.py" --source "$ckks_source" \
-    --destination "$generated_root/ckks-data/$profile" --profile "$profile" \
-    --encoder "$hpu_seal_encoder" \
-    --producer-commit "$hpu_seal_commit"
-done
-
-echo '[hputest] inline-asm, HPU_SEAL operators/CKKS, and BFV/BGV application imports PASS'
+echo "[hputest] generating main v1 CKKS/BFV/BGV packages at $hpu_applications_commit"
+hpu_main_build="$output_root/hpu-main-cmake/$hpu_applications_commit"
+package_parent="$output_root/hpu-main-producer/$hpu_applications_commit"
+mkdir -p "$package_parent"
+# 本次独立生成，普通/静默编译复用同一份包，不能混用跨次随机密钥。
+package_root=$(mktemp -d "$package_parent/generation.XXXXXX")
+cmake -S "$test_root/tools/hpu-scheme-cases" -B "$hpu_main_build" \
+  -DINLINE_ASM_ROOT="$hpu_applications_root" -DCMAKE_BUILD_TYPE=Release \
+  -DHPU_APPLICATION_OUTPUT_ROOT="$package_root"
+HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
+HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
+  cmake --build "$hpu_main_build" --parallel "$jobs" --target \
+    hpu_fhe_delivery hpu_scheme_case_generator hpu_program_model hpu_program_model_test hpu_encode_program
+"$hpu_main_build/hpu_program_model_test"
+while IFS=$'\t' read -r case_id stem scheme degree role source; do
+  [[ $case_id == case_id ]] && continue
+  if [[ $role != application ]]; then
+    HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
+    HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
+      "$hpu_main_build/hpu_scheme_case_generator" "$scheme" "$role" "$degree" \
+        "$package_root/$stem"
+  fi
+  python3 "$script_dir/import-application-package.py" \
+    --source "$package_root/$stem" \
+    --destination "$generated_root/application-data/$stem" \
+    --validator "$hpu_main_build/inline-asm/hpu_validate_package" \
+    --encoder "$hpu_main_build/hpu_encode_program" \
+    --program-model "$hpu_main_build/hpu_program_model" \
+    --producer-commit "$hpu_applications_commit"
+done < "$test_root/scheme-cases.tsv"
+printf '%s\n' "$package_root" > "$generated_root/application-data/PRODUCER_ROOT"
+printf '%s\n' "$hpu_applications_commit" > "$generated_root/application-data/PRODUCER_COMMIT"
+echo '[hputest] legacy primitive/control + main scheme/application import PASS'

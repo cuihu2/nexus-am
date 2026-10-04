@@ -1,12 +1,17 @@
 # HPU tests for Nexus-AM
 
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
-testcases.  It contains the eleven bring-up/return probes plus the 55 migrated
+testcases.  It contains the eleven bring-up/return probes plus the 72 migrated
 IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
+2026-10-04 main v1更新、三算法差异、CMB004/CMB012修复及精度测量见
+[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。83项中67项软件自检、
+13项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
+`scheme-cases.tsv`明确算法/操作/规模，`case-aliases.tsv`映射旧编号。
+
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续55项中42项有软件自检，13项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续72项中59项有软件自检，13项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -47,10 +52,10 @@ src/common/
 src/01_configuration/          # 7 migrated IT cases
 src/02_data_paths/             # 6 migrated IT cases
 src/03_compute_instructions/   # 9 migrated IT cases
-src/04_composite_instruction_sequences/ # 13 migrated IT cases
+src/04_composite_instruction_sequences/ # 28 migrated IT cases
 src/05_cpu_hpu_structural_connectivity/  # 7 migrated IT cases
 src/06_performance/            # 6 migrated IT cases
-src/07_full_application/       # 7 migrated IT cases (6 active, 1 blocked)
+src/07_full_application/       # 9 migrated IT cases (8 active, 1 blocked)
 
 include/hpu/steps.h            # short, one-step public testcase API
 include/hpu/result.h           # UART START/PASS/FAIL reporting helpers
@@ -60,7 +65,7 @@ runtime/                       # mechanical helpers, never whole scenarios
 
 third_party/
 ├── inline-asm/                 # pinned legacy-main branch, existing producer contract
-├── hpu-seal/                   # pinned older main, existing algorithm-library API
+├── hpu-seal/                   # pinned current main
 └── hpu-applications/           # pinned current main, application package v1
 
 build/                          # ignored: generated outputs only
@@ -198,16 +203,12 @@ self-check returns 0.  UART records expose that decision but do not replace it.
 的提交 `69030963e71dbcf32897e8ae08695cfa2e65d79a`。正常构建使用固定gitlink，
 不是每次自动取远端HEAD；本次未修改上游源码或RTL。
 同步差异和新旧包的使用边界见 [main更新说明](docs/INLINE_MAIN_6903096.md)。
-`third_party/hpu-seal` 独立固定同仓库当前 `main` 分支提交
-`b5398a3cbe6dbd3a5a0d9abbef06425b0107f300`，仅用于正式算法库接口用例；CMB_009/010
-分别通过 BFV `BfvOperationPlan::append_add` 和 `append_multiply` 生成程序、resolved DMA、
-输入、密钥、常量和SEAL golden；CMB_012/013通过CKKS `CkksOperationPlan`分别生成独立
-Reline/Rescale程序，CMB_014通过BFV `append_rotate_rows`生成旋转交付，APP_002/003则接收
-上游CKKS应用交付。
-`third_party/hpu-applications`固定较新的main提交，使用application package v1接收APP004
-BFV乘法/降层链、APP005 BFV旋转分支、APP006 BGV明文链、APP007 BGV旋转链和APP008 BGV乘法/降层链；生成阶段要求
-SEAL与对应software executor逐字一致。三条固定gitlink分别校验，
-不用当前main编码替换legacy-main或旧算法库编码。
+`third_party/hpu-seal`和`third_party/hpu-applications`均固定当前main提交
+`c11dfe2cfbe731d7b45aea0a62d993d733e1a089`。三算法独立算子和八个应用统一接收
+application package v1；同时校验SEAL、高层software executor和实际指令复放。
+CKKS rounded-P、输入workspace和BFV物理顺序的AM适配见
+[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。原始包完整保留，未改上游源码或RTL。
+旧fixed-profile只用于既有基本指令、transform/BConv及明确命名的LEGACY Auto回归。
 
 上游已原生生成计算/控制custom2 `0x5B` 与DMA custom1 `0x2B`，
 AM只校验并原样接收，不再执行 `0x0B→0x5B` 转换。旧HPU `0x0B` 文件直接拒绝。
@@ -320,9 +321,9 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-38个后续源码具有真实软件自检。03的PNTT/PINTT已补齐；04的BConv Q→P、整体NTT/INTT、
-KeySwitch、Auto、BFV HADD、融合HMUL/relinearize、CKKS Reline/Rescale和BFV RotateRows已接入完整
-producer序列及golden，但仅覆盖各自固定基础组合。其它13项仍未接入，原因逐项记录于
+59个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
+LEGACY Auto与三算法KeySwitch/HADD/HMUL/Reline/降层/旋转，07包含八个完整应用。
+实际算法、参数和程序对应见`scheme-cases.tsv`。其它13项未接入，原因逐项记录于
 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
 上游“没有数据”。CMB_009/010/012/013/014均验收固定main分支的HPU-SEAL API；基础
 PADD/PMUL覆盖仍保留在03-001/003。
@@ -372,7 +373,7 @@ make -C tests/hputest group GROUP=fhe
 ```
 
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-67 ELF/BIN/TXT sets partitioned below `artifact/core/`,
+83 ELF/BIN/TXT sets partitioned below `artifact/core/`,
 `artifact/transform/`, and `artifact/fhe/`.  It also produces
 `MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, and a compact
 `provenance/inline-asm-mm/` directory containing the selected producer
@@ -391,7 +392,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共82个已发布测试身份、164组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共98个已发布测试身份、196组ELF/BIN/TXT；13项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

@@ -1,12 +1,13 @@
 # v2 测试点落实范围与运行说明
 
 依据 `HPU-IT测试点分解v2.xlsx` 的原用例 ID，以及本轮提供的功能、边界、性能、CPU 回归要求更新。
-**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 55 个后续用例中，42 个具备真实软件自检；
+**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 72 个后续用例中，59 个具备软件自检；
 13 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改。既有生产者仍为
-inline-asm legacy-main `6903096`，既有算法库用例使用固定main `b5398a3`，APP004/005/006/007/008使用
-application package v1生产者 `6bd619c`；三套固定gitlink不混用。
+inline-asm legacy-main `6903096`；三算法算子和八个应用统一使用main `c11dfe2`的
+application package v1。新名称、原始包/SEAL golden和指令适配详见
+[当前交付说明](SCHEME_DELIVERY_V1.md)，旧ID对应`case-aliases.tsv`。
 本版同步说明见 [inline-main更新](INLINE_MAIN_6903096.md)。
 
 耗时优化、可选单子项执行、阶段cycle与全量UART结果导出见

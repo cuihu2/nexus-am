@@ -9,7 +9,7 @@
  */
 int main(void) {
     case_start(__FILE__);
-    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_011\n");
+    LOG_ERROR("[HPU][BLOCKED] HPU_IT_DIR_CMB_011_ENCODE_HOST_ONLY\n");
     LOG_ERROR("缺 encode 库接口版本、编码参数、精度和可独立校验的数据。\n");
     LOG_ERROR("[HPU][ACTION] See docs/V2_COVERAGE.md; no HPU command issued.\n");
     case_not_qualified(__FILE__);

@@ -16,6 +16,7 @@ INLINE_ASM_ROOT ?= $(TEST_ROOT)/third_party/inline-asm
 HPU_GENERATED_ROOT ?= $(TEST_ROOT)/build/generated
 HPU_DUMP_RESULTS ?= 0
 HPU_LOG_LEVEL ?= 1
+HPU_APPLICATION_TIMEOUT_CYCLES ?= 25000000
 ifeq ($(filter $(HPU_LOG_LEVEL),0 1 2),)
 $(error HPU_LOG_LEVEL must be 0, 1, or 2)
 endif
@@ -79,7 +80,7 @@ SRCS += $(HPU_IT_RUNTIME_SRCS)
 # Most migrated finite cases consume the producer's two 4096-coefficient RNS
 # inputs. Application-package cases own complete images and must not link that
 # unrelated fixture.
-ifeq ($(filter HPU_IT_DIR_APP_004 HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006 HPU_IT_DIR_APP_007 HPU_IT_DIR_APP_008,$(CASE_ID)),)
+ifeq ($(filter HPU_IT_DIR_APP_004_BFV_MUL_RELINE_MODSWITCH_ADD_N128 HPU_IT_DIR_APP_005_BFV_ROTATE_ROWS_COLUMNS_ADD_N128 HPU_IT_DIR_APP_006_BGV_PLAIN_ADD_MUL_SUB_N128 HPU_IT_DIR_APP_007_BGV_ADD_ROTATE_ADD_N128 HPU_IT_DIR_APP_008_BGV_MUL_RELINE_MODSWITCH_ADD_N128,$(CASE_ID)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
 ifneq ($(filter %/HPU_IT_DIR_INS_C0_005.c %/HPU_IT_DIR_INS_C0_006.c,$(CASE_SOURCE)),)
@@ -88,33 +89,24 @@ endif
 ifneq ($(filter %/HPU_IT_DIR_INS_C0_008.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_irq.c
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_002.c %/HPU_IT_DIR_CMB_003.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c %/HPU_IT_DIR_CMB_003_INTT_N4096.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/it_transform.c
 SRCS += $(TEST_ROOT)/src/common/it_transform_fixture.S
 INC_DIR += $(HPU_GENERATED_ROOT)/transform-data
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_002.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c,$(CASE_SOURCE)),)
 SRCS += $(HPU_GENERATED_ROOT)/transform-data/ntt/ntt.c
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_003.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_003_INTT_N4096.c,$(CASE_SOURCE)),)
 SRCS += $(HPU_GENERATED_ROOT)/transform-data/intt/intt.c
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_001.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_001_BCONV_Q4_TO_P3_N4096.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/it_bconv.c
 SRCS += $(TEST_ROOT)/src/common/it_bconv_fixture.S
 SRCS += $(HPU_GENERATED_ROOT)/bconv-data/bconv.c
 INC_DIR += $(HPU_GENERATED_ROOT)/bconv-data
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_004.c,$(CASE_SOURCE)),)
-ifeq ($(wildcard $(HPU_GENERATED_ROOT)/keyswitch-data/keyswitch_delivery.h),)
-$(error missing KeySwitch delivery; run 'make prepare-inline-asm-mm')
-endif
-SRCS += $(TEST_ROOT)/src/common/it_keyswitch.c
-SRCS += $(TEST_ROOT)/src/common/it_keyswitch_fixture.S
-SRCS += $(HPU_GENERATED_ROOT)/keyswitch-data/keyswitch.c
-INC_DIR += $(HPU_GENERATED_ROOT)/keyswitch-data
-endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_005.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096.c,$(CASE_SOURCE)),)
 ifeq ($(wildcard $(HPU_GENERATED_ROOT)/auto-data/auto_delivery.h),)
 $(error missing Auto delivery; run 'make prepare-inline-asm-mm')
 endif
@@ -123,71 +115,9 @@ SRCS += $(TEST_ROOT)/src/common/it_auto_fixture.S
 SRCS += $(HPU_GENERATED_ROOT)/auto-data/auto.c
 INC_DIR += $(HPU_GENERATED_ROOT)/auto-data
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_009.c,$(CASE_SOURCE)),)
-ifeq ($(wildcard $(HPU_GENERATED_ROOT)/hadd-data/hadd_delivery.h),)
-$(error missing HPU_SEAL HADD delivery; run 'make prepare-inline-asm-mm')
-endif
-SRCS += $(TEST_ROOT)/src/common/it_hadd.c
-SRCS += $(TEST_ROOT)/src/common/it_hadd_fixture.S
-SRCS += $(HPU_GENERATED_ROOT)/hadd-data/hadd.c
-INC_DIR += $(HPU_GENERATED_ROOT)/hadd-data
-endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_010.c,$(CASE_SOURCE)),)
-ifeq ($(wildcard $(HPU_GENERATED_ROOT)/hmul-data/hmul_delivery.h),)
-$(error missing HPU_SEAL HMUL delivery; run 'make prepare-inline-asm-mm')
-endif
-SRCS += $(TEST_ROOT)/src/common/it_hmul.c
-SRCS += $(TEST_ROOT)/src/common/it_hmul_fixture.S
-SRCS += $(HPU_GENERATED_ROOT)/hmul-data/hmul.c
-INC_DIR += $(HPU_GENERATED_ROOT)/hmul-data
-endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_014.c,$(CASE_SOURCE)),)
-ifeq ($(wildcard $(HPU_GENERATED_ROOT)/rotate-data/rotate_delivery.h),)
-$(error missing HPU_SEAL Rotate delivery; run 'make prepare-inline-asm-mm')
-endif
-SRCS += $(TEST_ROOT)/src/common/it_rotate.c
-SRCS += $(TEST_ROOT)/src/common/it_rotate_fixture.S
-SRCS += $(HPU_GENERATED_ROOT)/rotate-data/rotate.c
-INC_DIR += $(HPU_GENERATED_ROOT)/rotate-data
-endif
-ifneq ($(filter HPU_IT_DIR_CMB_012 HPU_IT_DIR_CMB_013 HPU_IT_DIR_APP_002 HPU_IT_DIR_APP_003,$(CASE_ID)),)
-ifeq ($(CASE_ID),HPU_IT_DIR_CMB_012)
-CKKS_PROFILE := reline
-CKKS_STEM := ckks_reline
-else ifeq ($(CASE_ID),HPU_IT_DIR_CMB_013)
-CKKS_PROFILE := rescale
-CKKS_STEM := ckks_rescale
-else ifeq ($(CASE_ID),HPU_IT_DIR_APP_002)
-CKKS_PROFILE := polynomial
-CKKS_STEM := ckks_polynomial_x2_plus_one
-else
-CKKS_PROFILE := composed
-CKKS_STEM := ckks_composed_application
-endif
-CKKS_DATA := $(HPU_GENERATED_ROOT)/ckks-data/$(CKKS_PROFILE)
-ifeq ($(wildcard $(CKKS_DATA)/ckks_layout.h),)
-$(error missing CKKS application delivery; run 'make prepare-inline-asm-mm')
-endif
-SRCS += $(TEST_ROOT)/src/common/it_ckks.c
-SRCS += $(TEST_ROOT)/src/common/it_ckks_fixture.S
-SRCS += $(CKKS_DATA)/$(CKKS_STEM).c
-INC_DIR += $(CKKS_DATA)
-ASFLAGS += -Wa,-I$(CKKS_DATA)
-$(HPU_DST_DIR)/$(TEST_ROOT)/src/common/it_ckks_fixture.o: \
-  $(addprefix $(CKKS_DATA)/,ckks_window.u32.bin ckks_golden.u32.bin ckks_writable.u8.bin)
-endif
-ifneq ($(filter HPU_IT_DIR_APP_004 HPU_IT_DIR_APP_005 HPU_IT_DIR_APP_006 HPU_IT_DIR_APP_007 HPU_IT_DIR_APP_008,$(CASE_ID)),)
-ifeq ($(CASE_ID),HPU_IT_DIR_APP_004)
-APPLICATION_STEM := bfv_multiply_modswitch_application
-else ifeq ($(CASE_ID),HPU_IT_DIR_APP_005)
-APPLICATION_STEM := bfv_rotation_application
-else ifeq ($(CASE_ID),HPU_IT_DIR_APP_006)
-APPLICATION_STEM := bgv_plain_chain
-else ifeq ($(CASE_ID),HPU_IT_DIR_APP_007)
-APPLICATION_STEM := bgv_rotate_chain
-else
-APPLICATION_STEM := bgv_multiply_chain
-endif
+# 所有 scheme 用例沿用原目录；从显式清单选取本例的独立 producer 程序。
+APPLICATION_STEM := $(shell awk -F '\t' '$$1 == "$(CASE_ID)" {print $$2}' $(TEST_ROOT)/scheme-cases.tsv)
+ifneq ($(strip $(APPLICATION_STEM)),)
 APPLICATION_DATA := $(HPU_GENERATED_ROOT)/application-data/$(APPLICATION_STEM)
 ifeq ($(wildcard $(APPLICATION_DATA)/application_layout.h),)
 $(error missing $(CASE_ID) application delivery; run 'make prepare-inline-asm-mm')
@@ -214,7 +144,8 @@ INC_DIR += $(HPU_GENERATED_ROOT)/include $(TEST_ROOT)/include
 CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -DLINKNAN_HPU_IT=1 \
           -DHPU_DUMP_RESULTS=$(HPU_DUMP_RESULTS) \
-          -DHPU_LOG_LEVEL=$(HPU_LOG_LEVEL) -include hpu/log.h \
+          -DHPU_LOG_LEVEL=$(HPU_LOG_LEVEL) \
+          -DHPU_APPLICATION_TIMEOUT_CYCLES=$(HPU_APPLICATION_TIMEOUT_CYCLES) -include hpu/log.h \
           -ffile-prefix-map=$(TEST_ROOT)=tests/hputest \
           -fmacro-prefix-map=$(TEST_ROOT)=tests/hputest \
           -ffile-prefix-map=$(INLINE_ASM_ROOT)=inline-asm \
@@ -229,7 +160,7 @@ HPU_UART_FLAGS := $(HPU_DST_DIR)/.uart-mode
 .PHONY: hpu-uart-flags-force
 $(HPU_UART_FLAGS): hpu-uart-flags-force
 	@mkdir -p "$(dir $@)"
-	@printf 'HPU_DUMP_RESULTS=%s\nHPU_LOG_LEVEL=%s\n' '$(HPU_DUMP_RESULTS)' '$(HPU_LOG_LEVEL)' > "$@.new"
+	@printf 'HPU_DUMP_RESULTS=%s\nHPU_LOG_LEVEL=%s\nAPP_WAIT_CYCLES=%s\n' '$(HPU_DUMP_RESULTS)' '$(HPU_LOG_LEVEL)' '$(HPU_APPLICATION_TIMEOUT_CYCLES)' > "$@.new"
 	@if cmp -s "$@.new" "$@"; then rm -f "$@.new"; else mv -f "$@.new" "$@"; fi
 $(OBJS): $(HPU_UART_FLAGS)
 

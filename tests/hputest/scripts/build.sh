@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 67 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 83 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 20 || $roster_migrated -ne 56 || \
-      $roster_migrated_software -ne 43 || $roster_migrated_blocked -ne 13 ]]; then
+      ${roster_group_counts[fhe]} -ne 36 || $roster_migrated -ne 72 || \
+      $roster_migrated_software -ne 59 || $roster_migrated_blocked -ne 13 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -164,13 +164,9 @@ else
     if [[ $case_group == diagnostic ]]; then
       # 只发布已接入结果比较的 03 九项和 04 已定资格算子。
       # 不纳入没有真实接口/golden 的占位项，也不重新发布 00 冒烟。
-      if [[ $source_case_id =~ ^HPU_IT_DIR_INS_C0_00[1-9]$ || \
-            $source_case_id =~ ^HPU_IT_DIR_CMB_00[1-5]$ || \
-            $source_case_id == HPU_IT_DIR_CMB_009 || \
-            $source_case_id == HPU_IT_DIR_CMB_010 || \
-            $source_case_id == HPU_IT_DIR_CMB_012 || \
-            $source_case_id == HPU_IT_DIR_CMB_013 || \
-            $source_case_id == HPU_IT_DIR_CMB_014 ]]; then
+      if [[ ${roster_source[$source_case_id]} == src/03_compute_instructions/* || \
+            ( ${roster_source[$source_case_id]} == src/04_composite_instruction_sequences/* && \
+              ${roster_qualifier[$source_case_id]} == software-self-check ) ]]; then
         if [[ ${roster_qualifier[$source_case_id]} != software-self-check ]]; then
           printf 'ERROR: diagnostic testcase is not qualified: %s\n' "$source_case_id" >&2
           exit 2
@@ -292,26 +288,12 @@ test -s "$generated_root/keyswitch-data/producer_commit.txt"
 cp -a "$generated_root/keyswitch-data" "$artifact_root/provenance/keyswitch-data"
 test -s "$generated_root/auto-data/producer_commit.txt"
 cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
-test -s "$generated_root/hadd-data/producer_commit.txt"
-cp -a "$generated_root/hadd-data" "$artifact_root/provenance/hadd-data"
-test -s "$generated_root/rotate-data/producer_commit.txt"
-cp -a "$generated_root/rotate-data" "$artifact_root/provenance/rotate-data"
-for profile in reline rescale polynomial composed; do
-  test -s "$generated_root/ckks-data/$profile/producer_commit.txt"
-done
-cp -a "$generated_root/ckks-data" "$artifact_root/provenance/ckks-data"
-test -s "$generated_root/hmul-data/producer_commit.txt"
-cp -a "$generated_root/hmul-data" "$artifact_root/provenance/hmul-data"
-test -s "$generated_root/application-data/bfv_multiply_modswitch_application/producer_commit.txt"
-test -s "$generated_root/application-data/bfv_rotation_application/producer_commit.txt"
-test -s "$generated_root/application-data/bgv_plain_chain/producer_commit.txt"
-test -s "$generated_root/application-data/bgv_rotate_chain/producer_commit.txt"
-test -s "$generated_root/application-data/bgv_multiply_chain/producer_commit.txt"
-for application_case in bfv_rotation_application bgv_plain_chain bgv_rotate_chain \
-                        bgv_multiply_chain; do
-  cmp -s "$generated_root/application-data/bfv_multiply_modswitch_application/producer_commit.txt" \
-    "$generated_root/application-data/$application_case/producer_commit.txt"
-done
+test -s "$generated_root/application-data/PRODUCER_COMMIT"
+while IFS=$'\t' read -r case_id stem scheme degree role source; do
+  [[ $case_id == case_id ]] && continue
+  cmp -s "$generated_root/application-data/PRODUCER_COMMIT" \
+    "$generated_root/application-data/$stem/producer_commit.txt"
+done < "$test_root/scheme-cases.tsv"
 cp -a "$generated_root/application-data" "$artifact_root/provenance/application-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
@@ -322,20 +304,24 @@ cp "$test_root/docs/CKKS_APPLICATIONS.md" "$test_root/docs/CMB001_RUNTIME_NOTES.
   "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/BFV_APPLICATIONS.md" "$test_root/docs/BGV_APPLICATIONS.md" \
   "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/SCHEME_DELIVERY_V1.md" "$test_root/docs/CMB004_CMB012_FAILURE_ANALYSIS.md" \
+  "$artifact_root/provenance/testplan/docs/"
+cp -a "$test_root/tools/hpu-scheme-cases" "$artifact_root/provenance/testplan/generators"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
-cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$artifact_root/provenance/testplan/"
+cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$test_root/scheme-cases.tsv" \
+  "$test_root/case-aliases.tsv" "$artifact_root/provenance/testplan/"
 if [[ -n $case_filter ]]; then
   selection="case:$case_filter"
   expected_cases=1
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=67 ;;
+    all) expected_cases=83 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=20 ;;
-    diagnostic) expected_cases=20 ;;
+    fhe) expected_cases=36 ;;
+    diagnostic) expected_cases=34 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then
@@ -360,9 +346,9 @@ fi
   printf 'fhe_count=%u\n' "${group_counts[fhe]}"
   printf 'not_qualified_count=%u\n' "$not_qualified_count"
   printf 'inline_asm_commit=%s\n' "$(<"$mm_delivery_source/PRODUCER_COMMIT")"
-  printf 'hpu_seal_commit=%s\n' "$(<"$generated_root/hadd-data/producer_commit.txt")"
+  printf 'hpu_seal_commit=%s\n' "$(<"$generated_root/application-data/PRODUCER_COMMIT")"
   printf 'hpu_applications_commit=%s\n' \
-    "$(<"$generated_root/application-data/bgv_plain_chain/producer_commit.txt")"
+    "$(<"$generated_root/application-data/PRODUCER_COMMIT")"
 } > "$artifact_root/MANIFEST.txt"
 
 EXPECTED_CASES=$expected_cases CROSS_COMPILE="$cross_compile" \

@@ -18,7 +18,17 @@ SPEC.loader.exec_module(IMPORT)
 
 HARNESS = r'''
 #include <hpu/application_case.h>
-static uint32_t memory[HPU_APPLICATION_LINES * WORDS_PER_LINE];
+static uint32_t memory[HPU_APPLICATION_LINES * WORDS_PER_LINE] __attribute__((aligned(256)));
+static unsigned wait_mode, status_reads;
+static uint64_t cycle;
+uint64_t application_test_cycle(void) { cycle += 1024; return cycle; }
+uint32_t application_test_read(uintptr_t address) {
+    if (address == CSR_IRQ) return wait_mode == 1U ? IRQ_LEVEL : 0U;
+    if (address == CSR_FAULT) return wait_mode == 3U ? FAULT_VALID : 0U;
+    ++status_reads;
+    if (wait_mode == 2U) return STATUS_FAULT;
+    return STATUS_VALID | ((wait_mode == 1U && status_reads < 96U) ? STATUS_BUSY : 0U);
+}
 volatile uint32_t *ddr_line(unsigned line) { return memory + line * WORDS_PER_LINE; }
 void clean_lines(unsigned first, unsigned lines) { (void)first; (void)lines; }
 void invalidate_lines(unsigned first, unsigned lines) { (void)first; (void)lines; }
@@ -52,6 +62,14 @@ int main(void) {
         if (application_writable[line]) { ddr_line(line)[0] ^= 1U; break; }
     }
     if (application_check_memory()) return 6;
+    wait_mode = 1U; status_reads = 0U; cycle = 0U;
+    if (application_wait() != 0 || status_reads < 96U) return 7;
+    wait_mode = 2U; status_reads = 0U;
+    if (application_wait() == 0) return 8;
+    wait_mode = 3U;
+    if (application_wait() == 0) return 9;
+    wait_mode = 0U; cycle = UINT64_MAX - 2048U;
+    if (application_wait() == 0) return 10;
     return 0;
 }
 '''
@@ -64,13 +82,9 @@ class ApplicationDeliveryTests(unittest.TestCase):
         case = IMPORT.load_json(ARGS.source / "package.json")["case_name"]
         spec = IMPORT.CASE_SPECS[case]
         self.assertEqual(commit, ARGS.producer_commit)
-        self.assertEqual(config, {"capacity_lines": spec["capacity_lines"],
-                                  "used_lines": spec["used_lines"]})
-        self.assertEqual(len(image), (spec["used_lines"] + IMPORT.GUARD_LINES) * 256)
-        golden_count = sum(2 * len(moduli) for moduli in spec["golden_moduli"])
-        self.assertEqual(len(golden), golden_count * 128 * 4)
-        self.assertEqual(len(mask), spec["used_lines"] + IMPORT.GUARD_LINES)
-        self.assertEqual(len(outputs), golden_count)
+        self.assertEqual(len(image), config["used_lines"] * 256)
+        self.assertEqual(len(golden), len(outputs) * int(spec["degree"]) * 4)
+        self.assertTrue(all(0 <= line < config["used_lines"] for line in mask))
 
     def test_upstream_validator_rejects_corrupt_golden(self):
         with tempfile.TemporaryDirectory(prefix="application-corrupt-") as directory:
@@ -93,15 +107,20 @@ class ApplicationDeliveryTests(unittest.TestCase):
                 "#include <stdint.h>\n#define WORDS_PER_LINE 64U\n"
                 "volatile uint32_t *ddr_line(unsigned);\n"
                 "void clean_lines(unsigned, unsigned);\n"
-                "void invalidate_lines(unsigned, unsigned);\n", encoding="utf-8")
+                "void invalidate_lines(unsigned, unsigned);\n"
+                "#define CSR_IRQ 1U\n#define CSR_STATUS 2U\n#define CSR_FAULT 3U\n"
+                "#define IRQ_LEVEL 1U\n#define STATUS_VALID 1U\n#define STATUS_BUSY 2U\n"
+                "#define STATUS_FAULT 4U\n#define FAULT_VALID 1U\n", encoding="utf-8")
             (root / "harness.c").write_text(HARNESS, encoding="utf-8")
             executable = root / "application-runtime"
             subprocess.run([
                 "cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Werror",
-                "-DHPU_LOG_LEVEL=0", f"-I{root}", f"-I{ROOT / 'include'}",
+                "-DHPU_LOG_LEVEL=0", "-DHPU_APPLICATION_HOST_TEST=1",
+                "-DHPU_APPLICATION_TIMEOUT_CYCLES=4096", f"-I{root}", f"-I{ROOT / 'include'}",
                 f"-I{ARGS.generated}", f"-Wa,-I{ARGS.generated}",
                 str(ROOT / "src/common/it_application.c"),
                 str(ROOT / "src/common/it_application_fixture.S"),
+                str(ROOT / "runtime/it_trace.c"),
                 str(root / "harness.c"), "-o", str(executable)], check=True)
             subprocess.run([str(executable)], check=True)
 

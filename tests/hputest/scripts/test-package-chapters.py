@@ -66,7 +66,7 @@ class ChapterPackageTests(unittest.TestCase):
 
     def test_merge_groups_into_one_chapter(self):
         self.fixture([self.row(), self.row("HPU_IT_DIR_INS_C0_005", "transform"),
-                      self.row("HPU_IT_DIR_CMB_004", "fhe", chapter="04_composite_instruction_sequences")])
+                      self.row("HPU_IT_DIR_CMB_004_CKKS_KEYSWITCH_N4096", "fhe", chapter="04_composite_instruction_sequences")])
         release = PACKAGER.package(self.artifact)
         self.assertEqual(release, self.root / "release")
         self.assertTrue((release / "03_compute_instructions/01_basic/HPU_IT_DIR_INS_C0_001.elf").is_file())
@@ -155,21 +155,15 @@ class ChapterPackageTests(unittest.TestCase):
         self.assertEqual(len(list((release / "03_compute_instructions").rglob("*.elf"))), 9)
 
     def diagnostic_rows(self):
-        return [self.row(f"HPU_IT_DIR_INS_C0_{i:03d}",
-                         "transform" if i in (5, 6) else "core")
-                for i in range(1, 10)] + [
-            self.row(f"HPU_IT_DIR_CMB_{i:03d}", "transform" if i < 4 else "fhe",
-                     chapter="04_composite_instruction_sequences")
-            for i in range(1, 6)] + [
-            self.row(f"HPU_IT_DIR_CMB_{i:03d}", "fhe",
-                     chapter="04_composite_instruction_sequences")
-            for i in (9, 10, 12, 13, 14)]
+        return [self.row(case_id, chapter="03_compute_instructions" if "_INS_" in case_id
+                         else "04_composite_instruction_sequences")
+                for case_id in sorted(PACKAGER.DIAGNOSTIC_IDS)]
 
-    def test_diagnostic_publishes_nineteen_full_uart_cases(self):
+    def test_diagnostic_publishes_all_ready_03_04_full_uart_cases(self):
         self.fixture(self.diagnostic_rows(), selection="diagnostic",
                      uart_results="full", dump_results="1")
         release = PACKAGER.package(self.artifact, require_diagnostic=True)
-        self.assertEqual(len(list(release.rglob("*.elf"))), 19)
+        self.assertEqual(len(list(release.rglob("*.elf"))), 34)
         self.assertEqual({row["case_id"] for row in self.index(release)},
                          PACKAGER.DIAGNOSTIC_IDS)
         self.assertTrue(all("全量 UART" in row["notes"] for row in self.index(release)))
@@ -196,22 +190,22 @@ class ChapterPackageTests(unittest.TestCase):
     def test_diagnostic_rejects_missing_case(self):
         self.fixture(self.diagnostic_rows()[:-1], selection="diagnostic",
                      uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the nineteen"):
+        with self.assertRaisesRegex(ValueError, "exactly the 34"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_diagnostic_rejects_blocked_placeholder(self):
         rows = self.diagnostic_rows()
         rows[-1]["qualifier"] = "blocked-not-issued"
         self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the nineteen"):
+        with self.assertRaisesRegex(ValueError, "exactly the 34"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_diagnostic_rejects_wrong_chapter(self):
         rows = self.diagnostic_rows()
-        rows[-1] = self.row("HPU_IT_DIR_CMB_014", "fhe",
+        rows[-1] = self.row(rows[-1]["case_id"], rows[-1]["group"],
                             chapter="00_bringup")
         self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the nineteen"):
+        with self.assertRaisesRegex(ValueError, "exactly the 34"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_uart_macro_and_metadata_must_agree(self):
