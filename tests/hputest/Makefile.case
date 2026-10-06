@@ -92,7 +92,7 @@ ifneq ($(filter %/HPU_IT_DIR_INS_C0_008.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_irq.c
 endif
 ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c %/HPU_IT_DIR_CMB_003_INTT_N4096.c \
-                %/HPU_IT_DIR_PERF_002.c,$(CASE_SOURCE)),)
+                %/HPU_IT_DIR_PERF_002.c %/HPU_IT_DIR_PERF_003.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/it_transform.c
 SRCS += $(TEST_ROOT)/src/common/it_transform_fixture.S
 INC_DIR += $(HPU_GENERATED_ROOT)/transform-data
@@ -100,7 +100,7 @@ endif
 ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c %/HPU_IT_DIR_PERF_002.c,$(CASE_SOURCE)),)
 SRCS += $(HPU_GENERATED_ROOT)/transform-data/ntt/ntt.c
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_003_INTT_N4096.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_003_INTT_N4096.c %/HPU_IT_DIR_PERF_003.c,$(CASE_SOURCE)),)
 SRCS += $(HPU_GENERATED_ROOT)/transform-data/intt/intt.c
 endif
 ifneq ($(filter %/HPU_IT_DIR_CMB_001_BCONV_Q4_TO_P3_N4096.c,$(CASE_SOURCE)),)

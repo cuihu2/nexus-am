@@ -6,12 +6,12 @@ IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 2026-10-04 main v1更新、三算法差异、CMB004/CMB012修复及精度测量见
-[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。83项中68项软件自检、
-12项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
+[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。83项中69项软件自检、
+11项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
 `scheme-cases.tsv`明确算法/操作/规模，`case-aliases.tsv`映射旧编号。
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续72项中60项有软件自检，12项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续72项中61项有软件自检，11项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -321,10 +321,10 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-60个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
+61个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
 LEGACY Auto与三算法KeySwitch/HADD/HMUL/Reline/降层/旋转，07包含八个完整应用。
-PERF002复用CMB002的N4096/Q0交付，逐轮比较CPU参考NTT与HPU结果并报告cycle。
-实际算法、参数和程序对应见`scheme-cases.tsv`。其它12项未接入，原因逐项记录于
+PERF002/003分别复用CMB002/003的N4096/Q0交付，逐轮比较CPU参考NTT/INTT与HPU结果并报告cycle。
+实际算法、参数和程序对应见`scheme-cases.tsv`。其它11项未接入，原因逐项记录于
 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
 上游“没有数据”。CMB_009/010/012/013/014均验收固定main分支的HPU-SEAL API；基础
 PADD/PMUL覆盖仍保留在03-001/003。
@@ -393,7 +393,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共99个已发布测试身份、198组ELF/BIN/TXT；12项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共100个已发布测试身份、200组ELF/BIN/TXT；11项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

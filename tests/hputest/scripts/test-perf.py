@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host-test PERF timing and the CPU NTT reference against generated delivery."""
+"""Host-test PERF timing and CPU NTT/INTT references against generated delivery."""
 
 import os
 from pathlib import Path
@@ -10,8 +10,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WINDOW = ROOT / "build/generated/transform-data/ntt/window.u32.bin"
-GOLDEN = ROOT / "build/generated/transform-data/ntt/golden.u32.bin"
+NTT_WINDOW = ROOT / "build/generated/transform-data/ntt/window.u32.bin"
+NTT_GOLDEN = ROOT / "build/generated/transform-data/ntt/golden.u32.bin"
+INTT_WINDOW = ROOT / "build/generated/transform-data/intt/window.u32.bin"
+INTT_GOLDEN = ROOT / "build/generated/transform-data/intt/golden.u32.bin"
 HARNESS = r'''
 #include <assert.h>
 #include <limits.h>
@@ -21,7 +23,7 @@ HARNESS = r'''
 #include <hpu/ntt_reference.h>
 #include <hpu/perf.h>
 
-enum { WINDOW_WORDS = 640 * 64, INPUT_WORD = 1 * 64, TWIST_WORD = 130 * 64 };
+enum { WINDOW_WORDS = 640 * 64, INPUT_WORD = 1 * 64, FACTOR_WORD = 130 * 64 };
 
 static unsigned enabled, sampled;
 static uint64_t cycles[] = {100U, 175U};
@@ -42,9 +44,10 @@ static void read_words(const char *path, uint32_t *words, size_t count) {
 
 int main(int argc, char **argv) {
     struct perf_samples values;
-    static struct hpu_ntt_reference reference;
-    static uint32_t window[WINDOW_WORDS], golden[HPU_NTT_REFERENCE_N];
-    assert(argc == 3);
+    static struct hpu_ntt_reference ntt_reference, intt_reference;
+    static uint32_t ntt_window[WINDOW_WORDS], ntt_golden[HPU_NTT_REFERENCE_N];
+    static uint32_t intt_window[WINDOW_WORDS], intt_golden[HPU_NTT_REFERENCE_N];
+    assert(argc == 5);
     perf_cycle_enable();
     assert(perf_cycle_read() == 100U);
     assert(perf_cycle_read() == 175U);
@@ -63,12 +66,19 @@ int main(int argc, char **argv) {
     assert(perf_samples_record(&values, 0U) == 1);
     perf_samples_report("CASE", "cpu-compute", &values);
 
-    read_words(argv[1], window, WINDOW_WORDS);
-    read_words(argv[2], golden, HPU_NTT_REFERENCE_N);
-    assert(hpu_ntt_reference_prepare(&reference, window + INPUT_WORD,
-                                     window + TWIST_WORD, 50061313U) == 0);
-    hpu_ntt_reference_run(&reference);
-    assert(memcmp(reference.output, golden, sizeof(golden)) == 0);
+    read_words(argv[1], ntt_window, WINDOW_WORDS);
+    read_words(argv[2], ntt_golden, HPU_NTT_REFERENCE_N);
+    assert(hpu_ntt_reference_prepare(&ntt_reference, ntt_window + INPUT_WORD,
+                                     ntt_window + FACTOR_WORD, 50061313U) == 0);
+    hpu_ntt_reference_run(&ntt_reference);
+    assert(memcmp(ntt_reference.output, ntt_golden, sizeof(ntt_golden)) == 0);
+
+    read_words(argv[3], intt_window, WINDOW_WORDS);
+    read_words(argv[4], intt_golden, HPU_NTT_REFERENCE_N);
+    assert(hpu_intt_reference_prepare(&intt_reference, intt_window + INPUT_WORD,
+                                      intt_window + FACTOR_WORD, 50061313U) == 0);
+    hpu_intt_reference_run(&intt_reference);
+    assert(memcmp(intt_reference.output, intt_golden, sizeof(intt_golden)) == 0);
     return 0;
 }
 '''
@@ -100,7 +110,8 @@ class PerfTests(unittest.TestCase):
 
     def test_sampling_statistics_and_report(self):
         result = subprocess.run(
-            [str(self.executable), str(WINDOW), str(GOLDEN)],
+            [str(self.executable), str(NTT_WINDOW), str(NTT_GOLDEN),
+             str(INTT_WINDOW), str(INTT_GOLDEN)],
             check=True, capture_output=True, text=True
         )
         self.assertIn("metric=cpu-compute round=0 cycles=100", result.stdout)

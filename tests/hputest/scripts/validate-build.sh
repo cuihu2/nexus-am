@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 83 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 36 || $roster_migrated -ne 72 || \
-      $roster_migrated_software -ne 60 || $roster_migrated_blocked -ne 12 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 68 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 12 || \
+      $roster_migrated_software -ne 61 || $roster_migrated_blocked -ne 11 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 69 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 11 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -926,6 +926,7 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_002_NTT_N4096 && \
             $name != HPU_IT_DIR_CMB_003_INTT_N4096 && \
             $name != HPU_IT_DIR_PERF_002 && \
+            $name != HPU_IT_DIR_PERF_003 && \
             $name != HPU_IT_DIR_CMB_004_CKKS_KEYSWITCH_N4096 && \
             $name != HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096 && \
             $name != HPU_IT_DIR_CMB_009_BFV_HADD_N4096 && \
@@ -969,9 +970,9 @@ for elf in "${elfs[@]}"; do
       require_stage_fixture "$elf" "$txt" ntt ;;
     HPU_IT_DIR_INS_C0_006)
       require_stage_fixture "$elf" "$txt" intt ;;
-    HPU_IT_DIR_CMB_002_NTT_N4096|HPU_IT_DIR_PERF_002|HPU_IT_DIR_CMB_003_INTT_N4096)
+    HPU_IT_DIR_CMB_002_NTT_N4096|HPU_IT_DIR_PERF_002|HPU_IT_DIR_CMB_003_INTT_N4096|HPU_IT_DIR_PERF_003)
       operator=ntt
-      [[ $name == HPU_IT_DIR_CMB_003_INTT_N4096 ]] && operator=intt
+      [[ $name == HPU_IT_DIR_CMB_003_INTT_N4096 || $name == HPU_IT_DIR_PERF_003 ]] && operator=intt
       python3 "$script_dir/verify-operator-elf.py" \
         --delivery "$artifact_root/provenance/transform-data/$operator" \
         --elf "$elf" --disassembly "$txt" --operator "$operator" ;;
