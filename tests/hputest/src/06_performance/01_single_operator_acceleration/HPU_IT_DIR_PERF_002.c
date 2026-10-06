@@ -18,7 +18,7 @@
 #error "HPU_PERF_MEASURE_ROUNDS must be in [2, HPU_PERF_MAX_SAMPLES]"
 #endif
 
-#define CASE_ID "HPU_IT_DIR_PERF_002"
+static const char k_case_id[] = "HPU_IT_DIR_PERF_002";
 
 _Static_assert((unsigned)TRANSFORM_N == (unsigned)HPU_NTT_REFERENCE_N,
                "PERF002 reference and transform delivery size differ");
@@ -111,11 +111,11 @@ int main(void) {
     }
 
     phase_mark("report");
-    perf_samples_report(CASE_ID, "cpu-compute", &cpu_samples);
-    perf_samples_report(CASE_ID, "hpu-submit-to-done", &hpu_samples);
+    perf_samples_report(k_case_id, "cpu-compute", &cpu_samples);
+    perf_samples_report(k_case_id, "hpu-submit-to-done", &hpu_samples);
     LOG_EVENT("[HPU][PERF][SPEEDUP] case=%s numerator=cpu-compute "
               "denominator=hpu-submit-to-done x1000=%lu threshold=none\n",
-              CASE_ID, (unsigned long)perf_speedup_x1000(
+              k_case_id, (unsigned long)perf_speedup_x1000(
                   perf_samples_average(&cpu_samples),
                   perf_samples_average(&hpu_samples)));
     LOG_EVENT("[HPU][PERF][SCOPE] hpu-pure-compute=NOT_MEASURED "
