@@ -925,6 +925,7 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_CMB_001_BCONV_Q4_TO_P3_N4096 && \
             $name != HPU_IT_DIR_CMB_002_NTT_N4096 && \
             $name != HPU_IT_DIR_CMB_003_INTT_N4096 && \
+            $name != HPU_IT_DIR_PERF_002 && \
             $name != HPU_IT_DIR_CMB_004_CKKS_KEYSWITCH_N4096 && \
             $name != HPU_IT_DIR_CMB_005_LEGACY_AUTO_N4096 && \
             $name != HPU_IT_DIR_CMB_009_BFV_HADD_N4096 && \
@@ -968,7 +969,7 @@ for elf in "${elfs[@]}"; do
       require_stage_fixture "$elf" "$txt" ntt ;;
     HPU_IT_DIR_INS_C0_006)
       require_stage_fixture "$elf" "$txt" intt ;;
-    HPU_IT_DIR_CMB_002_NTT_N4096|HPU_IT_DIR_CMB_003_INTT_N4096)
+    HPU_IT_DIR_CMB_002_NTT_N4096|HPU_IT_DIR_PERF_002|HPU_IT_DIR_CMB_003_INTT_N4096)
       operator=ntt
       [[ $name == HPU_IT_DIR_CMB_003_INTT_N4096 ]] && operator=intt
       python3 "$script_dir/verify-operator-elf.py" \
