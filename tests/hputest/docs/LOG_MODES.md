@@ -10,12 +10,14 @@
 | HPU_LOG_LEVEL | HPU_DUMP_RESULTS | 行为 |
 | --- | --- | --- |
 | 0（silent） | 0 | 不打印；跳过AM串口初始化和输出；只保留原返回码与仿真结束指令 |
-| 1（minimal，默认） | 0 | HPU开始/最终PASS或FAIL；失败结果每块仅首错及总错误数；不打印成功系数/每轮阶段 |
+| 1（minimal，默认） | 0 | HPU开始/最终PASS或FAIL；失败结果每块仅首错及总错误数；性能例外输出逐轮cycle及汇总，不打印其它用例的成功系数/每轮阶段 |
 | 2（verbose） | 0 | 详细配置/阶段/受限结果诊断，主要用于定位错误 |
 | 2（verbose） | 1 | 完整BEGIN/DATA/END逐项输出，最慢，仅按需使用 |
 
 最小版仍可能有少量公共AM启动日志；完全不需要UART时请选择silent。
-minimal/silent不再采样阶段cycle或写`mcounteren.CY`，也不计算只用于详细误差报告的差值除法。
+除06性能用例为度量工作显式读取cycle外，minimal/silent不再采样通用阶段cycle或写
+`mcounteren.CY`，也不计算只用于详细误差报告的差值除法。性能用例的silent版本仍执行
+同样的计时与正确性检查，但不经UART输出统计；应使用同构建的minimal版本读取数值。
 它们仍逐项读取并精确比较结果，不能把输出先取模或放宽误差来制造PASS。
 
 关闭的日志不求值实参；原报告的block递增已移出日志参数，避免静默后漏更新软件状态。
@@ -25,7 +27,7 @@ minimal/silent不再采样阶段cycle或写`mcounteren.CY`，也不计算只用�
 
 GitHub Actions只发布一个`nexus-am-hpu-tests`。普通minimal版本保留原文件名，真正无printf的
 版本在扩展名前加`_silent`，例如`foo.elf`和`foo_silent.elf`。03只发布37个独立子项，
-不发布原九个串行整例；其它章节使用原workload。13项未接入用例仍不发布占位二进制。
+不发布原九个串行整例；其它章节使用原workload。12项未接入用例仍不发布占位二进制。
 
 `INDEX.tsv`记录每个文件的`variant/log_mode/uart_results`。各模式仍先在独立构建目录完成
 静态验证，再由组包器核对revision、producer、清单和文件集合后合并，防止混用。

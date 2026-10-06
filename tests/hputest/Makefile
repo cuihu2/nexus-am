@@ -111,6 +111,7 @@ verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-log.py
 	@python3 scripts/test-verify-silent-elf.py
 	@python3 scripts/test-progress.py
+	@python3 scripts/test-perf.py
 	@python3 scripts/test-subtest-support.py
 	@python3 scripts/test-build-log-modes.py
 	@python3 scripts/test-run-subtests.py

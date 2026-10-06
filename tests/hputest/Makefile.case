@@ -17,6 +17,8 @@ HPU_GENERATED_ROOT ?= $(TEST_ROOT)/build/generated
 HPU_DUMP_RESULTS ?= 0
 HPU_LOG_LEVEL ?= 1
 HPU_APPLICATION_TIMEOUT_CYCLES ?= 25000000
+HPU_PERF_WARMUP_ROUNDS ?= 1
+HPU_PERF_MEASURE_ROUNDS ?= 3
 ifeq ($(filter $(HPU_LOG_LEVEL),0 1 2),)
 $(error HPU_LOG_LEVEL must be 0, 1, or 2)
 endif
@@ -89,12 +91,13 @@ endif
 ifneq ($(filter %/HPU_IT_DIR_INS_C0_008.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_irq.c
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c %/HPU_IT_DIR_CMB_003_INTT_N4096.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c %/HPU_IT_DIR_CMB_003_INTT_N4096.c \
+                %/HPU_IT_DIR_PERF_002.c,$(CASE_SOURCE)),)
 SRCS += $(TEST_ROOT)/src/common/it_transform.c
 SRCS += $(TEST_ROOT)/src/common/it_transform_fixture.S
 INC_DIR += $(HPU_GENERATED_ROOT)/transform-data
 endif
-ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c,$(CASE_SOURCE)),)
+ifneq ($(filter %/HPU_IT_DIR_CMB_002_NTT_N4096.c %/HPU_IT_DIR_PERF_002.c,$(CASE_SOURCE)),)
 SRCS += $(HPU_GENERATED_ROOT)/transform-data/ntt/ntt.c
 endif
 ifneq ($(filter %/HPU_IT_DIR_CMB_003_INTT_N4096.c,$(CASE_SOURCE)),)
@@ -146,6 +149,8 @@ CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -DHPU_DUMP_RESULTS=$(HPU_DUMP_RESULTS) \
           -DHPU_LOG_LEVEL=$(HPU_LOG_LEVEL) \
           -DHPU_APPLICATION_TIMEOUT_CYCLES=$(HPU_APPLICATION_TIMEOUT_CYCLES) -include hpu/log.h \
+          -DHPU_PERF_WARMUP_ROUNDS=$(HPU_PERF_WARMUP_ROUNDS) \
+          -DHPU_PERF_MEASURE_ROUNDS=$(HPU_PERF_MEASURE_ROUNDS) \
           -ffile-prefix-map=$(TEST_ROOT)=tests/hputest \
           -fmacro-prefix-map=$(TEST_ROOT)=tests/hputest \
           -ffile-prefix-map=$(INLINE_ASM_ROOT)=inline-asm \

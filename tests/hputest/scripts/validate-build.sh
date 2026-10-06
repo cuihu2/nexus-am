@@ -87,9 +87,9 @@ done < <(tail -n +2 "$roster")
 if [[ ${#roster_ids[@]} -ne 83 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
       ${roster_group_counts[fhe]} -ne 36 || $roster_migrated -ne 72 || \
-      $roster_migrated_software -ne 59 || $roster_migrated_blocked -ne 13 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 67 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 13 || \
+      $roster_migrated_software -ne 60 || $roster_migrated_blocked -ne 12 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 68 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 12 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then

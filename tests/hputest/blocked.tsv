@@ -6,7 +6,6 @@ HPU_IT_DIR_STR_003	缺项目异常/特权入口与提交 monitor，无法用普�
 HPU_IT_DIR_STR_004	缺可重复的外部事件注入和队列/提交观测接口，不能通过扩大 timeout 代替。
 HPU_IT_STING_STR_005	缺 STING 入口、参考执行模型和错误路径/异常注入契约。
 HPU_IT_DIR_PERF_001	缺匹配的 CPU/HPU RelinOnly 实现、评估数据、统一纯计算计时边界与重复轮数。
-HPU_IT_DIR_PERF_002	功能实现见 CMB_002；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。
 HPU_IT_DIR_PERF_003	功能实现见 CMB_003；性能仍缺统一纯计算计数入口/边界与确认的 CPU 基线、轮数。
 HPU_IT_DIR_PERF_004	缺 AM BConv 完整接收和相同输入/参数的 CPU 对照、纯计算计数边界与轮数。
 HPU_IT_DIR_PERF_005	KeySwitch 数据绑定已完成；尚缺功能用例运行验证、匹配 CPU 基线、纯计算计数边界与轮数。

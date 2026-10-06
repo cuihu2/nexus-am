@@ -1,8 +1,8 @@
 # v2 测试点落实范围与运行说明
 
 依据 `HPU-IT测试点分解v2.xlsx` 的原用例 ID，以及本轮提供的功能、边界、性能、CPU 回归要求更新。
-**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 72 个后续用例中，59 个具备软件自检；
-13 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
+**本次不是“全部测试点已完成”或“全部 IT 已通过”。** 72 个后续用例中，60 个具备软件自检；
+12 个尚未接入，只保留原因和源码，不在下载包发布占位二进制。具体缺口见 `../blocked.tsv`。
 部分软件自检仅覆盖一个基础参数组合，不能等同整个测试点全部覆盖。
 `00_bringup` 的指令流程和数据保持不变，本次只增加统一日志开关；RTL未改。既有生产者仍为
 inline-asm legacy-main `6903096`；三算法算子和八个应用统一使用main `c11dfe2`的
@@ -119,9 +119,9 @@ modified-SEAL密文oracle和HPU_SEAL software executor三重host检查。
 
 ## 6. 性能、完整应用、CPU回归
 
-性能与CPU回归仍未完成；完整应用已有APP002/003/004/005/006/007/008七个基础参数用例，但不等于该章节全部验收。
+性能与CPU回归尚未全部完成；完整应用已有APP002/003/004/005/006/007/008七个基础参数用例，但不等于该章节全部验收。
 
-- 性能6项：NTT、INTT、BConv、KeySwitch、密文乘法、RelinOnly保留原ID。需固定同输入/参数/精度、CPU基线、统一计数入口、纯计算/端到端边界及轮数；逐轮先验结果再报告cycle、均值/最小/最大/波动，按CPU/HPU计算speedup。CPU从发令到PSYNC的时间不能标成HPU纯计算时间。
+- 性能6项保留原ID。PERF002已复用CMB002的N4096/Q0输入、程序和golden，实现1轮warm-up及默认3轮CPU参考NTT/HPU submit-to-done计时；逐轮先验结果，再报告cycle、均值、最小、最大、波动和比值。该HPU指标包含发令、DMA、反压与等待，明确不称为HPU纯计算cycle；纯计算仍须RTL monitor。INTT、BConv、KeySwitch、密文乘法和RelinOnly尚需按同一契约接入。
 - APP001：当前表仅一个应用项，用户新增了A*B+C和向量规约两种要求；还需确认真实FHE密文语义及库接口/密钥/精度。当前两者均未实现，不能以普通整数乘加代替FHE应用。
 - APP002/003：分别执行CKKS多项式和组合应用，生成阶段由SEAL检查密文/解密语义，目标端精确比较最终物理RNS字并保护只读区/guard。
 - APP004：执行BFV `Multiply+Relinearize -> ModSwitch -> AddPlain(3)`，N=128、Q3→Q2、2 components；4434指令/1835 DMA。application package v1生成时要求modified-SEAL真值与`BfvSoftwareExecutor`的14个逐阶段limb完全一致；AM毒化全部输出并逐字检查顶层乘法、降层和加明文结果，以及输入/密钥/常量和64-line guard。仍需真实IT/VCS运行和其它参数/level/边界组合。
@@ -134,8 +134,8 @@ modified-SEAL密文oracle和HPU_SEAL software executor三重host检查。
 ## 7. 下载和复验
 
 GitHub Actions的唯一HPU产物名为`nexus-am-hpu-tests`，内部是00至07章节目录和`INDEX.tsv`。
-03用37个独立subtest替换九个串行整例，其余章节保留45组非占位workload；每项同时提供普通和
-`_silent`版本，共164组ELF/BIN/反汇编。13项未就绪只列原因，不夹在可运行列表中。
+03用37个独立subtest替换九个串行整例，其余章节保留62组非占位workload；每项同时提供普通和
+`_silent`版本，共198组ELF/BIN/反汇编。12项未就绪只列原因，不夹在可运行列表中。
 `provenance/`保留固定producer版本、实际指令、DMA/数据布局和本说明。
 新用例需要更多初始化、逐项golden和guard扫描，不承诺100万cycle一定足够；由IT测定预算并保存原始超时日志。
 失败回传至少包含case ID、AM/producer/RTL/simv版本、cycle-limit、最后阶段、首错日志和对应波形。
