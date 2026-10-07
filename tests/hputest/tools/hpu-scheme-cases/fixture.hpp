@@ -17,10 +17,12 @@ struct Fixture {
     seal::Ciphertext left, right, input, tensor, expected;
     std::string scheme, operation, stem;
     std::size_t degree;
+    int rotation_steps;
     std::filesystem::path directory;
 
-    Fixture(std::string s, std::string op, std::size_t n, std::filesystem::path out, int scale_bits=30)
-        : scheme(s), operation(op), degree(n), directory(std::move(out)) {
+    Fixture(std::string s, std::string op, std::size_t n, std::filesystem::path out,
+            int scale_bits=30, int rotate_steps=1, bool nontrivial_bgv_cf=true)
+        : scheme(s), operation(op), degree(n), rotation_steps(rotate_steps), directory(std::move(out)) {
         if (n < 128 || n > 65536 || (n & (n - 1)))
             throw std::invalid_argument("degree must be a power of two in [128,65536]");
         const auto type = scheme == "ckks" ? seal::scheme_type::ckks :
@@ -39,7 +41,7 @@ struct Fixture {
         if (!context->parameters_set()) throw std::runtime_error(context->parameter_error_message());
         keys = std::make_unique<seal::KeyGenerator>(*context);
         if (op == "keyswitch" || op == "reline" || op == "hmul") keys->create_relin_keys(relin);
-        if (op == "rotate") keys->create_galois_keys(std::vector<int>{1}, galois);
+        if (op == "rotate") keys->create_galois_keys(std::vector<int>{rotation_steps}, galois);
         seal::Plaintext a, b;
         if (scheme == "ckks") {
             seal::CKKSEncoder encoder(*context);
@@ -54,7 +56,7 @@ struct Fixture {
         }
         seal::Encryptor encryptor(*context, keys->secret_key());
         encryptor.encrypt_symmetric(a, left); encryptor.encrypt_symmetric(b, right);
-        if (scheme == "bgv") {
+        if (scheme == "bgv" && nontrivial_bgv_cf) {
             // 非平凡 cf，避免把 BGV 误测成 CKKS 的逐点算术。
             const auto t = parameters.plain_modulus().value();
             for (auto *ciphertext : {&left, &right}) {
@@ -86,8 +88,8 @@ struct Fixture {
             if (scheme == "ckks") evaluator.rescale_to_next(input, expected);
             else evaluator.mod_switch_to_next(input, expected);
         } else if (op == "rotate") {
-            if (scheme == "ckks") evaluator.rotate_vector(input, 1, galois, expected);
-            else evaluator.rotate_rows(input, 1, galois, expected);
+            if (scheme == "ckks") evaluator.rotate_vector(input, rotation_steps, galois, expected);
+            else evaluator.rotate_rows(input, rotation_steps, galois, expected);
         } else throw std::invalid_argument("unknown operation");
         stem = scheme + "_" + op + "_n" + std::to_string(n);
         if (scale_bits != 30) stem += "_scale" + std::to_string(scale_bits);

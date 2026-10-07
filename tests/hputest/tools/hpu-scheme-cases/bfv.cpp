@@ -41,14 +41,14 @@ void generate_bfv(Fixture &f) {
         output = plan.append_mod_switch("tested", input, modswitch, "output");
     } else {
         tables = builder.add_canonical_twiddles();
-        key = builder.add_row_rotation_key("key/rotate", f.galois, 1, level);
+        key = builder.add_row_rotation_key("key/rotate", f.galois, f.rotation_steps, level);
         constants = builder.add_keyswitch_constants("constants/keyswitch", level);
-        fused = builder.add_row_rotation_twiddles("constants/rotation", 1, level);
+        fused = builder.add_row_rotation_twiddles("constants/rotation", f.rotation_steps, level);
         workspace = builder.reserve_ciphertext("scratch/rotate", level, 2,
             hpu::runtime::PolynomialDomain::coefficient,
-            hpu::scheme::bfv::row_rotation_galois_element(f.degree, 1),
+            hpu::scheme::bfv::row_rotation_galois_element(f.degree, f.rotation_steps),
             hpu::runtime::AllocationKind::workspace);
-        output = plan.append_rotate_rows("tested", input, 1, key, constants, fused, workspace, "output");
+        output = plan.append_rotate_rows("tested", input, f.rotation_steps, key, constants, fused, workspace, "output");
     }
     builder.trim_capacity_to_used_lines();
     BfvSoftwareExecutor executor(*f.context, builder.image());
@@ -57,7 +57,7 @@ void generate_bfv(Fixture &f) {
     else if (f.operation == "keyswitch" || f.operation == "reline")
         executor.relinearize(input, key, constants, tables, output);
     else if (f.operation == "modswitch") executor.mod_switch(input, modswitch, output);
-    else executor.rotate_rows(input, 1, key, constants, fused, tables, workspace, output);
+    else executor.rotate_rows(input, f.rotation_steps, key, constants, fused, tables, workspace, output);
     const auto lowered = lower_bfv_operation_plan(plan, *f.context, true, true);
     const auto relocations = build_bfv_relocation_schedule(lowered, builder.image(), *f.context);
     if (!relocations.complete()) throw std::runtime_error("BFV unresolved DMA");

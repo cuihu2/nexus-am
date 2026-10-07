@@ -6,6 +6,7 @@ JOBS ?= 4
 INLINE_ASM_ROOT ?= $(CURDIR)/third_party/inline-asm
 HPU_SEAL_ROOT ?= $(CURDIR)/third_party/hpu-seal
 HPU_APPLICATIONS_ROOT ?= $(CURDIR)/third_party/hpu-applications
+POSEIDON_ROOT ?= $(CURDIR)/third_party/poseidon
 HPU_GENERATED_ROOT ?= $(OUTPUT_ROOT)/generated
 export mainargs
 HPU_DUMP_RESULTS ?= 0
@@ -94,9 +95,10 @@ silent-subtests:
 prepare-inline-asm-mm:
 	@scripts/prepare-inline-asm-mm.sh \
 	  "$(INLINE_ASM_ROOT)" "$(OUTPUT_ROOT)" "$(JOBS)" "$(HPU_SEAL_ROOT)" \
-	  "$(HPU_APPLICATIONS_ROOT)"
+	  "$(HPU_APPLICATIONS_ROOT)" "$(POSEIDON_ROOT)"
 
 verify-inline-asm: prepare-inline-asm-mm
+	@python3 scripts/test-poseidon-delivery.py --generated "$(HPU_GENERATED_ROOT)/application-data"
 	@HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
 	  scripts/verify-inline-asm-encodings.sh "$(INLINE_ASM_ROOT)"
 	@python3 scripts/test-mm-delivery.py "$(HPU_GENERATED_ROOT)/inline-asm/mm/mm.c"

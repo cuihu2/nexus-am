@@ -1,17 +1,21 @@
 # HPU tests for Nexus-AM
 
+05组新增真实Poseidon库API对拍：CKKS/BFV/BGV各提供N128/N4096、五类操作，共30例。
+原结构连接测试保留至08组。覆盖范围、旋转约定和构建说明见
+[POSEIDON_LIBRARY.md](docs/POSEIDON_LIBRARY.md)。
+
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
-testcases.  It contains the eleven bring-up/return probes plus the 72 migrated
+testcases.  It contains the eleven bring-up/return probes plus the 102 subsequent
 IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 2026-10-04 main v1更新、三算法差异、CMB004/CMB012修复及精度测量见
-[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。83项中69项软件自检、
+[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。113项中99项软件自检、
 11项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
 `scheme-cases.tsv`明确算法/操作/规模，`case-aliases.tsv`映射旧编号。
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续72项中61项有软件自检，11项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续102项中91项有软件自检，11项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -53,7 +57,8 @@ src/01_configuration/          # 7 migrated IT cases
 src/02_data_paths/             # 6 migrated IT cases
 src/03_compute_instructions/   # 9 migrated IT cases
 src/04_composite_instruction_sequences/ # 28 migrated IT cases
-src/05_cpu_hpu_structural_connectivity/  # 7 migrated IT cases
+src/05_poseidon_library/       # 30 Poseidon API cases: CKKS/BFV/BGV × N128/N4096
+src/08_cpu_hpu_structural_connectivity/  # 7 preserved structural cases
 src/06_performance/            # 6 migrated IT cases
 src/07_full_application/       # 9 migrated IT cases (8 active, 1 blocked)
 
@@ -66,7 +71,8 @@ runtime/                       # mechanical helpers, never whole scenarios
 third_party/
 ├── inline-asm/                 # pinned legacy-main branch, existing producer contract
 ├── hpu-seal/                   # pinned current main
-└── hpu-applications/           # pinned current main, application package v1
+├── hpu-applications/           # pinned current main, application package v1
+└── poseidon/                   # official main 961df3a, host library API oracle
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
@@ -321,7 +327,7 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-61个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
+91个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
 LEGACY Auto与三算法KeySwitch/HADD/HMUL/Reline/降层/旋转，07包含八个完整应用。
 PERF002/003分别复用CMB002/003的N4096/Q0交付，逐轮比较CPU参考NTT/INTT与HPU结果并报告cycle。
 实际算法、参数和程序对应见`scheme-cases.tsv`。其它11项未接入，原因逐项记录于
@@ -374,7 +380,7 @@ make -C tests/hputest group GROUP=fhe
 ```
 
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-83 ELF/BIN/TXT sets partitioned below `artifact/core/`,
+102 ELF/BIN/TXT sets from 113 canonical entries, partitioned below `artifact/core/`,
 `artifact/transform/`, and `artifact/fhe/`.  It also produces
 `MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, and a compact
 `provenance/inline-asm-mm/` directory containing the selected producer
@@ -391,9 +397,9 @@ make -C tests/hputest unified
 ```
 
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
-内容来自`build/unified/release/hputest/`。包内按00至07章节组织；03以37个独立subtest
+内容来自`build/unified/release/hputest/`。包内按00至08章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共100个已发布测试身份、200组ELF/BIN/TXT；11项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共130个已发布测试身份、260组ELF/BIN/TXT；11项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

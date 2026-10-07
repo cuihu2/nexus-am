@@ -19,7 +19,7 @@ QUALIFIERS = {
 CHAPTERS = {
     "00_bringup", "01_configuration", "02_data_paths",
     "03_compute_instructions", "04_composite_instruction_sequences",
-    "05_cpu_hpu_structural_connectivity", "06_performance", "07_full_application",
+    "05_poseidon_library", "08_cpu_hpu_structural_connectivity", "06_performance", "07_full_application",
 }
 with (Path(__file__).resolve().parents[1] / "cases.tsv").open() as stream:
     DIAGNOSTIC_IDS = {row["case_id"] for row in csv.DictReader(stream, delimiter="\t")

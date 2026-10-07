@@ -15,7 +15,7 @@ void generate_bgv(Fixture &f) {
     } else if (f.operation == "keyswitch" || f.operation == "reline")
         output = plan.append_relinearize("tested", input, f.relin);
     else if (f.operation == "modswitch") output = plan.append_modswitch_to_next("tested", input);
-    else output = plan.append_rotate_rows("tested", input, 1, f.galois);
+    else output = plan.append_rotate_rows("tested", input, f.rotation_steps, f.galois);
     plan.set_output(output);
     const auto application = plan.lower(16777216);
     BgvSoftwareExecutor executor(*f.context, application.image);

@@ -86,7 +86,7 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   if [[ ! $group =~ ^(core|transform|fhe)$ ]] || \
      [[ ! $qualifier =~ ^(software-self-check|blocked-not-issued|waveform-hold|termination-probe-pass|termination-probe-fail)$ ]] || \
      [[ ! $case_id =~ ^[A-Za-z0-9_]+$ ]] || \
-     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
+     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
      [[ -n ${roster_group[$case_id]:-} ]] || \
      [[ -n ${roster_path_ids[$source_path]:-} ]]; then
     printf 'ERROR: malformed or duplicate canonical roster row for %s\n' \
@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 83 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 36 || $roster_migrated -ne 72 || \
-      $roster_migrated_software -ne 61 || $roster_migrated_blocked -ne 11 ]]; then
+      ${roster_group_counts[fhe]} -ne 66 || $roster_migrated -ne 102 || \
+      $roster_migrated_software -ne 91 || $roster_migrated_blocked -ne 11 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -145,7 +145,7 @@ if [[ -n $case_filter ]]; then
   case_filter=${case_filter#src/}
   case_filter=${case_filter%.c}
   if [[ $case_filter == /* || $case_filter == *'..'* || \
-        ! $case_filter =~ ^(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+$ ]]; then
+        ! $case_filter =~ ^(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+$ ]]; then
     printf 'ERROR: invalid testcase path: %s\n' "$case_filter" >&2
     exit 2
   fi
@@ -306,6 +306,7 @@ cp "$test_root/docs/BFV_APPLICATIONS.md" "$test_root/docs/BGV_APPLICATIONS.md" \
   "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/SCHEME_DELIVERY_V1.md" "$test_root/docs/CMB004_CMB012_FAILURE_ANALYSIS.md" \
   "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/POSEIDON_LIBRARY.md" "$artifact_root/provenance/testplan/docs/"
 cp -a "$test_root/tools/hpu-scheme-cases" "$artifact_root/provenance/testplan/generators"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
@@ -317,10 +318,10 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=83 ;;
+    all) expected_cases=113 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=36 ;;
+    fhe) expected_cases=66 ;;
     diagnostic) expected_cases=34 ;;
   esac
 fi
@@ -349,6 +350,7 @@ fi
   printf 'hpu_seal_commit=%s\n' "$(<"$generated_root/application-data/PRODUCER_COMMIT")"
   printf 'hpu_applications_commit=%s\n' \
     "$(<"$generated_root/application-data/PRODUCER_COMMIT")"
+  printf 'poseidon_commit=%s\n' "$(<"$generated_root/application-data/POSEIDON_COMMIT")"
 } > "$artifact_root/MANIFEST.txt"
 
 EXPECTED_CASES=$expected_cases CROSS_COMPILE="$cross_compile" \

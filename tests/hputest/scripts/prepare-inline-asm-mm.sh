@@ -8,6 +8,7 @@ output_root=${2:-"$test_root/build"}
 jobs=${3:-${JOBS:-4}}
 hpu_seal_root=${4:-"$test_root/third_party/hpu-seal"}
 hpu_applications_root=${5:-"$test_root/third_party/hpu-applications"}
+poseidon_root=${6:-"$test_root/third_party/poseidon"}
 
 if [[ $inline_asm_root != /* ]]; then
   inline_asm_root=$(cd -- "$test_root" && realpath -m -- "$inline_asm_root")
@@ -101,6 +102,24 @@ for tool in cmake python3 "${CXX:-c++}"; do
     exit 2
   }
 done
+
+poseidon_root=$(realpath -m -- "$poseidon_root")
+poseidon_path=${poseidon_root#"$repository_root/"}
+poseidon_gitlink=$(git -C "$repository_root" ls-files -s -- "$poseidon_path" |
+  awk '$1 == "160000" { print $2 }')
+poseidon_commit=$(git -C "$poseidon_root" rev-parse HEAD)
+if [[ -z $poseidon_gitlink || $poseidon_commit != "$poseidon_gitlink" ]] ||
+   ! git -C "$poseidon_root" diff --quiet -- ||
+   ! git -C "$poseidon_root" diff --cached --quiet --; then
+  echo 'ERROR: Poseidon must be clean and match the Nexus-AM gitlink' >&2
+  exit 2
+fi
+poseidon_build="$output_root/poseidon-cmake/$poseidon_commit"
+cmake -S "$poseidon_root" -B "$poseidon_build" \
+  -DCMAKE_BUILD_TYPE=Release -DPOSEIDON_USE_HARDWARE=OFF \
+  -DPOSEIDON_BUILD_EXAMPLES=OFF -DPOSEIDON_USE_ZLIB=OFF -DPOSEIDON_USE_ZSTD=OFF \
+  -DPOSEIDON_USE_MSGSL=OFF -DPOSEIDON_USE_INTEL_HEXL=OFF -DPOSEIDON_USE_SPDLOG=OFF
+cmake --build "$poseidon_build" --parallel "$jobs" --target poseidon_shared
 
 cmake_build="$output_root/inline-asm-cmake"
 # 按生产者提交隔离输出，切换分支时不读取旧 submodule 内的 outputs。
@@ -241,18 +260,22 @@ mkdir -p "$package_parent"
 package_root=$(mktemp -d "$package_parent/generation.XXXXXX")
 cmake -S "$test_root/tools/hpu-scheme-cases" -B "$hpu_main_build" \
   -DINLINE_ASM_ROOT="$hpu_applications_root" -DCMAKE_BUILD_TYPE=Release \
+  -DPOSEIDON_ROOT="$poseidon_root" -DPOSEIDON_BUILD="$poseidon_build" \
   -DHPU_APPLICATION_OUTPUT_ROOT="$package_root"
 HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
 HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
   cmake --build "$hpu_main_build" --parallel "$jobs" --target \
-    hpu_fhe_delivery hpu_scheme_case_generator hpu_program_model hpu_program_model_test hpu_encode_program
+    hpu_fhe_delivery hpu_scheme_case_generator hpu_poseidon_case_generator \
+    hpu_program_model hpu_program_model_test hpu_encode_program
 "$hpu_main_build/hpu_program_model_test"
 while IFS=$'\t' read -r case_id stem scheme degree role source; do
   [[ $case_id == case_id ]] && continue
   if [[ $role != application ]]; then
+    generator="$hpu_main_build/hpu_scheme_case_generator"
+    if [[ $stem == poseidon_* ]]; then generator="$hpu_main_build/hpu_poseidon_case_generator"; fi
     HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
     HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
-      "$hpu_main_build/hpu_scheme_case_generator" "$scheme" "$role" "$degree" \
+      "$generator" "$scheme" "$role" "$degree" \
         "$package_root/$stem"
   fi
   python3 "$script_dir/import-application-package.py" \
@@ -261,8 +284,9 @@ while IFS=$'\t' read -r case_id stem scheme degree role source; do
     --validator "$hpu_main_build/inline-asm/hpu_validate_package" \
     --encoder "$hpu_main_build/hpu_encode_program" \
     --program-model "$hpu_main_build/hpu_program_model" \
-    --producer-commit "$hpu_applications_commit"
+    --producer-commit "$hpu_applications_commit" --poseidon-commit "$poseidon_commit"
 done < "$test_root/scheme-cases.tsv"
 printf '%s\n' "$package_root" > "$generated_root/application-data/PRODUCER_ROOT"
 printf '%s\n' "$hpu_applications_commit" > "$generated_root/application-data/PRODUCER_COMMIT"
+printf '%s\n' "$poseidon_commit" > "$generated_root/application-data/POSEIDON_COMMIT"
 echo '[hputest] legacy primitive/control + main scheme/application import PASS'

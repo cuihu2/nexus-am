@@ -55,14 +55,14 @@ void generate_ckks(Fixture &f) {
         output = plan.append_rescale("tested", input, rescale, "output");
     } else {
         tables = builder.add_canonical_twiddles();
-        key = builder.add_rotation_key("key/rotate", f.galois, 1, level);
+        key = builder.add_rotation_key("key/rotate", f.galois, f.rotation_steps, level);
         constants = builder.add_keyswitch_constants("constants/keyswitch", level);
-        fused = builder.add_rotation_twiddles("constants/rotation", 1, level);
-        const auto galois_element = hpu::scheme::ckks::rotation_galois_element(f.degree, 1);
+        fused = builder.add_rotation_twiddles("constants/rotation", f.rotation_steps, level);
+        const auto galois_element = hpu::scheme::ckks::rotation_galois_element(f.degree, f.rotation_steps);
         workspace = builder.reserve_ciphertext("scratch/rotate", level, 2, input.scale,
             hpu::runtime::PolynomialDomain::coefficient, galois_element,
             hpu::runtime::AllocationKind::workspace);
-        output = plan.append_rotate_slots("tested", input, 1, key, constants, fused, workspace, "output");
+        output = plan.append_rotate_slots("tested", input, f.rotation_steps, key, constants, fused, workspace, "output");
     }
     builder.trim_capacity_to_used_lines();
     CkksSoftwareExecutor executor(*f.context, builder.image());
@@ -74,7 +74,7 @@ void generate_ckks(Fixture &f) {
     else if (f.operation == "keyswitch" || f.operation == "reline")
         executor.relinearize(input, key, constants, output, tables);
     else if (f.operation == "modswitch") executor.rescale(input, rescale, output, tables);
-    else executor.rotate_slots(input, 1, key, constants, fused, tables, workspace, output);
+    else executor.rotate_slots(input, f.rotation_steps, key, constants, fused, tables, workspace, output);
     const auto lowered = lower_ckks_operation_plan(plan, *f.context);
     const auto relocations = build_ckks_relocation_schedule(lowered, builder.image(), *f.context);
     if (!relocations.complete()) throw std::runtime_error("CKKS unresolved DMA");
