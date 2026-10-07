@@ -49,7 +49,7 @@ class SchemeTests(unittest.TestCase):
         self.assertNotEqual(physical, words)
 
     def test_original_ckks_missing_rounding_is_rejected_at_instruction_level(self):
-        source = ARGS.generated / "poseidon_ckks_reline_n4096" / "upstream"
+        source = ARGS.generated / "seal_ckks_reline_n4096" / "upstream"
         package = json.loads((source / "package.json").read_text())
         with tempfile.TemporaryDirectory(prefix="scheme-negative-") as temporary:
             result = subprocess.run([
@@ -59,7 +59,7 @@ class SchemeTests(unittest.TestCase):
                 str(Path(temporary) / "raw.u32.bin")], capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)
             self.assertIn("PROGRAM_MODEL_MISMATCH", result.stderr)
-        fixed = json.loads((ARGS.generated / "poseidon_ckks_reline_n4096" / "AM_ADAPTATION.json").read_text())
+        fixed = json.loads((ARGS.generated / "seal_ckks_reline_n4096" / "AM_ADAPTATION.json").read_text())
         self.assertGreater(fixed["ckks_rounded_p_instructions_added"], 0)
 
 

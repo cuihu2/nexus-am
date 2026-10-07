@@ -4,6 +4,7 @@
 *.bin
 *.txt
 !tools/hpu-scheme-cases/CMakeLists.txt
+!experiments/poseidon/tools/CMakeLists.txt
 *.o
 *.a
 *.map

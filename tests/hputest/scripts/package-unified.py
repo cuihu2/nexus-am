@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHAPTERS = (
     "00_bringup", "01_configuration", "02_data_paths",
     "03_compute_instructions", "04_composite_instruction_sequences",
-    "05_poseidon_library", "08_cpu_hpu_structural_connectivity", "06_performance", "07_full_application",
+    "05_algorithm_library", "08_cpu_hpu_structural_connectivity", "06_performance", "07_full_application",
 )
 INSTRUCTION_IDS = {f"HPU_IT_DIR_INS_C0_{number:03d}" for number in range(1, 10)}
 WORKLOAD_FIELDS = (
@@ -124,10 +124,10 @@ def compare_metadata(manifests):
     if None in hpu_application_values or len(hpu_application_values) != 1:
         raise ValueError("workload packages disagree on hpu_applications_commit: "
                          f"{hpu_application_values}")
-    poseidon_values = {manifests[name].get("poseidon_commit")
+    backend_values = {manifests[name].get("golden_backend")
                        for name in ("workloads", "silent-workloads")}
-    if None in poseidon_values or len(poseidon_values) != 1:
-        raise ValueError(f"workload packages disagree on poseidon_commit: {poseidon_values}")
+    if None in backend_values or len(backend_values) != 1:
+        raise ValueError(f"workload packages disagree on golden_backend: {backend_values}")
 
 
 def compare_trees(left, right, label):
@@ -433,7 +433,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             f"inline_asm_commit={metadata['inline_asm_commit']}\n"
             f"hpu_seal_commit={metadata['hpu_seal_commit']}\n"
             f"hpu_applications_commit={metadata['hpu_applications_commit']}\n"
-            f"poseidon_commit={metadata['poseidon_commit']}\n"
+            f"golden_backend={metadata['golden_backend']}\n"
             "variants=normal,silent\nnormal_log_mode=minimal\nsilent_log_mode=silent\n"
             "parent_instruction_cases_replaced=9\nsubtests=37\n"
             "published_test_identities=122\npublished_variant_sets=244\n"

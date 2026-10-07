@@ -51,44 +51,34 @@ def package_files(source):
     return package, {key: safe_file(source, package[key]) for key in referenced}
 
 
-def validate_poseidon(source, spec, poseidon_commit):
-    if not spec["program_stem"].startswith("poseidon_"):
+def validate_seal(source, spec, producer_commit):
+    if not spec["program_stem"].startswith("seal_"):
         return None
-    report = load_json(source.with_name(source.name + ".poseidon.json"))
-    prefix = {"ckks": "EvaluatorCkksBase", "bfv": "EvaluatorBfvBase",
-              "bgv": "EvaluatorBgvBase"}[spec["scheme"]]
-    api = {"hadd": "add", "hmul": "multiply_relin", "reline": "relinearize",
-           "rotate": "rotate" if spec["scheme"] == "ckks" else "rotate_row",
-           "modswitch": "rescale" if spec["scheme"] == "ckks" else "drop_modulus_to_next"}[spec["role"]]
-    require(bool(poseidon_commit) and report.get("revision") == poseidon_commit and
-            re.fullmatch(r"[0-9a-f]{40}", poseidon_commit) and
-            report.get("library") == "https://github.com/luhang-HPU/poseidon" and
-            report.get("scheme") == spec["scheme"] and report.get("degree") == int(spec["degree"]) and
+    report = load_json(source.with_name(source.name + ".seal.json"))
+    api = {"hadd": "add", "hmul": "multiply+relinearize", "reline": "relinearize",
+           "rotate": "rotate_vector" if spec["scheme"] == "ckks" else "rotate_rows",
+           "modswitch": "rescale_to_next" if spec["scheme"] == "ckks" else "mod_switch_to_next"}[spec["role"]]
+    require(bool(producer_commit) and report.get("producer_commit") == producer_commit and
+            re.fullmatch(r"[0-9a-f]{40}", producer_commit) and
+            report.get("library") == "inline-asm/third_party/modified-SEAL" and
             report.get("program") == spec["program_stem"] and
-            report.get("api") == f"{prefix}::{api}" and report.get("status") == "PASS" and
-            report.get("device") == "software" and report.get("key_switch") == "BV/P=1" and
-            report.get("comparison") ==
-            ("exact decrypted BFV polynomial; SEAL physical golden"
-             if spec["scheme"] == "bfv" and spec["role"] == "hmul"
-             else "all raw words and ciphertext metadata") and
+            report.get("scheme") == spec["scheme"] and report.get("degree") == int(spec["degree"]) and
+            report.get("api") == f"seal::Evaluator::{api}" and report.get("status") == "PASS" and
+            report.get("comparison") == "all raw physical words" and
+            type(report.get("raw_word_mismatches")) is int and report["raw_word_mismatches"] == 0 and
+            report.get("initial_correction_factors") == [1, 1] and report.get("rotation_generator") == 3 and
             report.get("rotation_steps") == (int(spec["degree"]) // 4 if spec["role"] == "rotate" else 0),
-            "Poseidon API oracle/provenance mismatch")
-    mismatches = report.get("raw_word_mismatches")
-    require(type(mismatches) is int and mismatches >= 0 and
-            report.get("plaintext_coefficients_compared") ==
-            (2 * int(spec["degree"]) if spec["scheme"] == "bfv" and spec["role"] == "hmul" else 0) and
-            ((spec["scheme"] == "bfv" and spec["role"] == "hmul") or mismatches == 0),
-            "Poseidon comparison evidence is incomplete")
+            "modified-SEAL oracle/provenance mismatch")
     return report
 
 
-def validate(source, validator, producer_commit=None, poseidon_commit=None):
+def validate(source, validator, producer_commit=None):
     subprocess.run([str(validator), str(source)], check=True)
     package, files = package_files(source)
     case = package.get("case_name")
     require(case in CASE_SPECS, f"unsupported application case: {case}")
     spec = CASE_SPECS[case]
-    validate_poseidon(source, spec, poseidon_commit)
+    validate_seal(source, spec, producer_commit)
     require(package.get("schema") == "hpu-application-package" and
             package.get("schema_version") == 1 and package.get("scheme") == spec["scheme"] and
             package.get("word_bits") == 32 and package.get("line_words") == 64 and
@@ -218,9 +208,8 @@ def validate(source, validator, producer_commit=None, poseidon_commit=None):
     return commit, config, image, bytes(golden), writable, outputs
 
 
-def import_package(source, destination, validator, producer_commit, encoder, program_model,
-                   poseidon_commit=None):
-    commit, config, image, golden, writable, outputs = validate(source, validator, producer_commit, poseidon_commit)
+def import_package(source, destination, validator, producer_commit, encoder, program_model):
+    commit, config, image, golden, writable, outputs = validate(source, validator, producer_commit)
     package, files = package_files(source)
     stem = package["case_name"]
     spec = CASE_SPECS[stem]
@@ -304,10 +293,10 @@ def import_package(source, destination, validator, producer_commit, encoder, pro
                       "ckks_rounded_p_instructions_added": adapted["instructions_added"] if adapted else 0,
                       "ckks_input_shadow_count": adapted["input_shadow_count"] if adapted else 0,
                       "program_model_matches_seal": True, "rtl_verified": False}
-        if stem.startswith("poseidon_"):
-            sidecar = source.with_name(source.name + ".poseidon.json")
-            adaptation["poseidon_oracle"] = load_json(sidecar)
-            shutil.copy2(sidecar, root / "POSEIDON_ORACLE.json")
+        if stem.startswith("seal_"):
+            sidecar = source.with_name(source.name + ".seal.json")
+            adaptation["seal_oracle"] = load_json(sidecar)
+            shutil.copy2(sidecar, root / "SEAL_ORACLE.json")
         (root / "AM_ADAPTATION.json").write_text(json.dumps(adaptation, indent=2) + "\n")
         declarations = "\n".join("    {%dU, %dU, %dU, %dU, %dU, %dU, %dU, %dU}," % row
                                  for row in outputs)
@@ -335,9 +324,8 @@ if __name__ == "__main__":
     for name in ("source", "destination", "validator", "encoder", "program-model"):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--producer-commit", required=True)
-    parser.add_argument("--poseidon-commit")
     args = parser.parse_args()
     require(not args.destination.resolve().is_relative_to(args.source.resolve()) and
             not args.source.resolve().is_relative_to(args.destination.resolve()), "overlapping import")
     import_package(args.source, args.destination, args.validator, args.producer_commit,
-                   args.encoder, args.program_model, args.poseidon_commit)
+                   args.encoder, args.program_model)

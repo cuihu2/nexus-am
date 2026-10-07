@@ -27,8 +27,8 @@ class PoseidonTests(unittest.TestCase):
                           for op in ("hadd", "hmul", "reline", "modswitch", "rotate")})
         for row in ROWS:
             source = Path(row["source"])
-            self.assertEqual(source.parts[1], "05_poseidon_library")
-            self.assertEqual(len(source.parts), 4)
+            self.assertEqual(source.parts[0], "src")
+            self.assertEqual(len(source.parts), 3)
             self.assertEqual(source.stem, row["case_id"])
             code = (ROOT / source).read_text()
             self.assertEqual(code.count("hpu_run_" + row["program_stem"] + "()"), 1)

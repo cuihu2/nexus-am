@@ -138,8 +138,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          submodules: recursive
           persist-credentials: false
+      - name: Initialize inline-asm and modified-SEAL dependencies
+        run: |
+          git submodule update --init --recursive \
+            tests/hputest/third_party/inline-asm \
+            tests/hputest/third_party/hpu-seal \
+            tests/hputest/third_party/hpu-applications
       - name: Install RISC-V build dependencies
         run: |
           sudo apt-get update
@@ -148,7 +153,6 @@ jobs:
             gcc-riscv64-linux-gnu \
             g++-riscv64-linux-gnu \
             binutils-riscv64-linux-gnu \
-            libgmp-dev \
             python3
       - name: Build and validate all HPU tests
         env:

@@ -10,7 +10,7 @@
 	path = tests/hputest/third_party/hpu-applications
 	url = https://github.com/cuihu2/inline-asm.git
 	branch = main
-[submodule "tests/hputest/third_party/poseidon"]
-	path = tests/hputest/third_party/poseidon
+[submodule "tests/hputest/experiments/poseidon/third_party/poseidon"]
+	path = tests/hputest/experiments/poseidon/third_party/poseidon
 	url = https://github.com/luhang-HPU/poseidon.git
 	branch = main

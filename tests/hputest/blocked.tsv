@@ -1,6 +1,6 @@
 case_id	reason
-HPU_IT_LIB_POSEIDON_ENCODE_PENDING	Poseidon版本已固定；AM尚缺encode完整参数、精度、fixture及目标执行入口。
-HPU_IT_LIB_POSEIDON_BOOTSTRAP_PENDING	Poseidon版本已固定；AM尚缺bootstrap完整指令链、参数、评估数据、golden及执行入口。
+HPU_IT_LIB_SEAL_ENCODE_PENDING	modified-SEAL版本已固定；AM尚缺encode完整参数、精度、fixture及目标执行入口。
+HPU_IT_LIB_SEAL_BOOTSTRAP_PENDING	modified-SEAL版本已固定；AM尚缺bootstrap完整指令链、参数、评估数据、golden及执行入口。
 HPU_IT_STING_CMB_007	缺 STING 生成/重放入口、合法对象分配约束、seed 与逐阶段 golden/布局交付。
 HPU_IT_DIR_STR_003	缺项目异常/特权入口与提交 monitor，无法用普通顺序 C 承诺错误路径 HPU 命令无副作用。
 HPU_IT_DIR_STR_004	缺可重复的外部事件注入和队列/提交观测接口，不能通过扩大 timeout 代替。

@@ -86,7 +86,7 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   if [[ ! $group =~ ^(core|transform|fhe)$ ]] || \
      [[ ! $qualifier =~ ^(software-self-check|blocked-not-issued|waveform-hold|termination-probe-pass|termination-probe-fail)$ ]] || \
      [[ ! $case_id =~ ^[A-Za-z0-9_]+$ ]] || \
-     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
+     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_algorithm_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
      [[ -n ${roster_group[$case_id]:-} ]] || \
      [[ -n ${roster_path_ids[$source_path]:-} ]]; then
     printf 'ERROR: malformed or duplicate canonical roster row for %s\n' \
@@ -145,7 +145,7 @@ if [[ -n $case_filter ]]; then
   case_filter=${case_filter#src/}
   case_filter=${case_filter%.c}
   if [[ $case_filter == /* || $case_filter == *'..'* || \
-        ! $case_filter =~ ^(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+$ ]]; then
+        ! $case_filter =~ ^(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_algorithm_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+$ ]]; then
     printf 'ERROR: invalid testcase path: %s\n' "$case_filter" >&2
     exit 2
   fi
@@ -289,12 +289,15 @@ cp -a "$generated_root/keyswitch-data" "$artifact_root/provenance/keyswitch-data
 test -s "$generated_root/auto-data/producer_commit.txt"
 cp -a "$generated_root/auto-data" "$artifact_root/provenance/auto-data"
 test -s "$generated_root/application-data/PRODUCER_COMMIT"
+mkdir -p "$artifact_root/provenance/application-data"
+cp "$generated_root/application-data/PRODUCER_COMMIT" "$artifact_root/provenance/application-data/"
 while IFS=$'\t' read -r case_id stem scheme degree role source; do
   [[ $case_id == case_id ]] && continue
   cmp -s "$generated_root/application-data/PRODUCER_COMMIT" \
     "$generated_root/application-data/$stem/producer_commit.txt"
+  # 只接收当前清单：旧缓存中的Poseidon或已去重交付不能混入默认下载包。
+  cp -a "$generated_root/application-data/$stem" "$artifact_root/provenance/application-data/"
 done < "$test_root/scheme-cases.tsv"
-cp -a "$generated_root/application-data" "$artifact_root/provenance/application-data"
 mkdir -p "$artifact_root/provenance/testplan/docs"
 cp "$test_root/docs/V2_COVERAGE.md" "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/RUNTIME_UART_DIAGNOSTICS.md" "$artifact_root/provenance/testplan/docs/"
@@ -306,7 +309,7 @@ cp "$test_root/docs/BFV_APPLICATIONS.md" "$test_root/docs/BGV_APPLICATIONS.md" \
   "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/SCHEME_DELIVERY_V1.md" "$test_root/docs/CMB004_CMB012_FAILURE_ANALYSIS.md" \
   "$artifact_root/provenance/testplan/docs/"
-cp "$test_root/docs/POSEIDON_LIBRARY.md" "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/SEAL_LIBRARY.md" "$artifact_root/provenance/testplan/docs/"
 cp -a "$test_root/tools/hpu-scheme-cases" "$artifact_root/provenance/testplan/generators"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
@@ -350,7 +353,7 @@ fi
   printf 'hpu_seal_commit=%s\n' "$(<"$generated_root/application-data/PRODUCER_COMMIT")"
   printf 'hpu_applications_commit=%s\n' \
     "$(<"$generated_root/application-data/PRODUCER_COMMIT")"
-  printf 'poseidon_commit=%s\n' "$(<"$generated_root/application-data/POSEIDON_COMMIT")"
+  printf 'golden_backend=inline-asm/modified-SEAL\n'
 } > "$artifact_root/MANIFEST.txt"
 
 EXPECTED_CASES=$expected_cases CROSS_COMPILE="$cross_compile" \

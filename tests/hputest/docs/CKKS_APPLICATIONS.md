@@ -48,7 +48,7 @@ CMB013 镜像6850 lines，加 guard配置6914 lines。
 N=65536 不应按 N=4096 冒烟的 cycle-limit 或耗时估算；本次未偷偷降规模。
 
 两个应用跟随既有统一下载包进入 `07_full_application/01_application_demo/`；
-旧CMB012/013已合并到`05_poseidon_library/01_ckks/`的Poseidon Reline/Rescale规范项；
+旧CMB012/013已合并到`05_algorithm_library/01_ckks/`的SEAL Reline/Rescale规范项；
 旧ID映射见`case-aliases.tsv`和`layer-migration.tsv`，04不再包含算法库接口目录。
 普通版保持 minimal，另有 `_silent`，不默认逐系数打印。
 详细阶段诊断可单例构建 `HPU_LOG_LEVEL=2 HPU_DUMP_RESULTS=0`；

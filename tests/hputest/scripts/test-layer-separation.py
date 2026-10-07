@@ -22,15 +22,16 @@ class LayerTests(unittest.TestCase):
         self.assertEqual({r["role"] for r in specs}, {"keyswitch"})
         self.assertTrue(all(not r["case_id"].startswith("HPU_IT_LIB_") for r in cases))
 
-    def test_05_has_poseidon_matrix_distinct_parameter_regressions_and_pending(self):
+    def test_05_has_seal_matrix_distinct_parameter_regressions_and_pending(self):
         cases = [r for r in rows("cases.tsv") if r["source"].startswith("src/05_")]
         self.assertEqual(len(cases), 39)
-        self.assertTrue(all(r["case_id"].startswith("HPU_IT_LIB_") for r in cases))
+        self.assertTrue(all(r["case_id"].startswith("HPU_IT_LIB_SEAL_") for r in cases))
+        self.assertTrue(all(r["source"].startswith("src/05_algorithm_library/") for r in cases))
         specs = [r for r in rows("scheme-cases.tsv") if r["source"].startswith("src/05_")]
-        poseidon = [r for r in specs if r["program_stem"].startswith("poseidon_")]
-        regression = [r for r in specs if not r["program_stem"].startswith("poseidon_")]
-        self.assertEqual(len(poseidon), 30)
-        self.assertEqual({(r["scheme"], r["degree"], r["role"]) for r in poseidon},
+        seal = [r for r in specs if r["program_stem"].startswith("seal_")]
+        regression = [r for r in specs if not r["program_stem"].startswith("seal_")]
+        self.assertEqual(len(seal), 30)
+        self.assertEqual({(r["scheme"], r["degree"], r["role"]) for r in seal},
                          {(s, n, op) for s in ("ckks", "bfv", "bgv") for n in ("128", "4096")
                           for op in ("hadd", "hmul", "reline", "modswitch", "rotate")})
         self.assertEqual({r["program_stem"] for r in regression},
@@ -40,7 +41,7 @@ class LayerTests(unittest.TestCase):
         for row in regression:
             self.assertIn("/04_parameter_regression/", row["source"])
             self.assertTrue("_CF" in row["case_id"] or "_GEN3_STEP1_" in row["case_id"])
-            self.assertIn("不宣称调用Poseidon API", (ROOT / row["source"]).read_text())
+            self.assertIn("主机参考为SEAL", (ROOT / row["source"]).read_text())
         pending = [r for r in cases if r["qualifier"] == "blocked-not-issued"]
         self.assertEqual(len(pending), 2)
         for row in pending:

@@ -79,7 +79,7 @@ class UnifiedPackageTests(unittest.TestCase):
             "inline_asm_commit=producer-commit\n"
             "hpu_seal_commit=hpu-seal-producer-commit\n"
             "hpu_applications_commit=hpu-applications-producer-commit\n"
-            "poseidon_commit=poseidon-producer-commit\n", encoding="utf-8")
+            "golden_backend=inline-asm/modified-SEAL\n", encoding="utf-8")
         rows = []
         for source in self.rows(TEST_ROOT / "cases.tsv"):
             relative_source = PurePosixPath(source["source"])

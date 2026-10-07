@@ -1,8 +1,9 @@
 # HPU tests for Nexus-AM
 
-04只保留基本/组合算子；05统一放算法库接口，包含30项Poseidon规范用例、7项不同参数回归和2项未接入记录。
-原结构连接测试保留至08组。覆盖范围、旋转约定和构建说明见
-[POSEIDON_LIBRARY.md](docs/POSEIDON_LIBRARY.md)。
+04只保留基本/组合算子；05统一放算法库接口，包含30项modified-SEAL规范用例、7项不同参数回归和2项未接入记录。
+原结构连接测试保留至08组；Poseidon独立保存在`experiments/poseidon/`，不进入默认构建或下载包。
+覆盖范围、旋转约定和构建说明见
+[SEAL_LIBRARY.md](docs/SEAL_LIBRARY.md)。
 
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
 testcases.  It contains the eleven bring-up/return probes plus the 94 subsequent
@@ -57,7 +58,7 @@ src/01_configuration/          # 7 migrated IT cases
 src/02_data_paths/             # 6 migrated IT cases
 src/03_compute_instructions/   # 9 migrated IT cases
 src/04_composite_instruction_sequences/ # 11 basic/operator-chain cases
-src/05_poseidon_library/       # 30 Poseidon API + 7 parameter regressions + 2 pending
+src/05_algorithm_library/       # 30 modified-SEAL API + 7 parameter regressions + 2 pending
 src/08_cpu_hpu_structural_connectivity/  # 7 preserved structural cases
 src/06_performance/            # 6 migrated IT cases
 src/07_full_application/       # 9 migrated IT cases (8 active, 1 blocked)
@@ -71,8 +72,8 @@ runtime/                       # mechanical helpers, never whole scenarios
 third_party/
 ├── inline-asm/                 # pinned legacy-main branch, existing producer contract
 ├── hpu-seal/                   # pinned current main
-├── hpu-applications/           # pinned current main, application package v1
-└── poseidon/                   # official main 961df3a, host library API oracle
+└── hpu-applications/           # pinned current main, modified-SEAL application package v1
+
 
 build/                          # ignored: generated outputs only
 ├── inline-asm-producer/<producer_commit>/ # isolated producer working directory
@@ -332,7 +333,7 @@ LEGACY Auto与三算法KeySwitch；05包含HADD/HMUL/Reline/降层/旋转，07�
 PERF002/003分别复用CMB002/003的N4096/Q0交付，逐轮比较CPU参考NTT/INTT与HPU结果并报告cycle。
 实际算法、参数和程序对应见`scheme-cases.tsv`。其它11项未接入，原因逐项记录于
 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
-上游“没有数据”。旧CMB_009/010/012/013/014已归05，Poseidon接口与SEAL参数回归分别注明参考机制；
+上游“没有数据”。旧CMB_009/010/012/013/014已归05，modified-SEAL接口与SEAL参数回归分别注明参考机制；
 基础PADD/PMUL覆盖仍保留在03-001/003，具体旧ID映射见`layer-migration.tsv`。
 
 未接入源码仍交叉编译以检查接口，执行只报具体原因并return 1。

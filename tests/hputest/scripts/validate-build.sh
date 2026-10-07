@@ -48,7 +48,7 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   if [[ ! $group =~ ^(core|transform|fhe)$ ]] || \
      [[ ! $qualifier =~ ^(software-self-check|blocked-not-issued|waveform-hold|termination-probe-pass|termination-probe-fail)$ ]] || \
      [[ ! $case_id =~ ^[A-Za-z0-9_]+$ ]] || \
-     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
+     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_algorithm_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
      [[ -n ${roster_group[$case_id]:-} ]] || \
      [[ -n ${roster_path_ids[$source_path]:-} ]]; then
     printf 'ERROR: malformed or duplicate canonical roster row for %s\n' \
@@ -222,7 +222,8 @@ manifest_cases=$(manifest_value case_count)
 manifest_inline_asm=$(manifest_value inline_asm_commit)
 manifest_hpu_seal=$(manifest_value hpu_seal_commit)
 manifest_hpu_applications=$(manifest_value hpu_applications_commit)
-manifest_poseidon=$(manifest_value poseidon_commit)
+manifest_golden=$(manifest_value golden_backend)
+[[ $manifest_golden == inline-asm/modified-SEAL ]] || exit 2
 manifest_selection=$(manifest_value selection)
 manifest_core=$(manifest_value core_count)
 manifest_transform=$(manifest_value transform_count)
@@ -266,7 +267,7 @@ case "$manifest_selection" in
     ;;
   case:*)
     selected_relative=${manifest_selection#case:}
-    if [[ ! $selected_relative =~ ^(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+$ ]]; then
+    if [[ ! $selected_relative =~ ^(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_algorithm_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+$ ]]; then
       printf 'ERROR: malformed testcase selection: %s\n' \
         "$manifest_selection" >&2
       exit 2
@@ -337,7 +338,7 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   if [[ ! $group =~ ^(core|transform|fhe)$ ]] || \
      [[ ! $qualifier =~ ^(software-self-check|blocked-not-issued|waveform-hold|termination-probe-pass|termination-probe-fail)$ ]] || \
      [[ ! $case_id =~ ^[A-Za-z0-9_]+$ ]] || \
-     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]]; then
+     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_algorithm_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]]; then
     printf 'ERROR: malformed CASE_MANIFEST.tsv row for %s\n' "$case_id" >&2
     exit 2
   fi
@@ -394,7 +395,7 @@ fi
 declare -A not_qualified_ids=()
 while IFS=$'\t' read -r case_id source_path reason; do
   if [[ ! $case_id =~ ^[A-Za-z0-9_]+$ ]] || \
-     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_poseidon_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
+     [[ ! $source_path =~ ^src/(00_bringup|01_configuration|02_data_paths|03_compute_instructions|04_composite_instruction_sequences|05_algorithm_library|08_cpu_hpu_structural_connectivity|06_performance|07_full_application)/[^/]+/[^/]+\.c$ ]] || \
      [[ -n ${not_qualified_ids[$case_id]:-} ]] || \
      [[ -z ${selected_ids[$case_id]:-} ]] || \
      [[ ${roster_qualifier[$case_id]} != blocked-not-issued ]] || \
@@ -439,11 +440,10 @@ while IFS=$'\t' read -r case_id stem scheme degree role source; do
                   PROGRAM_MODEL.log AM_ADAPTATION.json; do
     test -s "$delivery/$required" || { printf 'ERROR: missing %s/%s\n' "$stem" "$required" >&2; exit 2; }
   done
-  if [[ $stem == poseidon_* ]]; then
-    [[ $manifest_poseidon =~ ^[0-9a-f]{40}$ ]] || exit 2
-    test -s "$delivery/POSEIDON_ORACLE.json"
-    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"] == "PASS" and r["revision"] == sys.argv[2]' \
-      "$delivery/POSEIDON_ORACLE.json" "$manifest_poseidon"
+  if [[ $stem == seal_* ]]; then
+    test -s "$delivery/SEAL_ORACLE.json"
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"] == "PASS" and r["producer_commit"] == sys.argv[2] and r["comparison"] == "all raw physical words" and r["raw_word_mismatches"] == 0' \
+      "$delivery/SEAL_ORACLE.json" "$manifest_hpu_applications"
   fi
 done < "$test_root/scheme-cases.tsv"
 for required in encoder_words.tsv RESOLVED_DMA_SPANS.csv DELIVERY_SUMMARY.md \
@@ -925,7 +925,7 @@ for elf in "${elfs[@]}"; do
       fi ;;
     */01_configuration/*.elf|*/02_data_paths/*.elf|\
     */03_compute_instructions/*.elf|*/04_composite_instruction_sequences/*.elf|\
-    */05_poseidon_library/*.elf|*/08_cpu_hpu_structural_connectivity/*.elf|*/06_performance/*.elf|\
+    */05_algorithm_library/*.elf|*/08_cpu_hpu_structural_connectivity/*.elf|*/06_performance/*.elf|\
     */07_full_application/*.elf)
       if [[ $qualifier != blocked-not-issued && \
             -z $(awk -F '\t' -v id="$name" '$1 == id {print $2}' "$test_root/scheme-cases.tsv") && \

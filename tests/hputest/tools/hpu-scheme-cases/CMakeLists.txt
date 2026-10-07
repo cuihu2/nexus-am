@@ -28,21 +28,3 @@ target_link_libraries(hpu_encode_program PRIVATE hpu_encode)
 add_executable(hpu_ckks_precision precision.cpp)
 target_compile_features(hpu_ckks_precision PRIVATE cxx_std_17)
 target_link_libraries(hpu_ckks_precision PRIVATE hpu_seal_delivery)
-
-# Poseidon单独构建，避免其全局CMake选项改变inline-asm/SEAL的配置。
-if(DEFINED POSEIDON_ROOT AND DEFINED POSEIDON_BUILD)
-  unset(POSEIDON_LIBRARY CACHE)
-  find_library(POSEIDON_LIBRARY NAMES poseidon_shared
-    PATHS "${POSEIDON_BUILD}/lib" "${POSEIDON_BUILD}" NO_DEFAULT_PATH REQUIRED)
-  execute_process(COMMAND git -C "${POSEIDON_ROOT}" rev-parse HEAD
-    OUTPUT_VARIABLE POSEIDON_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
-  add_executable(hpu_poseidon_case_generator
-    poseidon_main.cpp poseidon_fixture.cpp poseidon_bridge.cpp ckks.cpp bfv.cpp bgv.cpp)
-  target_compile_features(hpu_poseidon_case_generator PRIVATE cxx_std_17)
-  target_compile_options(hpu_poseidon_case_generator PRIVATE -Wall -Wextra -Werror)
-  target_include_directories(hpu_poseidon_case_generator SYSTEM PRIVATE
-    "${POSEIDON_ROOT}/src" "${POSEIDON_BUILD}" ${POSEIDON_GMP_INCLUDE})
-  target_compile_definitions(hpu_poseidon_case_generator PRIVATE POSEIDON_REVISION="${POSEIDON_REVISION}")
-  target_link_libraries(hpu_poseidon_case_generator PRIVATE
-    hpu_seal_delivery hpu_filesystem_compat "${POSEIDON_LIBRARY}")
-endif()
