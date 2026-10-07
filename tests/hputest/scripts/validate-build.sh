@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 105 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 66 || $roster_migrated -ne 102 || \
-      $roster_migrated_software -ne 91 || $roster_migrated_blocked -ne 11 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 99 || \
+      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 94 || \
+      $roster_migrated_software -ne 83 || $roster_migrated_blocked -ne 11 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 91 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 11 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \

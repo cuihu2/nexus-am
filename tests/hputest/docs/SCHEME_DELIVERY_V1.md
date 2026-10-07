@@ -1,5 +1,8 @@
 # main v1 交付与算法用例
 
+当前章节已重分：04只放基本算子和指令链，库接口在05。本文以下使用原测试点编号描述实现，
+旧CMB009/010/012/013/014的直接映射见`../case-aliases.tsv`与`../layer-migration.tsv`；不再重复发布相同程序。
+
 固定 inline-asm main：`c11dfe2cfbe731d7b45aea0a62d993d733e1a089`。
 依据 `doc/delivery/HPU_APPLICATION_PACKAGE_V1.md` 与 `IT_HANDOFF_CHECKLIST.md`。
 本版本有八个默认应用，本次全部接入。章节结构和统一下载 workflow 保持原结构。

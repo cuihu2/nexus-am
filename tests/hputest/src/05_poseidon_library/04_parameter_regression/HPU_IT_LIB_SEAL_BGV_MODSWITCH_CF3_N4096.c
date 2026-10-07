@@ -5,14 +5,13 @@
 #include <hpu/report.h>
 #include <hpu/result.h>
 #include <hpu/trace.h>
-#include <bfv_rotate_n4096.h>
+#include <bgv_modswitch_n4096.h>
 
 /*
- * 测试点：IT-CMB-014
- * 目的：BFV，N=4096。验证左旋一格及 Galois KeySwitch；CKKS 槽旋转和 BFV/BGV 行旋转分别生成。
- * 指令、模表、密钥和初始数据来自 inline-asm main 同一批交付。
- * 目标直接比对 SEAL 物理 golden；布局/rounded-P 适配另有记录。
- * 每个 ELF 只执行一次，末尾唯一 PSYNC；silent 保留 application_trace。
+ * 测试点：HPU_IT_LIB_SEAL_BGV_MODSWITCH_CF3_N4096（原编号HPU_IT_DIR_CMB_013_BGV_MODSWITCH_N4096）
+ * 目的：BGV降一层，输入correction factor为3；验证模t修正和输出golden。
+ * 层级：05算法库参数回归，主机参考为SEAL；不宣称调用Poseidon API。
+ * 保留原输入、指令、golden及guard检查，唯一PSYNC仍在完整程序末尾。
  */
 int main(void) {
     int rc;
@@ -42,7 +41,7 @@ int main(void) {
 
     trace_phase(TRACE_ISSUE);
     phase_mark("issue");
-    rc = hpu_run_bfv_rotate_n4096();
+    rc = hpu_run_bgv_modswitch_n4096();
     if (rc != 0) {
         LOG_ERROR("[HPU][APP][PROGRAM-FAIL] rc=%d instruction=%u dma=%u\n",
                   rc, application_trace.instruction, application_trace.dma);

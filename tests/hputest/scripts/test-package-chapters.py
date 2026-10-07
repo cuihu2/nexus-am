@@ -163,7 +163,7 @@ class ChapterPackageTests(unittest.TestCase):
         self.fixture(self.diagnostic_rows(), selection="diagnostic",
                      uart_results="full", dump_results="1")
         release = PACKAGER.package(self.artifact, require_diagnostic=True)
-        self.assertEqual(len(list(release.rglob("*.elf"))), 34)
+        self.assertEqual(len(list(release.rglob("*.elf"))), 19)
         self.assertEqual({row["case_id"] for row in self.index(release)},
                          PACKAGER.DIAGNOSTIC_IDS)
         self.assertTrue(all("全量 UART" in row["notes"] for row in self.index(release)))
@@ -190,14 +190,14 @@ class ChapterPackageTests(unittest.TestCase):
     def test_diagnostic_rejects_missing_case(self):
         self.fixture(self.diagnostic_rows()[:-1], selection="diagnostic",
                      uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the 34"):
+        with self.assertRaisesRegex(ValueError, "exactly the 19"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_diagnostic_rejects_blocked_placeholder(self):
         rows = self.diagnostic_rows()
         rows[-1]["qualifier"] = "blocked-not-issued"
         self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the 34"):
+        with self.assertRaisesRegex(ValueError, "exactly the 19"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_diagnostic_rejects_wrong_chapter(self):
@@ -205,7 +205,7 @@ class ChapterPackageTests(unittest.TestCase):
         rows[-1] = self.row(rows[-1]["case_id"], rows[-1]["group"],
                             chapter="00_bringup")
         self.fixture(rows, selection="diagnostic", uart_results="full", dump_results="1")
-        with self.assertRaisesRegex(ValueError, "exactly the 34"):
+        with self.assertRaisesRegex(ValueError, "exactly the 19"):
             PACKAGER.package(self.artifact, require_diagnostic=True)
 
     def test_uart_macro_and_metadata_must_agree(self):

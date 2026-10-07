@@ -5,14 +5,13 @@
 #include <hpu/report.h>
 #include <hpu/result.h>
 #include <hpu/trace.h>
-#include <bgv_hmul_n4096.h>
+#include <bgv_reline_n4096.h>
 
 /*
- * 测试点：IT-CMB-010
- * 目的：BGV，N=4096。验证同一 level 的密文乘法和重线性化，最终两分量；不隐式降模或 rescale。
- * 指令、模表、密钥和初始数据来自 inline-asm main 同一批交付。
- * 目标直接比对 SEAL 物理 golden；布局/rounded-P 适配另有记录。
- * 每个 ELF 只执行一次，末尾唯一 PSYNC；silent 保留 application_trace。
+ * 测试点：HPU_IT_LIB_SEAL_BGV_RELINE_CF15_N4096（原编号HPU_IT_DIR_CMB_012_BGV_RELINE_N4096）
+ * 目的：BGV重线性化，输入是真实乘法的三分量tensor，correction factor为15。
+ * 层级：05算法库参数回归，主机参考为SEAL；不宣称调用Poseidon API。
+ * 保留原输入、指令、golden及guard检查，唯一PSYNC仍在完整程序末尾。
  */
 int main(void) {
     int rc;
@@ -42,7 +41,7 @@ int main(void) {
 
     trace_phase(TRACE_ISSUE);
     phase_mark("issue");
-    rc = hpu_run_bgv_hmul_n4096();
+    rc = hpu_run_bgv_reline_n4096();
     if (rc != 0) {
         LOG_ERROR("[HPU][APP][PROGRAM-FAIL] rc=%d instruction=%u dma=%u\n",
                   rc, application_trace.instruction, application_trace.dma);

@@ -5,14 +5,13 @@
 #include <hpu/report.h>
 #include <hpu/result.h>
 #include <hpu/trace.h>
-#include <bfv_reline_n4096.h>
+#include <ckks_rotate_n4096.h>
 
 /*
- * 测试点：IT-CMB-012
- * 目的：BFV，N=4096。验证真实三分量 tensor 的重线性化：保留原 c0/c1，并合并 KeySwitch 修正。
- * 指令、模表、密钥和初始数据来自 inline-asm main 同一批交付。
- * 目标直接比对 SEAL 物理 golden；布局/rounded-P 适配另有记录。
- * 每个 ELF 只执行一次，末尾唯一 PSYNC；silent 保留 application_trace。
+ * 测试点：HPU_IT_LIB_SEAL_CKKS_ROTATE_GEN3_STEP1_N4096（原编号HPU_IT_DIR_CMB_014_CKKS_ROTATE_N4096）
+ * 目的：CKKS的SEAL generator-3步长+1旋转；不等同Poseidon半行旋转。
+ * 层级：05算法库参数回归，主机参考为SEAL；不宣称调用Poseidon API。
+ * 保留原输入、指令、golden及guard检查，唯一PSYNC仍在完整程序末尾。
  */
 int main(void) {
     int rc;
@@ -42,7 +41,7 @@ int main(void) {
 
     trace_phase(TRACE_ISSUE);
     phase_mark("issue");
-    rc = hpu_run_bfv_reline_n4096();
+    rc = hpu_run_ckks_rotate_n4096();
     if (rc != 0) {
         LOG_ERROR("[HPU][APP][PROGRAM-FAIL] rc=%d instruction=%u dma=%u\n",
                   rc, application_trace.instruction, application_trace.dma);

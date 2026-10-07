@@ -194,7 +194,7 @@ def package(artifact, require_all=False, require_diagnostic=False, require_silen
                     "03_compute_instructions" if "_INS_" in row["case_id"]
                     else "04_composite_instruction_sequences")
                 for row in indexes):
-            raise ValueError("diagnostic package must contain exactly the 34 ready 03/04 cases")
+            raise ValueError("diagnostic package must contain exactly the 19 ready 03/04 cases")
     if require_all or require_silent:
         instruction_ids = {
             row["case_id"] for row in indexes
@@ -318,7 +318,7 @@ def main():
     parser.add_argument("artifact", type=Path)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--all", action="store_true", help="要求完整摘要构建且 03 包含全部九条指令")
-    mode.add_argument("--diagnostic", action="store_true", help="要求03/04十八项全量UART诊断构建")
+    mode.add_argument("--diagnostic", action="store_true", help="要求03/04十九项全量UART诊断构建")
     mode.add_argument("--silent", action="store_true", help="要求完整静默构建，关闭日志但保留全部检查")
     args = parser.parse_args()
     try:

@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 105 || ${roster_group_counts[core]} -ne 39 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 66 || $roster_migrated -ne 102 || \
-      $roster_migrated_software -ne 91 || $roster_migrated_blocked -ne 11 ]]; then
+      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 94 || \
+      $roster_migrated_software -ne 83 || $roster_migrated_blocked -ne 11 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -311,18 +311,18 @@ cp -a "$test_root/tools/hpu-scheme-cases" "$artifact_root/provenance/testplan/ge
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
 cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$test_root/scheme-cases.tsv" \
-  "$test_root/case-aliases.tsv" "$artifact_root/provenance/testplan/"
+  "$test_root/case-aliases.tsv" "$test_root/layer-migration.tsv" "$artifact_root/provenance/testplan/"
 if [[ -n $case_filter ]]; then
   selection="case:$case_filter"
   expected_cases=1
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=113 ;;
+    all) expected_cases=105 ;;
     core) expected_cases=39 ;;
     transform) expected_cases=8 ;;
-    fhe) expected_cases=66 ;;
-    diagnostic) expected_cases=34 ;;
+    fhe) expected_cases=58 ;;
+    diagnostic) expected_cases=19 ;;
   esac
 fi
 if [[ ${#case_sources[@]} -ne $expected_cases ]]; then
