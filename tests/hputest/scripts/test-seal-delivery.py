@@ -13,13 +13,17 @@ SPEC = importlib.util.spec_from_file_location("seal_import", Path(__file__).with
 IMPORTER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(IMPORTER)
 with (ROOT / "scheme-cases.tsv").open() as stream:
-    ROWS = [r for r in csv.DictReader(stream, delimiter="\t") if r["program_stem"].startswith("seal_")]
+    ROWS = [r for r in csv.DictReader(stream, delimiter="\t")
+            if r["source"].startswith("src/05_algorithm_library/")]
+STANDARD_ROWS = [r for r in ROWS if "/04_parameter_regression/" not in r["source"]]
+REGRESSION_ROWS = [r for r in ROWS if "/04_parameter_regression/" in r["source"]]
 
 
 class SealTests(unittest.TestCase):
     def test_complete_seal_matrix_and_single_run_sources(self):
-        self.assertEqual(len(ROWS), 30)
-        self.assertEqual({(r["scheme"], r["degree"], r["role"]) for r in ROWS},
+        self.assertEqual(len(ROWS), 37)
+        self.assertEqual(len(REGRESSION_ROWS), 7)
+        self.assertEqual({(r["scheme"], r["degree"], r["role"]) for r in STANDARD_ROWS},
                          {(s, n, op) for s in ("ckks", "bfv", "bgv") for n in ("128", "4096")
                           for op in ("hadd", "hmul", "reline", "modswitch", "rotate")})
         for row in ROWS:
@@ -40,6 +44,12 @@ class SealTests(unittest.TestCase):
                 self.assertEqual(report["library"], "inline-asm/third_party/modified-SEAL")
                 self.assertEqual(report["comparison"], "all raw physical words")
                 self.assertEqual(report["raw_word_mismatches"], 0)
+                regression = "/04_parameter_regression/" in row["source"]
+                self.assertEqual(report["initial_correction_factors"],
+                                 [3, 5] if regression and row["scheme"] == "bgv" else [1, 1])
+                self.assertEqual(report["rotation_steps"],
+                                 (1 if regression else int(row["degree"]) // 4)
+                                 if row["role"] == "rotate" else 0)
                 self.assertEqual(adaptation["seal_oracle"], report)
                 self.assertNotIn("poseidon_oracle", adaptation)
                 self.assertFalse((data / "POSEIDON_ORACLE.json").exists())
@@ -66,6 +76,18 @@ class SealTests(unittest.TestCase):
                 sidecar.write_text(json.dumps(dict(report, **{field: value})))
                 with self.subTest(field=field), self.assertRaises(ValueError):
                     IMPORTER.validate_seal(source, row, report["producer_commit"])
+
+    def test_hmul_rejects_multiply_without_relinearize(self):
+        row = next(r for r in ROWS if r["scheme"] == "ckks" and r["role"] == "hmul")
+        with self.assertRaisesRegex(ValueError, "HMUL graph mismatch"):
+            IMPORTER.validate_operation_graph(
+                row, [{"kind": "multiply", "component_count": 2, "operation_index": 0}])
+        IMPORTER.validate_operation_graph(row, [
+            {"kind": "multiply", "component_count": 3, "operation_index": 0},
+            {"kind": "relinearize", "component_count": 2, "operation_index": 1},
+        ])
+        IMPORTER.validate_operation_graph(
+            row, [{"kind": "multiply_relinearize", "component_count": 2, "operation_index": 0}])
 
     def test_poseidon_is_not_a_default_dependency_or_case(self):
         for path in ("scheme-cases.tsv", "cases.tsv", "Makefile", "scripts/prepare-inline-asm-mm.sh"):
