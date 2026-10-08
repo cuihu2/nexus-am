@@ -1,7 +1,7 @@
 # 08边缘快测与ST前置证据
 
 既有算子N4096通过可作为回归基线，但不能据此宣布结构/故障场景已覆盖。
-本轮新增八个独立定向用例，位于`src/08_cpu_hpu_structural_connectivity/03_edge_cases`。
+本轮新增十个独立定向用例，位于`src/08_cpu_hpu_structural_connectivity/03_edge_cases`。
 机器清单为`edge-cases.tsv`，每项一个ELF，不把多个规模/profile串在同一文件运行。
 
 | 用例 | 主要刺激与软件验收 |
@@ -10,6 +10,8 @@
 | CPU_HPU_ALU | 16条HPU算术命令与RV64字宽移位/XOR、CPU保存值交错；分别比较CPU和HPU结果 |
 | CPU_HPU_MEMORY_BRANCH | RV运算、volatile load/store、条件分支选择HPU加/乘；比较CPU全部scratch、末值、HPU结果 |
 | WATCHDOG_FAIL_STOP | 核侧命令入口反压超时，检查code=1、CPU继续运行、W1C不能恢复发令和DDR guard |
+| WATCHDOG_COMPUTE_BEFORE_DLOAD | 正常COMMIT窗口；PADD在p0/p1尚未DLOAD时进入队首，后排数据/模表DLOAD无法补齐依赖；检查code=1、窗口仍有效且无DMA/IRQ/DDR写回 |
+| WATCHDOG_PMODLD_BEFORE_DLOAD | 正常COMMIT窗口；PMODLD在模表DLOAD前进入队首，cfg_ready为0；检查code=1、窗口仍有效且无DMA/IRQ/DDR写回 |
 
 ## 运行规模与同步
 
@@ -18,9 +20,11 @@
 检查全部输出、输入、模表及所有未许可区域。
 CPU scratch位于ELF的BSS，不在HPU window中。
 
-看门狗用例单独准备4line（A/B各一line，另两line为guard），故意不提交窗口；
+原WATCHDOG_FAIL_STOP单独准备4line（A/B各一line，另两line为guard），故意不提交窗口；
 两份A/B仍来自inline-asm嵌入的N4096输入，本例仅取首64项，不做FHE运算。
 它不调用正向初始化和完成等待，也不允许HPU写回任何区域。
+两项缺依赖用例仍只准备4line：A/B各一line、producer模表一line和guard一line，
+并在main中逐寄存器写读BASE/SIZE及COMMIT。数据/模表全部来自inline-asm的已校验交付。
 
 全部HPU机器码取自固定inline-asm编码器，不在C里手拼位段。
 连续burst使用汇编`.rept`展开，区间为`edge_burst_begin..edge_burst_end`，
@@ -84,6 +88,38 @@ python3 tests/hputest/scripts/test-watchdog-rtl.py \
 脚本直接读取该commit的活动RTL，不改原文件、不缩短硬件阈值，验证custom0/custom1超时、
 最后一拍正常握手优先、输入撤销/握手清计数、sticky停发和复位恢复。
 独立模块回归和ELF编译通过都不等于整机IT/VCS已经通过。
+
+### 缺依赖的两项补充用例
+
+这两项先完成正常COMMIT，所以故障时预期`STATUS_VALID=1`、`STATUS_BUSY=0`、
+`STATUS_FAULT=1`及`CSR_FAULT code=1`；不能沿用未提交窗口用例的VALID=0判据。
+指令编码、对象号、offset和1line长度均合法，故意违规的是程序的依赖顺序；
+它们不是合法FHE程序，也不比较未准备好输入的算术结果，只验收该RTL定义的等待和看门狗故障行为。
+
+- `COMPUTE_BEFORE_DLOAD`：PADD → DLOAD p0/A → DLOAD p1/B → DLOAD p4/模表 →
+  PMODLD → 64条PADD，共69条被测命令。第一条PADD源对象未alloc/valid，
+  controller的`block_reason_local=6`，后排DLOAD不能越过它，最终入口持续反压。
+- `PMODLD_BEFORE_DLOAD`：PMODLD → DLOAD p4/模表 → 64条PMODLD，共66条被测命令。
+  [hpu_cfg_state_regs.sv](https://github.com/cuihu2/IT-SCPU-RTL/blob/0cfd995302af926aa22767e145aade9fc9d21ca2/rtl/cpu/SCPU_RTL/RTL/latest/hpu_cfg_state_regs.sv)
+  复位`table_ready_r=0`，`cfg_ready=(st==ST_IDLE)&&table_ready_r`；
+  后排模表DLOAD不能越过等待它的PMODLD，因此不会读未初始化模表或使用q=0做运算。
+
+每项一个ELF/一次序列，支持普通摘要和silent两种构建；原有看门狗和已通过用例保持不变。
+独立CPU影子覆盖全部256个DDR word。精确计时、controller阻塞原因、模表/数据DLOAD未执行、
+超时后停发和无额外AXI事务仍需IT monitor。恢复必须复位CPU和HPU。
+纯C用例不能直接force DDR的ready/ack；“DLOAD不给握手”需要另行提供IT故障注入接口。
+错误DMA地址可能产生另一个range/DMA故障，本次不用它冒充依赖看门狗。
+
+两项依赖阻塞的独立RTL回归（原controller/decoder/allocator/对象表/cfg模块，producer机器码）为：
+
+```bash
+python3 tests/hputest/scripts/test-watchdog-dependencies-rtl.py \
+  --rtl-repository /path/to/IT-SCPU-RTL \
+  --generated-root /path/to/validated-generated-data
+```
+
+回归检查队首不能被后排DLOAD越过、无执行/DMA/未初始化模表读，以及模表完成事件能解除
+PMODLD等待。它不运行完整CPU、跨域链路或DDR，不能代替这两个ELF的整机VCS验收。
 
 ## IT monitor与ST准入
 

@@ -41,7 +41,7 @@ class EdgeTests(unittest.TestCase):
             return subprocess.check_output([str(binary)], text=True)
 
     def test_case_matrix_is_flat_and_watchdog_has_explicit_fault_contract(self):
-        self.assertEqual(len(CASES), 8)
+        self.assertEqual(len(CASES), 10)
         self.assertEqual({int(c["commands"]) for c in CASES if c["kind"] == "contiguous-burst"}, {1, 8, 9, 32, 64})
         with (ROOT / "cases.tsv").open() as stream:
             roster = {c["case_id"]: c for c in csv.DictReader(stream, delimiter="\t")}
@@ -51,12 +51,18 @@ class EdgeTests(unittest.TestCase):
             self.assertEqual(path.stem, case["case_id"])
             self.assertEqual(roster[case["case_id"]]["source"], case["source"])
             text = (ROOT / path).read_text()
-            if case["kind"] == "watchdog-fail-stop":
+            if case["kind"].startswith("watchdog-"):
                 self.assertEqual(roster[case["case_id"]]["qualifier"], "software-self-check")
-                self.assertIn("watchdog_fault_match", text)
                 self.assertIn("fault_code(fault) != WD_CODE", text)
-                self.assertIn("check_window", text)
-                self.assertNotIn("csr_write(CSR_COMMIT", text)
+                if case["kind"] == "watchdog-fail-stop":
+                    self.assertIn("watchdog_fault_match", text)
+                    self.assertIn("check_window", text)
+                    self.assertNotIn("csr_write(CSR_COMMIT", text)
+                else:
+                    self.assertIn("wd_fault_expected(status, fault, 1U)", text)
+                    self.assertIn("wd_check_memory", text)
+                    self.assertIn("csr_write(CSR_COMMIT, COMMIT)", text)
+                    self.assertIn("wait_window(1)", text)
                 self.assertNotIn("irq_open", text)
                 self.assertEqual(text.count("    psync();"), 1)
             else:
@@ -80,6 +86,12 @@ int main(void) {
     assert(!watchdog_fault_match(5U, 0x101U));
     assert(!watchdog_fault_match(6U, 0x101U));
     assert(fault_code(0xff01U) == 255U);
+    assert(wd_fault_expected(5U, 0x101U, 1U));
+    assert(wd_fault_expected(4U, 0x101U, 0U));
+    assert(!wd_fault_expected(4U, 0x101U, 1U));
+    assert(!wd_fault_expected(5U, 0x101U, 0U));
+    assert(!wd_fault_expected(7U, 0x101U, 1U));
+    assert(!wd_fault_expected(5U, 1U, 1U));
     for (unsigned bit = 0; bit < 16; ++bit)
         if (WD_FAULT_MASK & (1U << bit))
             assert(!watchdog_fault_match(4U, 0x101U ^ (1U << bit)));
@@ -196,6 +208,23 @@ int main(void) {
                     words = [int(w,16) for w in re.findall(r"^\s*[0-9a-f]+:\s+([0-9a-f]{8})\s", asm, re.M)]
                     self.assertEqual(last-first, 64*4)
                     self.assertEqual(words, [encoded(name)] * 64)
+                continue
+            if case["kind"].startswith("watchdog-"):
+                first = int(re.search(r"^([0-9a-f]+)\s+\w\s+watchdog_order_begin$", symbols, re.M)[1], 16)
+                last = int(re.search(r"^([0-9a-f]+)\s+\w\s+watchdog_order_end$", symbols, re.M)[1], 16)
+                asm = subprocess.check_output(["riscv64-linux-gnu-objdump", "-d", "--start-address="+str(first), "--stop-address="+str(last), str(elf)], text=True)
+                words = [int(w,16) for w in re.findall(r"^\s*[0-9a-f]+:\s+([0-9a-f]{8})\s", asm, re.M)]
+                # 忽略offset递增的普通CPU指令，只验收真实HPU命令的编码与顺序。
+                words = [w for w in words if (w & 127) in (0x2b, 0x5b)]
+                mod = encoded("HPU_INSN_PMODLD_0")
+                loadmod = encoded("HPU_INSN_DLOAD_P4_MOD")
+                if case["kind"] == "watchdog-compute-before-dload":
+                    expect = [add, encoded("HPU_INSN_DLOAD_P0_POLY"),
+                              encoded("HPU_INSN_DLOAD_P1_POLY"), loadmod, mod] + [add]*64
+                else:
+                    expect = [mod, loadmod] + [mod]*64
+                self.assertEqual(len(words), int(case["commands"]))
+                self.assertEqual(words, expect)
                 continue
             prefix = "edge_burst" if case["kind"] == "contiguous-burst" else "edge_mix"
             first = int(re.search(r"^([0-9a-f]+)\s+\w\s+" + prefix + r"_begin$", symbols, re.M)[1],16)

@@ -84,11 +84,11 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 47 || \
+if [[ ${#roster_ids[@]} -ne 115 || ${roster_group_counts[core]} -ne 49 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 102 || \
-      $roster_migrated_software -ne 91 || $roster_migrated_blocked -ne 11 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 99 || \
+      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 104 || \
+      $roster_migrated_software -ne 93 || $roster_migrated_blocked -ne 11 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 101 || \
       ${roster_qualifier_counts[blocked-not-issued]} -ne 11 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
@@ -869,6 +869,21 @@ reject_mm_only_fixture() {
   fi
 }
 
+require_watchdog_mod_fixture() {
+  local elf=$1
+  # 这两项需要真实的后排模表DLOAD，但不应链接无关MM运算结果或MM程序。
+  "${cross_compile}nm" -S --defined-only "$elf" | grep -Eq \
+    '^[[:xdigit:]]+[[:space:]]+0*100[[:space:]]+[Rr][[:space:]]+RNS_MOD_CTX$' || {
+      printf 'ERROR: watchdog dependency case lacks the 256-byte producer modulus table: %s\n' "$elf" >&2
+      exit 2
+    }
+  if "${cross_compile}nm" --defined-only "$elf" | grep -Eq \
+      '[[:space:]](RNS_EXPECTED|hpu_program_mm)$'; then
+    printf 'ERROR: watchdog dependency case embeds unrelated MM golden/program: %s\n' "$elf" >&2
+    exit 2
+  fi
+}
+
 for elf in "${elfs[@]}"; do
   base=${elf%.elf}
   bin="$base.bin"
@@ -948,7 +963,12 @@ for elf in "${elfs[@]}"; do
             $name != HPU_IT_DIR_APP_008_BGV_MUL_RELINE_MODSWITCH_ADD_N128 ]]; then
         require_rns_fixture "$elf"
       fi
-      reject_mm_only_fixture "$elf" ;;
+      if [[ $name == HPU_IT_EDGE_WATCHDOG_COMPUTE_BEFORE_DLOAD || \
+            $name == HPU_IT_EDGE_WATCHDOG_PMODLD_BEFORE_DLOAD ]]; then
+        require_watchdog_mod_fixture "$elf"
+      else
+        reject_mm_only_fixture "$elf"
+      fi ;;
   esac
 
   case "$name" in

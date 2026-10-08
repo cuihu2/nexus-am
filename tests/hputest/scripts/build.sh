@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 47 || \
+if [[ ${#roster_ids[@]} -ne 115 || ${roster_group_counts[core]} -ne 49 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 102 || \
-      $roster_migrated_software -ne 91 || $roster_migrated_blocked -ne 11 ]]; then
+      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 104 || \
+      $roster_migrated_software -ne 93 || $roster_migrated_blocked -ne 11 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -322,8 +322,8 @@ if [[ -n $case_filter ]]; then
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=113 ;;
-    core) expected_cases=47 ;;
+    all) expected_cases=115 ;;
+    core) expected_cases=49 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=58 ;;
     diagnostic) expected_cases=19 ;;

@@ -142,8 +142,8 @@ def compare_trees(left, right, label):
 
 def workload_rows(release, mode):
     rows = read_tsv(release / "INDEX.tsv", WORKLOAD_FIELDS)
-    if len(rows) != 113:
-        raise ValueError(f"{mode} workloads must describe 113 canonical cases")
+    if len(rows) != 115:
+        raise ValueError(f"{mode} workloads must describe 115 canonical cases")
     seen = set()
     for row in rows:
         identity = row["case_id"]
@@ -161,8 +161,8 @@ def workload_rows(release, mode):
                     raise ValueError(f"wrong {field} extension for workload: {identity}")
     blocked = sum(row["qualifier"] == "blocked-not-issued" for row in rows)
     published = sum(bool(row["elf"]) for row in rows)
-    if (published, blocked) != (102, 11):
-        raise ValueError(f"{mode} workloads require 102 published and 11 blocked cases")
+    if (published, blocked) != (104, 11):
+        raise ValueError(f"{mode} workloads require 104 published and 11 blocked cases")
     instruction = {row["case_id"] for row in rows
                    if row["chapter"] == "03_compute_instructions" and row["elf"]}
     if instruction != INSTRUCTION_IDS:
@@ -424,7 +424,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
 
         published = sum(bool(row["elf"]) for row in indexes)
         blocked = sum(row["publish_status"] == "BLOCKED_NOT_PUBLISHED" for row in indexes)
-        if (published, blocked, len(indexes)) != (260, 11, 271):
+        if (published, blocked, len(indexes)) != (264, 11, 275):
             raise ValueError(f"unexpected unified counts: published={published} blocked={blocked} rows={len(indexes)}")
         metadata = manifests["workloads"]
         (package_root / "MANIFEST.txt").write_text(
@@ -436,7 +436,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             f"golden_backend={metadata['golden_backend']}\n"
             "variants=normal,silent\nnormal_log_mode=minimal\nsilent_log_mode=silent\n"
             "parent_instruction_cases_replaced=9\nsubtests=37\n"
-            "published_test_identities=130\npublished_variant_sets=260\n"
+            "published_test_identities=132\npublished_variant_sets=264\n"
             "blocked_index_only=11\nqualification=BUILD_READY_NOT_IT_PASS\n",
             encoding="utf-8")
         (package_root / "README.md").write_text(
@@ -450,7 +450,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             "构建成功不代表已经在 IT/VCS 上运行通过。\n\n"
             "`INDEX.tsv` 标明 kind、父用例、subcase、variant 和真实路径。"
             "11个尚未接入的测试只保留索引与原因，不发布占位二进制。"
-            "08组WATCHDOG_FAIL_STOP是预期故障测试，要求RTL包含two_core_no_fdi@ff86d9e的看门狗及故障码。"
+            "08组三项WATCHDOG用例是预期故障测试，要求RTL包含two_core_no_fdi@ff86d9e的看门狗及故障码，每例独立复位。"
             "并行运行03子项可使用 `tools/run-subtests.py`。\n",
             encoding="utf-8")
         (package_root / PACKAGE_MARKER).write_text(PACKAGE_IDENTITY, encoding="ascii")
@@ -463,7 +463,7 @@ def package(workloads, silent_workloads, subtests, silent_subtests, output_root)
             shutil.rmtree(staging)
         raise
     print(f"Unified HPU package: {output / 'release' / 'hputest'}; "
-          "130 tests x 2 variants, 11 blocked index-only")
+          "132 tests x 2 variants, 11 blocked index-only")
     return output / "release"
 
 

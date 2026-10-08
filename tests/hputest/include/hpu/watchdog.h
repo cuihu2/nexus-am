@@ -20,4 +20,11 @@ static inline int watchdog_fault_match(uint32_t status, uint32_t fault) {
            (fault & WD_FAULT_MASK) == WD_FAULT_VALUE;
 }
 
+/* 依赖死锁用例窗口已正常提交；仍要求DMA空闲和精确的CPU入口超时码。 */
+static inline int wd_fault_expected(uint32_t status, uint32_t fault, unsigned window_valid) {
+    const uint32_t expected = STATUS_FAULT | (window_valid ? STATUS_VALID : 0U);
+    return (status & (STATUS_VALID | STATUS_BUSY | STATUS_FAULT)) == expected &&
+           (fault & WD_FAULT_MASK) == WD_FAULT_VALUE;
+}
+
 #endif
