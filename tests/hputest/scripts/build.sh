@@ -115,10 +115,10 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < "$roster"
 
-if [[ ${#roster_ids[@]} -ne 105 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 47 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 94 || \
-      $roster_migrated_software -ne 83 || $roster_migrated_blocked -ne 11 ]]; then
+      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 102 || \
+      $roster_migrated_software -ne 90 || $roster_migrated_blocked -ne 12 ]]; then
   printf 'ERROR: canonical testcase roster counts changed unexpectedly\n' >&2
   exit 2
 fi
@@ -310,19 +310,20 @@ cp "$test_root/docs/BFV_APPLICATIONS.md" "$test_root/docs/BGV_APPLICATIONS.md" \
 cp "$test_root/docs/SCHEME_DELIVERY_V1.md" "$test_root/docs/CMB004_CMB012_FAILURE_ANALYSIS.md" \
   "$artifact_root/provenance/testplan/docs/"
 cp "$test_root/docs/SEAL_LIBRARY.md" "$artifact_root/provenance/testplan/docs/"
+cp "$test_root/docs/EDGE_SMOKE.md" "$artifact_root/provenance/testplan/docs/"
 cp -a "$test_root/tools/hpu-scheme-cases" "$artifact_root/provenance/testplan/generators"
 mkdir -p "$artifact_root/tools"
 cp "$test_root/scripts/parse-uart-results.py" "$artifact_root/tools/"
 cp "$test_root/cases.tsv" "$test_root/blocked.tsv" "$test_root/scheme-cases.tsv" \
-  "$test_root/case-aliases.tsv" "$test_root/layer-migration.tsv" "$artifact_root/provenance/testplan/"
+  "$test_root/case-aliases.tsv" "$test_root/layer-migration.tsv" "$test_root/edge-cases.tsv" "$artifact_root/provenance/testplan/"
 if [[ -n $case_filter ]]; then
   selection="case:$case_filter"
   expected_cases=1
 else
   selection=$case_group
   case "$case_group" in
-    all) expected_cases=105 ;;
-    core) expected_cases=39 ;;
+    all) expected_cases=113 ;;
+    core) expected_cases=47 ;;
     transform) expected_cases=8 ;;
     fhe) expected_cases=58 ;;
     diagnostic) expected_cases=19 ;;
@@ -358,5 +359,11 @@ fi
 
 EXPECTED_CASES=$expected_cases CROSS_COMPILE="$cross_compile" \
   "$script_dir/validate-build.sh" "$artifact_root"
+if awk -F '\t' '$2 == "software-self-check" && $3 ~ /^HPU_IT_EDGE_/ { found=1 } END { exit !found }' \
+     "$case_manifest"; then
+  HPU_EDGE_ELF_ROOT="$artifact_root/core/08_cpu_hpu_structural_connectivity/03_edge_cases" \
+    HPU_GENERATED_ROOT="$generated_root" python3 "$script_dir/test-edge-cases.py" \
+      EdgeTests.test_actual_elf_burst_counts_order_and_cpu_mix
+fi
 printf '[hputest] PASS: %u testcase artifact sets in %s\n' \
   "${#case_sources[@]}" "$artifact_root"

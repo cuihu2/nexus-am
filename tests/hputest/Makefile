@@ -98,6 +98,7 @@ prepare-inline-asm-mm:
 
 verify-inline-asm: prepare-inline-asm-mm
 	@python3 scripts/test-layer-separation.py
+	@python3 scripts/test-edge-cases.py
 	@python3 scripts/test-seal-delivery.py --generated "$(HPU_GENERATED_ROOT)/application-data"
 	@HPU_GENERATED_ROOT="$(HPU_GENERATED_ROOT)" \
 	  scripts/verify-inline-asm-encodings.sh "$(INLINE_ASM_ROOT)"

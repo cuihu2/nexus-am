@@ -84,12 +84,12 @@ while IFS=$'\t' read -r group qualifier case_id source_path; do
   fi
 done < <(tail -n +2 "$roster")
 
-if [[ ${#roster_ids[@]} -ne 105 || ${roster_group_counts[core]} -ne 39 || \
+if [[ ${#roster_ids[@]} -ne 113 || ${roster_group_counts[core]} -ne 47 || \
       ${roster_group_counts[transform]} -ne 8 || \
-      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 94 || \
-      $roster_migrated_software -ne 83 || $roster_migrated_blocked -ne 11 || \
-      ${roster_qualifier_counts[software-self-check]} -ne 91 || \
-      ${roster_qualifier_counts[blocked-not-issued]} -ne 11 || \
+      ${roster_group_counts[fhe]} -ne 58 || $roster_migrated -ne 102 || \
+      $roster_migrated_software -ne 90 || $roster_migrated_blocked -ne 12 || \
+      ${roster_qualifier_counts[software-self-check]} -ne 98 || \
+      ${roster_qualifier_counts[blocked-not-issued]} -ne 12 || \
       ${roster_qualifier_counts[waveform-hold]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-pass]} -ne 1 || \
       ${roster_qualifier_counts[termination-probe-fail]} -ne 1 ]]; then
@@ -132,6 +132,7 @@ for case_id in "${roster_ids[@]}"; do
     software-self-check)
       if ! grep -Fq 'case_pass(__FILE__)' "$source_file" ||
          { ! grep -Fq 'case_fail(__FILE__, __LINE__)' "$source_file" &&
+           ! grep -Fq 'edge_failure(__FILE__, __LINE__,' "$source_file" &&
            ! { grep -Fq 'failure(__LINE__,' "$source_file" &&
                grep -Eq 'case_fail\(__FILE__, (line|source_line)\)' "$source_file"; }; }; then
         printf 'ERROR: self-check testcase lacks PASS/FAIL reporting: %s\n' \

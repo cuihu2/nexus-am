@@ -1,22 +1,25 @@
 # HPU tests for Nexus-AM
 
+08组新增CPU/HPU混合和连续算术发令快测，当前规模为1line/64系数。
+看门狗缺口、软件等待预算与IT/ST验收边界见[EDGE_SMOKE.md](docs/EDGE_SMOKE.md)。
+
 04只保留基本/组合算子；05统一放算法库接口，包含30项modified-SEAL规范用例、7项不同参数回归和2项未接入记录。
 原结构连接测试保留至08组；Poseidon独立保存在`experiments/poseidon/`，不进入默认构建或下载包。
 覆盖范围、旋转约定和构建说明见
 [SEAL_LIBRARY.md](docs/SEAL_LIBRARY.md)。
 
 `hputest` is the canonical Nexus-AM source tree for HPU bring-up and IT
-testcases.  It contains the eleven bring-up/return probes plus the 94 subsequent
+testcases.  It contains the eleven bring-up/return probes plus the 102 subsequent
 IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 2026-10-04 main v1更新、三算法差异、CMB004/CMB012修复及精度测量见
-[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。105项中91项软件自检、
-11项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
+[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。113项中98项软件自检、
+12项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
 `scheme-cases.tsv`明确算法/操作/规模，`case-aliases.tsv`映射旧编号。
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续94项中83项有软件自检，11项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续102项中90项有软件自检，12项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -59,7 +62,7 @@ src/02_data_paths/             # 6 migrated IT cases
 src/03_compute_instructions/   # 9 migrated IT cases
 src/04_composite_instruction_sequences/ # 11 basic/operator-chain cases
 src/05_algorithm_library/       # 30 modified-SEAL API + 7 parameter regressions + 2 pending
-src/08_cpu_hpu_structural_connectivity/  # 7 preserved structural cases
+src/08_cpu_hpu_structural_connectivity/  # 15 structural/edge entries (11 active, 4 pending)
 src/06_performance/            # 6 migrated IT cases
 src/07_full_application/       # 9 migrated IT cases (8 active, 1 blocked)
 
@@ -328,10 +331,10 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-83个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
+90个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
 LEGACY Auto与三算法KeySwitch；05包含HADD/HMUL/Reline/降层/旋转，07包含八个完整应用。
 PERF002/003分别复用CMB002/003的N4096/Q0交付，逐轮比较CPU参考NTT/INTT与HPU结果并报告cycle。
-实际算法、参数和程序对应见`scheme-cases.tsv`。其它11项未接入，原因逐项记录于
+实际算法、参数和程序对应见`scheme-cases.tsv`。其它12项未接入，原因逐项记录于
 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
 上游“没有数据”。旧CMB_009/010/012/013/014已归05，modified-SEAL接口与SEAL参数回归分别注明参考机制；
 基础PADD/PMUL覆盖仍保留在03-001/003，具体旧ID映射见`layer-migration.tsv`。
@@ -381,7 +384,7 @@ make -C tests/hputest group GROUP=fhe
 ```
 
 Local output is ignored under `tests/hputest/build/`.  A full build produces
-94 ELF/BIN/TXT sets from 105 canonical entries, partitioned below `artifact/core/`,
+101 ELF/BIN/TXT sets from 113 canonical entries, partitioned below `artifact/core/`,
 `artifact/transform/`, and `artifact/fhe/`.  It also produces
 `MANIFEST.txt`, `CASE_MANIFEST.tsv`, `NOT_QUALIFIED.tsv`, and a compact
 `provenance/inline-asm-mm/` directory containing the selected producer
@@ -400,7 +403,7 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至08章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共122个已发布测试身份、244组ELF/BIN/TXT；11项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共129个已发布测试身份、258组ELF/BIN/TXT；12项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

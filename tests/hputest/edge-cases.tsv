@@ -1,0 +1,9 @@
+case_id	kind	commands	words	profile	source
+HPU_IT_EDGE_CMD_BURST_N001	contiguous-burst	1	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CMD_BURST_N001.c
+HPU_IT_EDGE_CMD_BURST_N008	contiguous-burst	8	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CMD_BURST_N008.c
+HPU_IT_EDGE_CMD_BURST_N009	contiguous-burst	9	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CMD_BURST_N009.c
+HPU_IT_EDGE_CMD_BURST_N032	contiguous-burst	32	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CMD_BURST_N032.c
+HPU_IT_EDGE_CMD_BURST_N064	contiguous-burst	64	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CMD_BURST_N064.c
+HPU_IT_EDGE_CPU_HPU_ALU	mixed-alu	16	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CPU_HPU_ALU.c
+HPU_IT_EDGE_CPU_HPU_MEMORY_BRANCH	mixed-memory-branch	16	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CPU_HPU_MEMORY_BRANCH.c
+HPU_IT_EDGE_WATCHDOG_PENDING	watchdog-pending	0	0		src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_WATCHDOG_PENDING.c
