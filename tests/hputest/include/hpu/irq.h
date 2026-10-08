@@ -6,6 +6,8 @@
  * 用例在发 PSYNC 前调用 irq_open()，再用 irq_wait() 等待处理函数。
  */
 int irq_open(void);
+/* W1C清除HPU IRQ，并轮询确认电平已经真正撤销。 */
+int irq_clear_and_verify(void);
 int irq_wait(void);
 /* 等待处理函数清除并complete上一轮中断后，重置完成标志供下一阶段使用。 */
 int irq_rearm(void);

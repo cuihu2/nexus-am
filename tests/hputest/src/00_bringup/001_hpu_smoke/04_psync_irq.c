@@ -18,8 +18,6 @@ int main(void) {
     if (fixture_validate() != 0) return case_fail(__FILE__, __LINE__);
 
     csr_write(CSR_FAULT, FAULT_VALID);
-    csr_write(CSR_IRQ, IRQ_LEVEL);
-    csr_write(CSR_IRQ, 0U);
     csr_write(CSR_BASE_LO, (uint32_t)MEM_BASE);
     csr_write(CSR_BASE_HI, (uint32_t)(MEM_BASE >> 32U));
     csr_write(CSR_SIZE_LO, SMOKE_LINES);

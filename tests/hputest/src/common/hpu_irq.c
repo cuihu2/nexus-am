@@ -82,7 +82,7 @@ static volatile uint32_t irq_last_level;
 static volatile uint32_t irq_clear_last;
 static volatile uint32_t irq_clear_polls;
 
-static int clear_level(void) {
+int irq_clear_and_verify(void) {
     unsigned timeout;
     uint32_t level = 0U;
 
@@ -120,7 +120,7 @@ static _Context *handler(_Event event, _Context *context) {
     irq_last_level = csr_read(CSR_IRQ);
     if ((irq_last_level & IRQ_LEVEL) == 0U) {
         irq_error = IRQ_MISSING_LEVEL;
-    } else if (clear_level() != 0) {
+    } else if (irq_clear_and_verify() != 0) {
         irq_error = IRQ_CLEAR_TIMEOUT;
     }
     hpu_plic_complete(claim);
@@ -140,7 +140,6 @@ int irq_open(void) {
         return 1;
     }
 
-    irq_done = 0U;
     irq_error = 0U;
     irq_handler_seen = 0U;
     irq_last_event = 0;
@@ -148,6 +147,16 @@ int irq_open(void) {
     irq_last_level = 0U;
     irq_clear_last = 0U;
     irq_clear_polls = 0U;
+
+    /* 先确认旧完成电平已撤销，再武装PLIC，避免把旧事件当成本轮结果。 */
+    if (irq_clear_and_verify() != 0) {
+        LOG_ERROR("[HPU][IRQ][FAIL] phase=open reason=stale-level-clear-timeout "
+               "clear-last=0x%x clear-polls=%u\n",
+               irq_clear_last, irq_clear_polls);
+        return 1;
+    }
+
+    irq_done = 0U;
     seip_handler_reg(handler);
     mmio_write32(PLIC_PRIORITY_ADDR, 1U);
     mmio_write32(PLIC_THRESHOLD_ADDR, 0U);
