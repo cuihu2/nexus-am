@@ -36,7 +36,7 @@ CSR_HEADER = r"""
 #define STATUS_FAULT 4U
 #define FAULT_VALID 1U
 #define IRQ_LEVEL 1U
-#define TIMEOUT 32U
+#define TIMEOUT 64U
 uint32_t csr_read(uintptr_t address);
 void csr_write(uintptr_t address, uint32_t value);
 """
@@ -47,7 +47,8 @@ HARNESS = r"""
 struct cell { uintptr_t address; uint32_t value; };
 static struct cell cells[512];
 static unsigned used, plic_accesses, claims, completions, init_calls;
-static int enabled, bad_readback;
+static unsigned irq_reads, clear_after;
+static int enabled, bad_readback, clearing, expect_open_clear;
 static uint32_t hpu_level;
 int g_config_disable_timer;
 static struct cell *cell(uintptr_t address) {
@@ -98,12 +99,26 @@ uint32_t csr_read(uintptr_t address) {
     if (address == CSR_STATUS) return STATUS_VALID;
     if (address == CSR_FAULT) return 0U;
     assert(address == CSR_IRQ);
+    if (clearing) {
+        ++irq_reads;
+        if (expect_open_clear) {
+            assert(enabled == 0);
+            assert(cell(0x3c000404UL)->value == 0U);
+            assert((cell(0x3c0020a0UL)->value & 2U) == 0U);
+        }
+        if (clear_after != 0U && irq_reads >= clear_after) hpu_level = 0U;
+    }
     return hpu_level;
 }
 void csr_write(uintptr_t address, uint32_t value) {
     assert(address == CSR_IRQ);
     assert(value == IRQ_LEVEL || value == 0U);
-    if (value == IRQ_LEVEL) hpu_level = 0U;
+    if (value == IRQ_LEVEL) {
+        clearing = 1;
+        irq_reads = 0U;
+    } else {
+        clearing = 0;
+    }
 }
 int main(int argc, char **argv) {
     assert(argc == 2);
@@ -111,10 +126,31 @@ int main(int argc, char **argv) {
     _Static_assert(PLIC_ENABLE_ADDR == 0x3c0020a0UL, "enable source257/context1");
     _Static_assert(PLIC_THRESHOLD_ADDR == 0x3c201000UL, "threshold context1");
     _Static_assert(PLIC_CLAIM_ADDR == 0x3c201004UL, "claim context1");
+    clear_after = 1U;
     if (atoi(argv[1]) == 2) {
         bad_readback = 1;
         assert(irq_open() == 1 && enabled == 0);
         assert(claims == 0 && completions == 0);
+        return 0;
+    }
+    if (atoi(argv[1]) == 3) {
+        hpu_level = IRQ_LEVEL;
+        clear_after = 3U;
+        expect_open_clear = 1;
+        assert(irq_open() == 0);
+        expect_open_clear = 0;
+        assert(irq_reads == 3U && hpu_level == 0U && enabled == 1);
+        irq_close();
+        return 0;
+    }
+    if (atoi(argv[1]) == 4) {
+        hpu_level = IRQ_LEVEL;
+        clear_after = 0U;
+        expect_open_clear = 1;
+        assert(irq_open() == 1);
+        expect_open_clear = 0;
+        assert(irq_reads == TIMEOUT / 16U);
+        assert(hpu_level == IRQ_LEVEL && enabled == 0);
         return 0;
     }
     assert(irq_open() == 0 && enabled == 1 && init_calls == 1U);
@@ -190,6 +226,14 @@ class PlicAddressTests(unittest.TestCase):
     def test_priority_readback_failure_does_not_claim_or_enable_interrupts(self):
         for binary in self.binaries:
             subprocess.run([str(binary), "2"], check=True, capture_output=True)
+
+    def test_stale_irq_is_cleared_before_interrupts_are_enabled(self):
+        for binary in self.binaries:
+            subprocess.run([str(binary), "3"], check=True, capture_output=True)
+
+    def test_stale_irq_timeout_keeps_interrupts_disabled(self):
+        for binary in self.binaries:
+            subprocess.run([str(binary), "4"], check=True, capture_output=True)
 
     def test_platform_header_variants(self):
         source = self.directory / "platform.c"
