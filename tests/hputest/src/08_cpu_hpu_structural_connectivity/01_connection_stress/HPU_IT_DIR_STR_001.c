@@ -23,7 +23,6 @@ static int failure(unsigned line, const char *phase) {
 
 int main(void) {
     case_start(__FILE__);
-    (void)result_context(__FILE__, 0U);
     LOG_DEBUG("[HPU][STR001][SCOPE] software checks loopback/guard only; "
            "ready/backpressure/CDC coverage requires IT monitor\n");
 
@@ -32,6 +31,8 @@ int main(void) {
         const uint32_t *b;
         int rc;
 
+        if (result_context(__FILE__, profile) != 0)
+            return failure(__LINE__, "result-context");
         LOG_DEBUG("[HPU][STR001][PREPARE] profile=%u words=%u "
                "p0:line%u->%u p1:line%u->%u count=%u window-lines=%u\n",
                profile, POLY_WORDS, LINE_A, LINE_OUT, LINE_B, LINE_OUT_B,
