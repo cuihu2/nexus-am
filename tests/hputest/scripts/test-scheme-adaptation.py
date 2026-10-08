@@ -62,6 +62,24 @@ class SchemeTests(unittest.TestCase):
         fixed = json.loads((ARGS.generated / "seal_ckks_reline_n4096" / "AM_ADAPTATION.json").read_text())
         self.assertGreater(fixed["ckks_rounded_p_instructions_added"], 0)
 
+    def test_terminal_live_object_is_rejected(self):
+        source = ARGS.generated / "seal_ckks_hadd_n128" / "upstream"
+        package = json.loads((source / "package.json").read_text())
+        assembly = (source / package["program_asm"]).read_text()
+        self.assertEqual(assembly.count("pfree p4"), 1)
+        leaked = assembly.replace("pfree p4", "pmodld 0")
+        with tempfile.TemporaryDirectory(prefix="scheme-live-object-") as temporary:
+            temporary = Path(temporary)
+            asm = temporary / "leaked.asm"
+            asm.write_text(leaked)
+            result = subprocess.run([
+                str(ARGS.model), str(asm), str(source / package["image"]),
+                str(source / package["dma_relocation_manifest"]),
+                str(source / package["golden_manifest"]), str(source),
+                str(temporary / "leaked.u32.bin")], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("live object at program end p4", result.stderr)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -254,7 +254,11 @@ while IFS=$'\t' read -r case_id stem scheme degree role source; do
   if [[ $role != application ]]; then
     generator="$hpu_main_build/hpu_scheme_case_generator"
     profile=()
-    if [[ $stem == seal_* ]]; then profile=(library); fi
+    if [[ $stem == seal_* ]]; then
+      profile=(library)
+    elif [[ $source == src/05_algorithm_library/04_parameter_regression/* ]]; then
+      profile=(regression)
+    fi
     HPU_DELIVERY_COMMIT="$hpu_applications_commit" \
     HPU_DELIVERY_WORKTREE_STATE=clean-at-configure \
       "$generator" "$scheme" "$role" "$degree" \

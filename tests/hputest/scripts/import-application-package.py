@@ -52,12 +52,15 @@ def package_files(source):
 
 
 def validate_seal(source, spec, producer_commit):
-    if not spec["program_stem"].startswith("seal_"):
+    if not spec["source"].startswith("src/05_algorithm_library/"):
         return None
     report = load_json(source.with_name(source.name + ".seal.json"))
     api = {"hadd": "add", "hmul": "multiply+relinearize", "reline": "relinearize",
            "rotate": "rotate_vector" if spec["scheme"] == "ckks" else "rotate_rows",
            "modswitch": "rescale_to_next" if spec["scheme"] == "ckks" else "mod_switch_to_next"}[spec["role"]]
+    regression = "/04_parameter_regression/" in spec["source"]
+    correction_factors = [3, 5] if regression and spec["scheme"] == "bgv" else [1, 1]
+    rotation_steps = (1 if regression else int(spec["degree"]) // 4) if spec["role"] == "rotate" else 0
     require(bool(producer_commit) and report.get("producer_commit") == producer_commit and
             re.fullmatch(r"[0-9a-f]{40}", producer_commit) and
             report.get("library") == "inline-asm/third_party/modified-SEAL" and
@@ -66,10 +69,27 @@ def validate_seal(source, spec, producer_commit):
             report.get("api") == f"seal::Evaluator::{api}" and report.get("status") == "PASS" and
             report.get("comparison") == "all raw physical words" and
             type(report.get("raw_word_mismatches")) is int and report["raw_word_mismatches"] == 0 and
-            report.get("initial_correction_factors") == [1, 1] and report.get("rotation_generator") == 3 and
-            report.get("rotation_steps") == (int(spec["degree"]) // 4 if spec["role"] == "rotate" else 0),
+            report.get("initial_correction_factors") == correction_factors and
+            report.get("rotation_generator") == 3 and report.get("rotation_steps") == rotation_steps,
             "modified-SEAL oracle/provenance mismatch")
     return report
+
+
+def validate_operation_graph(spec, operations):
+    role = spec["role"]
+    kinds = [op["kind"] for op in operations]
+    if role != "application":
+        expected = {"hadd": ["add"], "keyswitch": ["relinearize"], "reline": ["relinearize"],
+                    "modswitch": ["rescale" if spec["scheme"] == "ckks" else "mod_switch"],
+                    "rotate": ["rotate" if spec["scheme"] == "ckks" else "rotate_rows"]}
+        if role == "hmul":
+            require(kinds in (["multiply", "relinearize"], ["multiply_relinearize"]),
+                    "HMUL graph mismatch")
+        else:
+            require(kinds == expected[role], "standalone operation graph mismatch")
+        require(operations[-1]["component_count"] == 2, "operator final component count")
+    require([r.get("operation_index", i) for i, r in enumerate(operations)] ==
+            list(range(len(operations))), "operation indices are not contiguous")
 
 
 def validate(source, validator, producer_commit=None):
@@ -108,20 +128,7 @@ def validate(source, validator, producer_commit=None):
     require(parameters.get("scheme") == spec["scheme"] and
             parameters.get("poly_modulus_degree") == n, "scheme/degree mismatch")
     operations = load_json(files["operation_graph"])["operations"]
-    role = spec["role"]
-    kinds = [op["kind"] for op in operations]
-    if role != "application":
-        expected = {"hadd": ["add"], "keyswitch": ["relinearize"], "reline": ["relinearize"],
-                    "modswitch": ["rescale" if spec["scheme"] == "ckks" else "mod_switch"],
-                    "rotate": ["rotate" if spec["scheme"] == "ckks" else "rotate_rows"]}
-        if role == "hmul":
-            require(kinds in (["multiply", "relinearize"], ["multiply_relinearize"], ["multiply"]),
-                    "HMUL graph mismatch")
-        else:
-            require(kinds == expected[role], "standalone operation graph mismatch")
-        require(operations[-1]["component_count"] == 2, "operator final component count")
-    require([r.get("operation_index", i) for i, r in enumerate(operations)] ==
-            list(range(len(operations))), "operation indices are not contiguous")
+    validate_operation_graph(spec, operations)
     config = load_json(files["memory_config"])
     require(0 < config["used_lines"] <= config["capacity_lines"], "window geometry")
     abi = load_json(files["memory_abi"])
@@ -293,7 +300,7 @@ def import_package(source, destination, validator, producer_commit, encoder, pro
                       "ckks_rounded_p_instructions_added": adapted["instructions_added"] if adapted else 0,
                       "ckks_input_shadow_count": adapted["input_shadow_count"] if adapted else 0,
                       "program_model_matches_seal": True, "rtl_verified": False}
-        if stem.startswith("seal_"):
+        if spec["source"].startswith("src/05_algorithm_library/"):
             sidecar = source.with_name(source.name + ".seal.json")
             adaptation["seal_oracle"] = load_json(sidecar)
             shutil.copy2(sidecar, root / "SEAL_ORACLE.json")

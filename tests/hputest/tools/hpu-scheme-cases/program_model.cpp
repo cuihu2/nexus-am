@@ -185,6 +185,10 @@ int main(int argc,char **argv) {
             }
         }
         if (dma_index!=dma.size()) throw std::runtime_error("extra DMA spans");
+        for (std::size_t object=0; object<live.size(); ++object) {
+            if (live[object])
+                throw std::runtime_error("live object at program end p"+std::to_string(object));
+        }
         unsigned failures=0;
         for (const auto &row:csv(argv[4])) {
             const auto expected=binary(std::string(argv[5])+"/"+row.at("path"));

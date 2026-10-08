@@ -82,7 +82,8 @@ SRCS += $(HPU_IT_RUNTIME_SRCS)
 # Most migrated finite cases consume the producer's two 4096-coefficient RNS
 # inputs. Application-package cases own complete images and must not link that
 # unrelated fixture.
-ifeq ($(filter HPU_IT_DIR_APP_004_BFV_MUL_RELINE_MODSWITCH_ADD_N128 HPU_IT_DIR_APP_005_BFV_ROTATE_ROWS_COLUMNS_ADD_N128 HPU_IT_DIR_APP_006_BGV_PLAIN_ADD_MUL_SUB_N128 HPU_IT_DIR_APP_007_BGV_ADD_ROTATE_ADD_N128 HPU_IT_DIR_APP_008_BGV_MUL_RELINE_MODSWITCH_ADD_N128,$(CASE_ID)),)
+APPLICATION_STEM := $(shell awk -F '\t' '$$1 == "$(CASE_ID)" {print $$2}' $(TEST_ROOT)/scheme-cases.tsv)
+ifeq ($(strip $(APPLICATION_STEM)),)
 SRCS += $(TEST_ROOT)/src/common/hpu_rns_fixture.S
 endif
 ifneq ($(filter %/HPU_IT_DIR_INS_C0_005.c %/HPU_IT_DIR_INS_C0_006.c,$(CASE_SOURCE)),)
@@ -119,7 +120,6 @@ SRCS += $(HPU_GENERATED_ROOT)/auto-data/auto.c
 INC_DIR += $(HPU_GENERATED_ROOT)/auto-data
 endif
 # 所有 scheme 用例沿用原目录；从显式清单选取本例的独立 producer 程序。
-APPLICATION_STEM := $(shell awk -F '\t' '$$1 == "$(CASE_ID)" {print $$2}' $(TEST_ROOT)/scheme-cases.tsv)
 ifneq ($(strip $(APPLICATION_STEM)),)
 APPLICATION_DATA := $(HPU_GENERATED_ROOT)/application-data/$(APPLICATION_STEM)
 ifeq ($(wildcard $(APPLICATION_DATA)/application_layout.h),)
