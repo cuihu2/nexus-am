@@ -40,7 +40,7 @@ class EdgeTests(unittest.TestCase):
             subprocess.run(command + (extra or []) + ["-o", str(binary)], check=True)
             return subprocess.check_output([str(binary)], text=True)
 
-    def test_case_matrix_is_flat_and_watchdog_not_falsely_qualified(self):
+    def test_case_matrix_is_flat_and_watchdog_has_explicit_fault_contract(self):
         self.assertEqual(len(CASES), 8)
         self.assertEqual({int(c["commands"]) for c in CASES if c["kind"] == "contiguous-burst"}, {1, 8, 9, 32, 64})
         with (ROOT / "cases.tsv").open() as stream:
@@ -51,15 +51,41 @@ class EdgeTests(unittest.TestCase):
             self.assertEqual(path.stem, case["case_id"])
             self.assertEqual(roster[case["case_id"]]["source"], case["source"])
             text = (ROOT / path).read_text()
-            if case["kind"] == "watchdog-pending":
-                self.assertEqual(roster[case["case_id"]]["qualifier"], "blocked-not-issued")
-                self.assertNotIn("case_pass", text)
-                self.assertIn("case_not_qualified", text)
+            if case["kind"] == "watchdog-fail-stop":
+                self.assertEqual(roster[case["case_id"]]["qualifier"], "software-self-check")
+                self.assertIn("watchdog_fault_match", text)
+                self.assertIn("fault_code(fault) != WD_CODE", text)
+                self.assertIn("check_window", text)
+                self.assertNotIn("csr_write(CSR_COMMIT", text)
+                self.assertNotIn("irq_open", text)
+                self.assertEqual(text.count("    psync();"), 1)
             else:
                 self.assertEqual(int(case["words"]), 64)
                 self.assertEqual(text.count("    psync();"), 1)
                 self.assertIn("v2_check_memory", text)
                 self.assertIn("edge_wait(EDGE_WAIT_CYCLES)", text)
+
+    def test_watchdog_fault_contract_rejects_other_faults_and_cdc_skew(self):
+        mock = '#include <stdint.h>\n#define STATUS_VALID 1U\n#define STATUS_BUSY 2U\n#define STATUS_FAULT 4U\n#define FAULT_VALID 1U\n'
+        self.compile_run(r'''
+#include <assert.h>
+#include <hpu/watchdog.h>
+int main(void) {
+    assert(WD_CYCLES == 500000U);
+    assert(watchdog_fault_match(4U, 0x101U));
+    assert(!watchdog_fault_match(0U, 0x101U));
+    assert(!watchdog_fault_match(4U, 0U));
+    assert(!watchdog_fault_match(4U, 1U));
+    assert(!watchdog_fault_match(4U, 0x201U));
+    assert(!watchdog_fault_match(5U, 0x101U));
+    assert(!watchdog_fault_match(6U, 0x101U));
+    assert(fault_code(0xff01U) == 255U);
+    for (unsigned bit = 0; bit < 16; ++bit)
+        if (WD_FAULT_MASK & (1U << bit))
+            assert(!watchdog_fault_match(4U, 0x101U ^ (1U << bit)));
+    return 0;
+}
+''', {"hpu/csr.h": mock})
 
     def test_pure_c_reference_against_independent_python(self):
         output = self.compile_run(r'''
@@ -157,11 +183,20 @@ int main(void) {
         add, mul = encoded("HPU_INSN_PADD_P0_P0_P1"), encoded("HPU_INSN_PMUL_IMM7_P0_P0")
         checked = 0
         for case in CASES:
-            if case["kind"] == "watchdog-pending": continue
             elf = directory / (case["case_id"] + ".elf")
             if not elf.is_file(): continue  # make one只验收实际选择项。
             checked += 1
             symbols = subprocess.check_output(["riscv64-linux-gnu-nm", str(elf)], text=True)
+            if case["kind"] == "watchdog-fail-stop":
+                for prefix, name in (("watchdog_stall", "HPU_INSN_DLOAD_P0_POLY"),
+                                     ("watchdog_drop", "HPU_INSN_DLOAD_P1_POLY")):
+                    first = int(re.search(r"^([0-9a-f]+)\s+\w\s+" + prefix + r"_begin$", symbols, re.M)[1], 16)
+                    last = int(re.search(r"^([0-9a-f]+)\s+\w\s+" + prefix + r"_end$", symbols, re.M)[1], 16)
+                    asm = subprocess.check_output(["riscv64-linux-gnu-objdump", "-d", "--start-address="+str(first), "--stop-address="+str(last), str(elf)], text=True)
+                    words = [int(w,16) for w in re.findall(r"^\s*[0-9a-f]+:\s+([0-9a-f]{8})\s", asm, re.M)]
+                    self.assertEqual(last-first, 64*4)
+                    self.assertEqual(words, [encoded(name)] * 64)
+                continue
             prefix = "edge_burst" if case["kind"] == "contiguous-burst" else "edge_mix"
             first = int(re.search(r"^([0-9a-f]+)\s+\w\s+" + prefix + r"_begin$", symbols, re.M)[1],16)
             last = int(re.search(r"^([0-9a-f]+)\s+\w\s+" + prefix + r"_end$", symbols, re.M)[1],16)

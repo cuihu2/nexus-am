@@ -6,4 +6,4 @@ HPU_IT_EDGE_CMD_BURST_N032	contiguous-burst	32	64	1	src/08_cpu_hpu_structural_co
 HPU_IT_EDGE_CMD_BURST_N064	contiguous-burst	64	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CMD_BURST_N064.c
 HPU_IT_EDGE_CPU_HPU_ALU	mixed-alu	16	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CPU_HPU_ALU.c
 HPU_IT_EDGE_CPU_HPU_MEMORY_BRANCH	mixed-memory-branch	16	64	1	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_CPU_HPU_MEMORY_BRANCH.c
-HPU_IT_EDGE_WATCHDOG_PENDING	watchdog-pending	0	0		src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_WATCHDOG_PENDING.c
+HPU_IT_EDGE_WATCHDOG_FAIL_STOP	watchdog-fail-stop	64	64	0	src/08_cpu_hpu_structural_connectivity/03_edge_cases/HPU_IT_EDGE_WATCHDOG_FAIL_STOP.c

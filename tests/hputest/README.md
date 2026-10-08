@@ -14,12 +14,12 @@ IT cases.  Generated ELF, BIN, TXT, object files, and archives are never
 committed.  GitHub Actions builds them as short-lived downloadable artifacts.
 
 2026-10-04 main v1更新、三算法差异、CMB004/CMB012修复及精度测量见
-[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。113项中98项软件自检、
-12项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
+[SCHEME_DELIVERY_V1.md](docs/SCHEME_DELIVERY_V1.md)。113项中99项软件自检、
+11项未接入、1项波形hold及2项终止探针；下载包保留普通/静默版本。
 `scheme-cases.tsv`明确算法/操作/规模，`case-aliases.tsv`映射旧编号。
 
 本轮按 v2 测试点更新后的实际覆盖、各指令轮次和未完成项见
-[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续102项中90项有软件自检，12项尚未接入；
+[V2_COVERAGE.md](docs/V2_COVERAGE.md)。后续102项中91项有软件自检，11项尚未接入；
 软件自检不等于整个测试点或IT验证已通过。00冒烟流程和数据不变，日志使用统一编译开关。
 
 **当前默认是少打印版**，不再打印成功系数、每轮阶段和DMA计划；同一个
@@ -331,10 +331,10 @@ of informal testcase numbers is not authoritative.
 | `transform` | PNTT, PINTT, BConv, NTT/INTT sequences, and their performance cases |
 | `fhe` | KeySwitch, ciphertext multiplication, relinearization, other algorithm cases, and the application case |
 
-90个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
+91个后续源码具有软件自检。03的PNTT/PINTT已补齐；04包含BConv、整体NTT/INTT、
 LEGACY Auto与三算法KeySwitch；05包含HADD/HMUL/Reline/降层/旋转，07包含八个完整应用。
 PERF002/003分别复用CMB002/003的N4096/Q0交付，逐轮比较CPU参考NTT/INTT与HPU结果并报告cycle。
-实际算法、参数和程序对应见`scheme-cases.tsv`。其它12项未接入，原因逐项记录于
+实际算法、参数和程序对应见`scheme-cases.tsv`。其它11项未接入，原因逐项记录于
 [blocked.tsv](blocked.tsv)，其中既有缺外部接口，也有AM接收工作未实现，不能笼统归因于
 上游“没有数据”。旧CMB_009/010/012/013/014已归05，modified-SEAL接口与SEAL参数回归分别注明参考机制；
 基础PADD/PMUL覆盖仍保留在03-001/003，具体旧ID映射见`layer-migration.tsv`。
@@ -403,7 +403,9 @@ make -C tests/hputest unified
 GitHub Actions在push/PR/手动运行中上传唯一的HPU产物`nexus-am-hpu-tests`，
 内容来自`build/unified/release/hputest/`。包内按00至08章节组织；03以37个独立subtest
 替换原九个串行整例，其余章节保留workload。每个已发布测试同时提供普通文件和`_silent`文件，
-共129个已发布测试身份、258组ELF/BIN/TXT；12项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+共130个已发布测试身份、260组ELF/BIN/TXT；11项未就绪只保留索引。`INDEX.tsv`列出模式和真实路径。
+08组看门狗用例要求RTL包含`IT-SCPU-RTL/two_core_no_fdi@ff86d9e`的核侧握手超时及故障码，
+详见[边缘快测说明](docs/EDGE_SMOKE.md)；不适用于尚未合入该机制的旧main交付。
 产物保留7天，不提交二进制到Git。
 
 ## PASS/FAIL boundary

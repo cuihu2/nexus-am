@@ -13,7 +13,7 @@
 | 指令测试 | `src/03_compute_instructions` | 9 | `HPU_IT_DIR_INS_C0_001..009` |
 | 基本算子/指令链测试 | `src/04_composite_instruction_sequences` | 11 | `HPU_IT_DIR_CMB_*`、`HPU_IT_STING_CMB_007`，详见cases.tsv |
 | 算法库接口/参数回归 | `src/05_algorithm_library` | 39 | 30项`HPU_IT_LIB_SEAL_*`、7项`HPU_IT_LIB_SEAL_*`、2项待接入 |
-| 结构/互联测试 | `src/08_cpu_hpu_structural_connectivity` | 15 | `HPU_IT_DIR_STR_001..004/006`、`HPU_IT_STING_STR_001/005` |
+| 结构/互联测试 | `src/08_cpu_hpu_structural_connectivity` | 15 | `HPU_IT_DIR_STR_001..004/006`、`HPU_IT_STING_STR_001/005`及8项`HPU_IT_EDGE_*`（含WATCHDOG_FAIL_STOP） |
 | 性能测试 | `src/06_performance` | 6 | `HPU_IT_DIR_PERF_001..006` |
 | 应用测试 | `src/07_full_application` | 9 | `HPU_IT_DIR_APP_*`，详见cases.tsv |
 
