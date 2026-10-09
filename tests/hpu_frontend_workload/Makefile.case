@@ -4,9 +4,18 @@ endif
 ifndef DATA_DIR
 $(error DATA_DIR is required)
 endif
+ifndef CASE_OBJ_DIR
+$(error CASE_OBJ_DIR is required)
+endif
+ifndef CASE_BINARY
+$(error CASE_BINARY is required)
+endif
 
 ROOT := $(CURDIR)
 BASELINE := $(AM_HOME)/tests/hputest
+# 用例路径只在本层映射：命令行DST_DIR会经MAKEFLAGS覆盖AM/klib自己的目录。
+DST_DIR := $(CASE_OBJ_DIR)
+BINARY := $(CASE_BINARY)
 NAME := $(CASE_ID)
 SRCS := $(CASE_SOURCE) $(ROOT)/runtime/fixture.S \
         $(ROOT)/runtime/image.c $(ROOT)/runtime/wait.c $(ROOT)/runtime/check.c \

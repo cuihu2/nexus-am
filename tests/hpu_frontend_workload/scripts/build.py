@@ -92,7 +92,7 @@ def build_case(args, spec, data, meta, mode):
          f'CASE_ID={spec["case_id"]}', f'CASE_SOURCE={ROOT / spec["source"]}',
          f"DATA_DIR={data}", f'PROGRAM_STEM={meta["program_stem"]}',
          f"LOG_LEVEL={int(mode != 'silent')}", f"WAIT_CYCLES={args.wait_cycles}",
-         f"DST_DIR={objects}", f"BINARY={binary}"])
+         f"CASE_OBJ_DIR={objects}", f"CASE_BINARY={binary}"])
     run([args.cross + "strip", "--strip-debug", str(binary) + ".elf"])
     actual_words = verify_elf(Path(str(binary) + ".elf"), args.cross, meta)
     package = read_json(args.packages / spec["case_id"] / "package.json")

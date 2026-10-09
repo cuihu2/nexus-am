@@ -1,0 +1,7 @@
+# 共享库必须保留自己的输出路径，不能继承某个用例的DST_DIR/BINARY。
+DST_DIR ?= library-default-objects
+BINARY ?= library-default-binary
+
+.PHONY: show-layout
+show-layout:
+	@printf 'child_dst=%s\nchild_binary=%s\n' '$(DST_DIR)' '$(BINARY)'
