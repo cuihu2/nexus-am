@@ -4,10 +4,17 @@ endif
 ifndef DATA_DIR
 $(error DATA_DIR is required)
 endif
+ifndef CASE_DST_DIR
+$(error CASE_DST_DIR is required)
+endif
 
 ROOT := $(CURDIR)
 BASELINE := $(AM_HOME)/tests/hputest
 NAME := $(CASE_ID)
+# Keep the per-case object root local to this make process. Passing DST_DIR on
+# the command line leaks it into recursive AM/klib builds and leaves their
+# archive directories absent on a clean checkout.
+DST_DIR := $(CASE_DST_DIR)
 SRCS := $(CASE_SOURCE) $(ROOT)/runtime/fixture.S \
         $(ROOT)/runtime/image.c $(ROOT)/runtime/wait.c $(ROOT)/runtime/check.c \
         $(DATA_DIR)/layout.c $(DATA_DIR)/$(PROGRAM_STEM).c
