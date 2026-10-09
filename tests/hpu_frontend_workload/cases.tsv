@@ -1,0 +1,7 @@
+case_id	scheme	degree	source
+HPU_FRONTEND_CKKS_N128	ckks	128	src/ckks_n128.c
+HPU_FRONTEND_CKKS_N4096	ckks	4096	src/ckks_n4096.c
+HPU_FRONTEND_BFV_N128	bfv	128	src/bfv_n128.c
+HPU_FRONTEND_BFV_N4096	bfv	4096	src/bfv_n4096.c
+HPU_FRONTEND_BGV_N128	bgv	128	src/bgv_n128.c
+HPU_FRONTEND_BGV_N4096	bgv	4096	src/bgv_n4096.c

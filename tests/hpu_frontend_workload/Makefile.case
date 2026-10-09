@@ -1,0 +1,34 @@
+ifndef CASE_ID
+$(error CASE_ID is required)
+endif
+ifndef DATA_DIR
+$(error DATA_DIR is required)
+endif
+
+ROOT := $(CURDIR)
+BASELINE := $(AM_HOME)/tests/hputest
+NAME := $(CASE_ID)
+SRCS := $(CASE_SOURCE) $(ROOT)/runtime/fixture.S \
+        $(ROOT)/runtime/image.c $(ROOT)/runtime/wait.c $(ROOT)/runtime/check.c \
+        $(DATA_DIR)/layout.c $(DATA_DIR)/$(PROGRAM_STEM).c
+INC_DIR += $(ROOT)/include $(DATA_DIR) $(BASELINE)/include
+ASFLAGS += -Wa,-I$(DATA_DIR)
+CFLAGS += -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+          -DLINKNAN_HPU_IT=1 -DHPU_LOG_LEVEL=$(LOG_LEVEL) \
+          -DWAIT_CYCLES=$(WAIT_CYCLES) -include hpu/log.h \
+          -ffile-prefix-map=$(AM_HOME)=nexus-am \
+          -ffile-prefix-map=$(DATA_DIR)=frontend-data/$(CASE_ID)
+ifeq ($(LOG_LEVEL),0)
+# 复用已经验证过的静默出口；不修改AM/klib，也不调用任何UART初始化。
+SRCS += $(BASELINE)/runtime/it_log_silent.c
+WRAPS := printf_ printf atomic_printf_ vprintf_ vprintf puts putchar _putc _putchar \
+         __am_uartlite_putchar __am_16550_putchar __am_init_uartlite __am_init_16550
+LDFLAGS += $(addprefix --wrap=,$(WRAPS))
+endif
+
+include $(AM_HOME)/Makefile.app
+CFLAGS += -g0
+$(DST_DIR)/$(ROOT)/runtime/image.o: $(DATA_DIR)/layout.h
+$(DST_DIR)/$(ROOT)/runtime/check.o: $(DATA_DIR)/layout.h
+$(DST_DIR)/$(ROOT)/runtime/fixture.o: $(DATA_DIR)/image.u32.bin \
+                                      $(DATA_DIR)/golden.u32.bin $(DATA_DIR)/writable.u8.bin

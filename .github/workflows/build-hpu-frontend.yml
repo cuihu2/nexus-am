@@ -1,0 +1,45 @@
+name: build experimental HPU frontend workload
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'tests/hpu_frontend_workload/**'
+      - '.github/workflows/build-hpu-frontend.yml'
+      - '.gitmodules'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'tests/hpu_frontend_workload/**'
+      - '.github/workflows/build-hpu-frontend.yml'
+      - '.gitmodules'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Initialize only the new API dependency
+        run: git submodule update --init tests/hpu_frontend_workload/third_party/inline-asm
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu python3
+      - name: Check receiver and target runtime
+        run: make -C tests/hpu_frontend_workload test
+      - name: Build separate minimal and silent workload
+        run: make -C tests/hpu_frontend_workload all JOBS=4
+      - name: Upload independent experimental package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexus-am-hpu-frontend-workload
+          path: tests/hpu_frontend_workload/build/hpu-frontend-workload.zip
+          if-no-files-found: error
+          retention-days: 7

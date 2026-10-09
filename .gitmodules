@@ -14,3 +14,7 @@
 	path = tests/hputest/experiments/poseidon/third_party/poseidon
 	url = https://github.com/luhang-HPU/poseidon.git
 	branch = main
+[submodule "tests/hpu_frontend_workload/third_party/inline-asm"]
+	path = tests/hpu_frontend_workload/third_party/inline-asm
+	url = https://github.com/cuihu2/inline-asm.git
+	branch = feature/operator-resource-management
