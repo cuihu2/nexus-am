@@ -72,6 +72,13 @@ class ReceiverTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_case_object_root_does_not_leak_into_recursive_builds(self):
+        makefile = (ROOT / "Makefile.case").read_text()
+        build_script = (ROOT / "scripts/build.py").read_text()
+        self.assertIn("DST_DIR := $(CASE_DST_DIR)", makefile)
+        self.assertIn('f"CASE_DST_DIR={objects}"', build_script)
+        self.assertNotIn('f"DST_DIR={objects}"', build_script)
+
     def test_memory_and_mmio_runtime(self):
         parent = ROOT / "build/host-tests"
         parent.mkdir(parents=True, exist_ok=True)
