@@ -1,0 +1,7 @@
+# Recursive libraries must keep their own paths instead of inheriting case paths.
+DST_DIR ?= library-default-objects
+BINARY ?= library-default-binary
+
+.PHONY: show-layout
+show-layout:
+	@printf 'child_dst=%s\nchild_binary=%s\n' '$(DST_DIR)' '$(BINARY)'

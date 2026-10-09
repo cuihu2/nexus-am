@@ -23,6 +23,8 @@ git submodule update --init tests/hpu_frontend_workload/third_party/inline-asm
 make -C tests/hpu_frontend_workload all
 ```
 
+用例路径通过 `CASE_OBJ_DIR`、`CASE_BINARY` 传入，仅在 `Makefile.case` 本层映射为输出目录；不把公共 `DST_DIR`、`BINARY` 作为命令行变量传给递归 AM/klib 构建。`make test` 会执行变量隔离回归，验证实际构建命令不会污染递归构建的默认路径。
+
 产物是`build/hpu-frontend-workload.zip`；GitHubActions另有独立的`build experimental HPU frontend workload`工作流，下载`nexus-am-hpu-frontend-workload`，不会混入旧`nexus-am-hpu-tests`包。
 
 压缩包的`minimal/`、`silent/`各包含6套ELF/BIN/TXT。正常包只打印阶段、CSR错误、前4个结果错误及错误总数，不全量打印4096项。静默版关闭用例打印、AM启动UART初始化和字符出口，自检与return码不变；可读取`workload_trace`定位阶段和首错。
